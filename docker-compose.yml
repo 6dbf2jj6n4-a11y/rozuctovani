@@ -1,0 +1,24 @@
+services:
+  db:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-rozuctovani}
+      POSTGRES_USER: ${POSTGRES_USER:-rozuctovani}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-rozuctovani}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+
+  web:
+    build: .
+    restart: unless-stopped
+    env_file: .env
+    depends_on:
+      - db
+    ports:
+      - "8000:8000"
+
+volumes:
+  postgres_data:
