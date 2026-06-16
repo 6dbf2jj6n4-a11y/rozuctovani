@@ -8,4 +8,4 @@ cmds = ["pip install -r requirements.txt"]
 cmds = ["python manage.py migrate --noinput", "python manage.py ensure_superuser", "python manage.py collectstatic --noinput"]
 
 [start]
-cmd = "gunicorn config.wsgi:application --bind 0.0.0.0:$PORT"
+cmd = "echo PGHOST=$PGHOST && echo POSTGRES_HOST=$POSTGRES_HOST && python manage.py migrate --noinput && gunicorn config.wsgi:application --bind 0.0.0.0:$PORT"
