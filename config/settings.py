@@ -64,24 +64,34 @@ WSGI_APPLICATION = "config.wsgi.application"
 
 
 # Databaze - PostgreSQL.
-#
-# Prioritne se pouzije promenna prostredi DATABASE_URL (takto ji
-# automaticky nastavi napr. Railway nebo Render po pripojeni
-# PostgreSQL databaze k projektu).
-#
-# Pro lokalni vyvoj bez Dockeru lze pres env. promennou docasne
-# presmerovat na sqlite (DJANGO_DB_ENGINE=sqlite3).
-if os.environ.get("DATABASE_URL"):
-    import dj_database_url
-
-    DATABASES = {
-        "default": dj_database_url.config(conn_max_age=600, ssl_require=False)
-    }
-elif os.environ.get("DJANGO_DB_ENGINE") == "sqlite3":
+# Poradi priorit:
+# 1. sqlite pro lokalni vyvoj (DJANGO_DB_ENGINE=sqlite3)
+# 2. DATABASE_URL (Railway reference nebo jina sluzba)
+# 3. PGHOST apod. (Railway je nastavi automaticky pro PostgreSQL ve stejnem projektu)
+# 4. POSTGRES_* promenne (Docker Compose lokalne)
+if os.environ.get("DJANGO_DB_ENGINE") == "sqlite3":
     DATABASES = {
         "default": {
             "ENGINE": "django.db.backends.sqlite3",
             "NAME": BASE_DIR / "db.sqlite3",
+        }
+    }
+elif os.environ.get("DATABASE_URL"):
+    import dj_database_url
+    DATABASES = {
+        "default": dj_database_url.config(conn_max_age=600, ssl_require=False)
+    }
+elif os.environ.get("PGHOST"):
+    # Railway automaticky nastavi tyto promenne kdyz je PostgreSQL
+    # ve stejnem projektu - funguje bez jakekoliv konfigurace.
+    DATABASES = {
+        "default": {
+            "ENGINE": "django.db.backends.postgresql",
+            "NAME": os.environ.get("PGDATABASE"),
+            "USER": os.environ.get("PGUSER"),
+            "PASSWORD": os.environ.get("PGPASSWORD"),
+            "HOST": os.environ.get("PGHOST"),
+            "PORT": os.environ.get("PGPORT", "5432"),
         }
     }
 else:
