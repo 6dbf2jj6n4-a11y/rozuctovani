@@ -11,6 +11,7 @@ class Migration(migrations.Migration):
 
     dependencies = [
         ("auth", "0012_alter_user_first_name_max_length"),
+        ("core", "0001_initial"),
     ]
 
     operations = [
@@ -31,6 +32,7 @@ class Migration(migrations.Migration):
                 ("role", models.CharField(choices=[("admin", "Administrator"), ("spravce", "Spravce"), ("klient", "Klient")], default="klient", max_length=20, verbose_name="Role")),
                 ("groups", models.ManyToManyField(blank=True, related_name="user_set", related_query_name="user", to="auth.group", verbose_name="groups")),
                 ("user_permissions", models.ManyToManyField(blank=True, related_name="user_set", related_query_name="user", to="auth.permission", verbose_name="user permissions")),
+                ("client", models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.SET_NULL, related_name="users", to="core.client", verbose_name="Klient (firma)")),
             ],
             options={"verbose_name": "Uzivatel", "verbose_name_plural": "Uzivatele"},
             managers=[("objects", django.contrib.auth.models.UserManager())],
