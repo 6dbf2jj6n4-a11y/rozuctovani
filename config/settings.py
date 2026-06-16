@@ -73,7 +73,7 @@ else:
             "NAME": os.environ.get("PGDATABASE") or os.environ.get("POSTGRES_DB", "rozuctovani"),
             "USER": os.environ.get("PGUSER") or os.environ.get("POSTGRES_USER", "postgres"),
             "PASSWORD": os.environ.get("PGPASSWORD") or os.environ.get("POSTGRES_PASSWORD", ""),
-            "HOST": os.environ.get("PGHOST") or os.environ.get("POSTGRES_HOST", "localhost"),
+            "HOST": os.environ.get("PGHOST") or os.environ.get("POSTGRES_HOST") or "postgres.railway.internal",
             "PORT": os.environ.get("PGPORT") or os.environ.get("POSTGRES_PORT", "5432"),
         }
     }
