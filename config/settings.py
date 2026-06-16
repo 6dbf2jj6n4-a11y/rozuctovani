@@ -1,8 +1,5 @@
 """
 Konfigurace Django projektu "rozuctovani".
-
-Citliva nastaveni (SECRET_KEY, pristup k databazi, DEBUG) se nacitaji
-z promennych prostredi - viz .env.example.
 """
 import os
 from pathlib import Path
@@ -23,9 +20,7 @@ INSTALLED_APPS = [
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
-
     "rest_framework",
-
     "accounts",
     "core",
     "meters",
@@ -63,12 +58,7 @@ TEMPLATES = [
 WSGI_APPLICATION = "config.wsgi.application"
 
 
-# Databaze - PostgreSQL.
-# Poradi priorit:
-# 1. sqlite pro lokalni vyvoj (DJANGO_DB_ENGINE=sqlite3)
-# 2. DATABASE_URL (Railway reference nebo jina sluzba)
-# 3. PGHOST apod. (Railway je nastavi automaticky pro PostgreSQL ve stejnem projektu)
-# 4. POSTGRES_* promenne (Docker Compose lokalne)
+# Databaze - pouzije prvni dostupnou konfiguraci
 if os.environ.get("DJANGO_DB_ENGINE") == "sqlite3":
     DATABASES = {
         "default": {
@@ -76,33 +66,15 @@ if os.environ.get("DJANGO_DB_ENGINE") == "sqlite3":
             "NAME": BASE_DIR / "db.sqlite3",
         }
     }
-elif os.environ.get("DATABASE_URL"):
-    import dj_database_url
-    DATABASES = {
-        "default": dj_database_url.config(conn_max_age=600, ssl_require=False)
-    }
-elif os.environ.get("PGHOST"):
-    # Railway automaticky nastavi tyto promenne kdyz je PostgreSQL
-    # ve stejnem projektu - funguje bez jakekoliv konfigurace.
-    DATABASES = {
-        "default": {
-            "ENGINE": "django.db.backends.postgresql",
-            "NAME": os.environ.get("PGDATABASE"),
-            "USER": os.environ.get("PGUSER"),
-            "PASSWORD": os.environ.get("PGPASSWORD"),
-            "HOST": os.environ.get("PGHOST"),
-            "PORT": os.environ.get("PGPORT", "5432"),
-        }
-    }
 else:
     DATABASES = {
         "default": {
             "ENGINE": "django.db.backends.postgresql",
-            "NAME": os.environ.get("POSTGRES_DB", "rozuctovani"),
-            "USER": os.environ.get("POSTGRES_USER", "rozuctovani"),
-            "PASSWORD": os.environ.get("POSTGRES_PASSWORD", "rozuctovani"),
-            "HOST": os.environ.get("POSTGRES_HOST", "db"),
-            "PORT": os.environ.get("POSTGRES_PORT", "5432"),
+            "NAME": os.environ.get("PGDATABASE") or os.environ.get("POSTGRES_DB", "rozuctovani"),
+            "USER": os.environ.get("PGUSER") or os.environ.get("POSTGRES_USER", "postgres"),
+            "PASSWORD": os.environ.get("PGPASSWORD") or os.environ.get("POSTGRES_PASSWORD", ""),
+            "HOST": os.environ.get("PGHOST") or os.environ.get("POSTGRES_HOST", "localhost"),
+            "PORT": os.environ.get("PGPORT") or os.environ.get("POSTGRES_PORT", "5432"),
         }
     }
 
@@ -137,4 +109,3 @@ REST_FRAMEWORK = {
         "rest_framework.permissions.IsAuthenticated",
     ],
 }
-# railway redeploy
