@@ -120,3 +120,7 @@ REST_FRAMEWORK = {
 CSRF_TRUSTED_ORIGINS = [
     "https://rozuctovani-production.up.railway.app",
 ]
+UNFOLD = {
+    "SITE_TITLE": "Rozúčtování",
+    "SITE_HEADER": "Správa rozúčtování",
+}
