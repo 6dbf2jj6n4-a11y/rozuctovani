@@ -74,7 +74,7 @@ class Client(models.Model):
     # Kontakt
     contact_email = models.EmailField("E-mail", blank=True)
     contact_phone = models.CharField("Telefon", max_length=50, blank=True)
-    note = models.TextField("Poznámka", blank=True)
+    note = models.CharField("Poznámka", max_length=500, blank=True)
 
     class Meta:
         verbose_name = "Klient"
