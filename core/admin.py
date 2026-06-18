@@ -37,7 +37,7 @@ class CardUnitInline(TabularInline):
 class ClientCardInline(TabularInline):
     model = ClientCard
     extra = 0
-    fields = ("description_link", "valid_from", "valid_to", "note")
+    fields = ("description_link", "valid_from", "valid_to", "is_active", "note")
     readonly_fields = ("description_link",)
     can_delete = True
     verbose_name = "Karta"
