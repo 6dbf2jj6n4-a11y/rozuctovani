@@ -40,6 +40,8 @@ class ClientCardInline(TabularInline):
     fields = ("description_link", "valid_from", "valid_to", "note")
     readonly_fields = ("description_link",)
     can_delete = True
+    verbose_name = "Karta"
+    verbose_name_plural = "Karty klientů"
 
     def description_link(self, obj):
         from django.urls import reverse
