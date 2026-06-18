@@ -97,7 +97,14 @@ class ClientAdmin(ModelAdmin):
             "fields": ("note",)
         }),
     )
-    inlines = [ClientCardInline]
+    inlines = [
+        CardUnitInline,
+        AllocationKeyRentInline,
+        AllocationKeyElectricityInline,
+        AllocationKeyWaterInline,
+        AllocationKeyHeatInline,
+        AllocationKeyOtherInline,
+    ]
 
 
 @admin.register(ClientCard)
