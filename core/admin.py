@@ -1,5 +1,7 @@
 from django.contrib import admin
+from django.utils.html import format_html
 from unfold.admin import ModelAdmin, TabularInline
+from unfold.decorators import action
 
 from .models import (
     Client, ClientCard, Site, Unit, CardUnit,
@@ -35,6 +37,8 @@ class CardUnitInline(TabularInline):
 class ClientCardInline(TabularInline):
     model = ClientCard
     extra = 0
+    fields = ("description", "valid_from", "valid_to", "note")
+    show_change_link = True
 
 
 @admin.register(Client)
@@ -42,6 +46,26 @@ class ClientAdmin(ModelAdmin):
     list_display = ("name", "code", "ico", "contact_email", "contact_phone", "is_active")
     search_fields = ("name", "ico", "code")
     list_filter = ("is_active",)
+    fieldsets = (
+        ("Základní údaje", {
+            "fields": (("name", "code"), ("is_active", "is_landlord", "vat_payer"))
+        }),
+        ("Sídlo", {
+            "fields": (("street", "street_number"), ("zip_code", "city"))
+        }),
+        ("Identifikace", {
+            "fields": (("ico", "dic"),)
+        }),
+        ("Bankovní spojení", {
+            "fields": (("bank_name", "bank_account", "bank_code"),)
+        }),
+        ("Kontakt", {
+            "fields": (("contact_email", "contact_phone"),)
+        }),
+        ("Poznámka", {
+            "fields": ("note",)
+        }),
+    )
     inlines = [ClientCardInline]
 
 
@@ -51,7 +75,25 @@ class ClientCardAdmin(ModelAdmin):
     list_filter = ("client__is_active",)
     autocomplete_fields = ("client",)
     search_fields = ("client__name", "description")
+    fieldsets = (
+        ("Základní údaje", {
+            "fields": (("client", "description"), ("valid_from", "valid_to"), "note")
+        }),
+    )
     inlines = [CardUnitInline]
+    actions = ["kopie_karty"]
+
+    @admin.action(description="Vytvořit kopii vybraných karet")
+    def kopie_karty(self, request, queryset):
+        for card in queryset:
+            units = list(card.card_units.all())
+            card.pk = None
+            card.description = f"{card.description} (kopie)"
+            card.external_id = None
+            card.save()
+            for cu in units:
+                CardUnit.objects.create(card=card, unit=cu.unit)
+        self.message_user(request, f"Vytvořeno {queryset.count()} kopií karet.")
 
 
 @admin.register(CardUnit)
