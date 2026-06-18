@@ -357,7 +357,7 @@ class UnitService(models.Model):
         related_name="unit_services", verbose_name="Měřidlo"
     )
 
-class Meta:
+    class Meta:
         verbose_name = "Výchozí služba plochy"
         verbose_name_plural = "Výchozí služby plochy"
         unique_together = ("unit", "service_item")
