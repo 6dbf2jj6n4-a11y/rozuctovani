@@ -32,7 +32,20 @@ class UnitAdmin(ModelAdmin):
 class CardUnitInline(TabularInline):
     model = CardUnit
     extra = 0
+    fields = ("unit", "area_m2", "rate_per_m2", "monthly_rent")
+    readonly_fields = ("area_m2", "monthly_rent")
     autocomplete_fields = ("unit",)
+    verbose_name = "Plocha"
+    verbose_name_plural = "Plochy a nájemné"
+
+    def area_m2(self, obj):
+        return f"{obj.unit.area_m2} m²" if obj.unit.area_m2 else "—"
+    area_m2.short_description = "Výměra"
+
+    def monthly_rent(self, obj):
+        rent = obj.monthly_rent
+        return f"{rent} Kč/měs." if rent else "—"
+    monthly_rent.short_description = "Nájemné/měs."
 
 
 class AllocationKeyInlineBase(TabularInline):
@@ -176,7 +189,6 @@ class ClientCardAdmin(ModelAdmin):
         }),
     )
     inlines = [
-        AllocationKeyRentInline,
         AllocationKeyElectricityInline,
         AllocationKeyWaterInline,
         AllocationKeyHeatInline,
