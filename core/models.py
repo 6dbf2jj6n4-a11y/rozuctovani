@@ -82,44 +82,37 @@ class Client(models.Model):
         ordering = ["name"]
 
     def __str__(self):
-        return self.name
 class ClientCard(models.Model):
     """
     Karta klienta - vazba klienta na konkretni pronajaty prostor
-    s obdobim platnosti. Datumy valid_from/valid_to slouzi pro
-    pomerne uctovani pri nastupu/odchodu v prubehu mesice.
+    s obdobim platnosti.
     """
-
     client = models.ForeignKey(
         Client, on_delete=models.CASCADE, related_name="cards", verbose_name="Klient"
     )
     unit = models.ForeignKey(
-    Unit, on_delete=models.SET_NULL, related_name="cards", verbose_name="Prostor",
-    null=True, blank=True
+        Unit, on_delete=models.SET_NULL, related_name="cards", verbose_name="Prostor",
+        null=True, blank=True
     )
     valid_from = models.DateField("Platnost od")
     valid_to = models.DateField("Platnost do", null=True, blank=True)
-    note = models.CharField("Poznámka", blank=True)
+    note = models.CharField("Poznámka", max_length=300, blank=True)
     external_id = models.IntegerField("Původní ID (IDK)", null=True, blank=True)
     description = models.CharField("Popis karty", max_length=200, blank=True)
-    
+
     class Meta:
         verbose_name = "Karta klienta"
         verbose_name_plural = "Karty klientů"
         ordering = ["client", "valid_from"]
 
     def __str__(self):
-    return self.description or f"Karta {self.client}"
+        return self.description or f"Karta {self.client}"
 
     def clean(self):
         if self.valid_to and self.valid_to < self.valid_from:
             raise ValidationError("Datum 'platnost do' nesmí být dříve než 'platnost od'.")
 
     def active_days_in_period(self, period_start, period_end):
-        """
-        Vrati pocet dni, po ktere byla karta aktivni v danem obdobi
-        (vcetne obou krajnich dat). Pouziva se pro pomerne uctovani.
-        """
         start = max(self.valid_from, period_start)
         end = min(self.valid_to or period_end, period_end)
         if end < start:
