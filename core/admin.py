@@ -188,6 +188,7 @@ class ClientCardAdmin(ModelAdmin):
         }),
     )
     inlines = [
+        CardUnitInline,
         AllocationKeyElectricityInline,
         AllocationKeyWaterInline,
         AllocationKeyHeatInline,
