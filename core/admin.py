@@ -32,8 +32,7 @@ class UnitAdmin(ModelAdmin):
 class CardUnitInline(TabularInline):
     model = CardUnit
     extra = 0
-    fields = ("unit", "area_m2", "rate_per_m2", "monthly_rent")
-    readonly_fields = ("area_m2", "monthly_rent")
+    fields = ("unit", "rate_per_m2")
     autocomplete_fields = ("unit",)
     verbose_name = "Plocha"
     verbose_name_plural = "Plochy a nájemné"
