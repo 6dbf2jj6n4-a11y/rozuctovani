@@ -46,7 +46,7 @@ class ClientAdmin(ModelAdmin):
     list_display = ("name", "code", "ico", "contact_email", "contact_phone", "is_active")
     search_fields = ("name", "ico", "code")
     list_filter = ("is_active",)
-   fieldsets = (
+    fieldsets = (
         ("Základní údaje", {
             "fields": (("name", "code"), ("is_active",))
         }),
