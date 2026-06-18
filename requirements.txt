@@ -5,3 +5,4 @@ gunicorn>=22.0
 dj-database-url>=2.2
 django-unfold==0.40.0
 whitenoise
+openpyxl
