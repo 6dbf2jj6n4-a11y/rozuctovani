@@ -87,7 +87,7 @@ class ClientCardAdmin(ModelAdmin):
     search_fields = ("client__name", "description")
     fieldsets = (
         ("Základní údaje", {
-            "fields": (("client", "description"), ("valid_from", "valid_to"), "note")
+            "fields": (("client", "description"), ("valid_from", "valid_to"), "is_active", "note")
         }),
     )
     inlines = [CardUnitInline]
