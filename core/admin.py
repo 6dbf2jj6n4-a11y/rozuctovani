@@ -100,6 +100,7 @@ class ClientCardAdmin(ModelAdmin):
             card.pk = None
             card.description = f"{card.description} (kopie)"
             card.external_id = None
+            card.is_active = False
             card.save()
             for cu in units:
                 CardUnit.objects.create(card=card, unit=cu.unit)
@@ -125,6 +126,7 @@ class ClientCardAdmin(ModelAdmin):
         card.pk = None
         card.description = f"{card.description} (kopie)"
         card.external_id = None
+        card.is_active = False
         card.save()
         for cu in units:
             CardUnit.objects.create(card=card, unit=cu.unit)
