@@ -36,9 +36,10 @@ class CardUnitInline(TabularInline):
 
 class ClientCardInline(TabularInline):
     model = ClientCard
-    extra = 0
+    extra = 1
     fields = ("description", "valid_from", "valid_to", "note")
     show_change_link = True
+    can_delete = True
 
 
 @admin.register(Client)
