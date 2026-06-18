@@ -1,7 +1,7 @@
 from rest_framework import viewsets
 
 from accounts.models import User
-from .models import BillingLine
+from core.models import BillingLine
 from .serializers import BillingLineSerializer
 
 
