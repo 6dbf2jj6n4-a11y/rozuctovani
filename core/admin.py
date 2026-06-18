@@ -40,9 +40,6 @@ class ClientCardInline(TabularInline):
     fields = ("description", "valid_from", "valid_to", "note")
     show_change_link = True
     can_delete = True
-    formfield_overrides = {
-        models.TextField: {"widget": Textarea(attrs={"rows": 1, "style": "resize:none;"})},
-    }
 
 
 @admin.register(Client)
