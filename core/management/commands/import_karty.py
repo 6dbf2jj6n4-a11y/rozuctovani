@@ -115,8 +115,7 @@ class Command(BaseCommand):
             if created:
                 units_created += 1
 
-            CardUnit, _ = apps.get_model("core", "CardUnit"), None
-            CardUnit = __import__("core.models", fromlist=["CardUnit"]).CardUnit
+            from core.models import CardUnit
             if not CardUnit.objects.filter(card=card, unit=unit).exists():
                 CardUnit.objects.create(card=card, unit=unit)
                 links_created += 1
