@@ -100,6 +100,7 @@ class ClientCard(models.Model):
     note = models.CharField("Poznámka", max_length=300, blank=True)
     external_id = models.IntegerField("Původní ID (IDK)", null=True, blank=True)
     description = models.CharField("Popis karty", max_length=200, blank=True)
+    is_active = models.BooleanField("Aktivní", default=True)
 
     class Meta:
         verbose_name = "Karta klienta"
