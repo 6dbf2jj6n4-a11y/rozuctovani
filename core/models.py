@@ -99,7 +99,7 @@ class ClientCard(models.Model):
     )
     valid_from = models.DateField("Platnost od")
     valid_to = models.DateField("Platnost do", null=True, blank=True)
-    note = models.TextField("Poznámka", blank=True)
+    note = models.CharField("Poznámka", blank=True)
     external_id = models.IntegerField("Původní ID (IDK)", null=True, blank=True)
     description = models.CharField("Popis karty", max_length=200, blank=True)
     
