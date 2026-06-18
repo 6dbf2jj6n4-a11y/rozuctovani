@@ -113,6 +113,15 @@ class ClientCard(models.Model):
     def clean(self):
         if self.valid_to and self.valid_to < self.valid_from:
             raise ValidationError("Datum 'platnost do' nesmí být dříve než 'platnost od'.")
+        if self.is_active:
+            qs = ClientCard.objects.filter(client=self.client, is_active=True)
+            if self.pk:
+                qs = qs.exclude(pk=self.pk)
+            if qs.exists():
+                raise ValidationError(
+                    f"Klient {self.client} již má aktivní kartu: {qs.first().description}. "
+                    "Nejprve deaktivujte stávající kartu."
+                )
 
     def active_days_in_period(self, period_start, period_end):
         start = max(self.valid_from, period_start)
