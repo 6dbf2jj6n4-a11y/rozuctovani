@@ -1,6 +1,6 @@
 from rest_framework import serializers
 
-from .models import BillingLine
+from core.models import BillingLine
 
 
 class BillingLineSerializer(serializers.ModelSerializer):
