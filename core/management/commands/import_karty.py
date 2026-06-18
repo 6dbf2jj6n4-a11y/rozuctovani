@@ -76,12 +76,14 @@ class Command(BaseCommand):
         self.stdout.write(f"Karet vytvořeno: {cards_created}")
 
         # 2. Import ploch
-        self.stdout.write("\n--- Import ploch ---")
+       # 2. Import ploch a propojení s kartami
+        self.stdout.write("\n--- Import ploch a propojení s kartami ---")
         wb2 = openpyxl.load_workbook(options["plochy_xlsx"], read_only=True)
         ws2 = wb2.active
         headers2 = [cell.value for cell in next(ws2.iter_rows(min_row=1, max_row=1))]
 
         units_created = 0
+        links_created = 0
 
         for row in ws2.iter_rows(min_row=2, values_only=True):
             data = dict(zip(headers2, row))
@@ -96,22 +98,29 @@ class Command(BaseCommand):
                 self.stdout.write(f"  Karta nenalezena pro IDK={idk}, plocha: {code}")
                 continue
 
-            if Unit.objects.filter(code=code, site=site).exists():
-                continue
-
             m2 = data.get("m2")
             rate = data.get("SazbaKcMRok")
 
-            Unit.objects.create(
-                site=site,
+            unit, created = Unit.objects.get_or_create(
                 code=code,
-                name=code,
-                purpose=str(data.get("Ucel") or "").strip(),
-                area_m2=float(m2) if m2 else None,
-                rate_per_m2_year=float(rate) if rate else None,
-                unit_type=str(data.get("Jednotka") or "m2").strip(),
+                site=site,
+                defaults={
+                    "name": code,
+                    "purpose": str(data.get("Ucel") or "").strip(),
+                    "area_m2": float(m2) if m2 else None,
+                    "rate_per_m2_year": float(rate) if rate else None,
+                    "unit_type": str(data.get("Jednotka") or "m2").strip(),
+                }
             )
-            units_created += 1
+            if created:
+                units_created += 1
+
+            CardUnit, _ = apps.get_model("core", "CardUnit"), None
+            CardUnit = __import__("core.models", fromlist=["CardUnit"]).CardUnit
+            if not CardUnit.objects.filter(card=card, unit=unit).exists():
+                CardUnit.objects.create(card=card, unit=unit)
+                links_created += 1
 
         self.stdout.write(f"Ploch vytvořeno: {units_created}")
+        self.stdout.write(f"Propojení vytvořeno: {links_created}")
         self.stdout.write(self.style.SUCCESS("\nImport dokončen!"))
