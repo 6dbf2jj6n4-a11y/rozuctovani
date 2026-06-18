@@ -3,6 +3,7 @@ Zakladni entity: arealy/objekty, pronajimane prostory, klienti
 a jejich karty (najemni vztahy s platnosti).
 """
 from django.core.exceptions import ValidationError
+from datetime import date
 from django.db import models
 
 
@@ -100,3 +101,189 @@ class ClientCard(models.Model):
         if end < start:
             return 0
         return (end - start).days + 1
+        import calendar
+
+class Period(models.Model):
+    class Status(models.TextChoices):
+        OPEN = "open", "Otevřeno"
+        CLOSED = "closed", "Uzavřeno"
+
+    year = models.PositiveIntegerField("Rok")
+    month = models.PositiveSmallIntegerField("Měsíc")
+    status = models.CharField("Stav", max_length=10, choices=Status.choices, default=Status.OPEN)
+
+    class Meta:
+        verbose_name = "Období"
+        verbose_name_plural = "Období"
+        unique_together = ("year", "month")
+        ordering = ["-year", "-month"]
+
+    def __str__(self):
+        return f"{self.month:02d}/{self.year}"
+
+    def date_range(self):
+        first_day = date(self.year, self.month, 1)
+        last_day_num = calendar.monthrange(self.year, self.month)[1]
+        last_day = date(self.year, self.month, last_day_num)
+        return first_day, last_day
+
+    @property
+    def days_in_period(self):
+        first_day, last_day = self.date_range()
+        return (last_day - first_day).days + 1
+
+    def previous_period(self):
+        if self.month == 1:
+            prev_year, prev_month = self.year - 1, 12
+        else:
+            prev_year, prev_month = self.year, self.month - 1
+        return Period.objects.filter(year=prev_year, month=prev_month).first()
+
+
+class Meter(models.Model):
+    class MeterType(models.TextChoices):
+        ELECTRICITY = "electricity", "Elektřina"
+        WATER = "water", "Voda"
+        GAS = "gas", "Plyn"
+        HEAT = "heat", "Teplo"
+        OTHER = "other", "Jiné"
+
+    site = models.ForeignKey(Site, on_delete=models.CASCADE, related_name="meters", verbose_name="Areál")
+    parent_meter = models.ForeignKey("self", null=True, blank=True, on_delete=models.PROTECT, related_name="children", verbose_name="Nadřazené měřidlo")
+    name = models.CharField("Název / označení", max_length=200)
+    meter_type = models.CharField("Typ", max_length=20, choices=MeterType.choices)
+    unit_of_measure = models.CharField("Měrná jednotka", max_length=20, default="kWh")
+    serial_number = models.CharField("Výrobní číslo", max_length=100, blank=True)
+
+    class Meta:
+        verbose_name = "Měřidlo"
+        verbose_name_plural = "Měřidla"
+        ordering = ["site", "meter_type", "name"]
+
+    def __str__(self):
+        return f"{self.name} ({self.get_meter_type_display()})"
+
+    def consumption_for(self, period):
+        current = self.readings.filter(period=period).first()
+        if current is None:
+            return None
+        prev_period = period.previous_period()
+        if prev_period is None:
+            return None
+        previous = self.readings.filter(period=prev_period).first()
+        if previous is None:
+            return None
+        return current.value - previous.value
+
+
+class MeterReading(models.Model):
+    meter = models.ForeignKey(Meter, on_delete=models.CASCADE, related_name="readings", verbose_name="Měřidlo")
+    period = models.ForeignKey(Period, on_delete=models.CASCADE, related_name="readings", verbose_name="Období")
+    reading_date = models.DateField("Datum odečtu")
+    value = models.DecimalField("Stav měřidla", max_digits=14, decimal_places=3)
+    is_estimate = models.BooleanField("Odhad", default=False)
+    note = models.CharField("Poznámka", max_length=300, blank=True)
+
+    class Meta:
+        verbose_name = "Odečet měřidla"
+        verbose_name_plural = "Odečty měřidel"
+        unique_together = ("meter", "period")
+        ordering = ["-period", "meter"]
+
+    def __str__(self):
+        return f"{self.meter} – {self.period}: {self.value}"
+
+
+class ServicePoolItem(models.Model):
+    class InvoiceClass(models.TextChoices):
+        RENT = "rent", "Nájemné"
+        ELECTRICITY = "electricity", "Elektřina"
+        WATER = "water", "Voda"
+        HEAT = "heat", "Teplo"
+        OTHER = "other", "Ostatní"
+
+    site = models.ForeignKey(Site, on_delete=models.CASCADE, related_name="service_items", verbose_name="Areál")
+    unit = models.ForeignKey(Unit, null=True, blank=True, on_delete=models.SET_NULL, related_name="service_items", verbose_name="Prostor")
+    meter = models.ForeignKey(Meter, null=True, blank=True, on_delete=models.SET_NULL, related_name="service_items", verbose_name="Měřidlo")
+    name = models.CharField("Název", max_length=200)
+    invoice_class = models.CharField("Třída", max_length=20, choices=InvoiceClass.choices, default=InvoiceClass.OTHER)
+
+    class Meta:
+        verbose_name = "Položka zásobníku"
+        verbose_name_plural = "Zásobník"
+        ordering = ["site", "invoice_class", "name"]
+
+    def __str__(self):
+        return f"{self.name} ({self.site})"
+
+
+class AllocationKey(models.Model):
+    class AllocationType(models.TextChoices):
+        PERCENT = "percent", "Procento"
+        AREA_RATIO = "area_ratio", "Podle výměry (m²)"
+        PERSON_COUNT = "person_count", "Podle počtu osob"
+        EQUAL_SPLIT = "equal_split", "Rovným dílem"
+        SUBMETER = "submeter", "Podružné měřidlo (1:1)"
+        FIXED_AMOUNT = "fixed_amount", "Pevná částka"
+
+    client_card = models.ForeignKey(ClientCard, on_delete=models.CASCADE, related_name="allocation_keys", verbose_name="Karta klienta")
+    service_item = models.ForeignKey(ServicePoolItem, on_delete=models.CASCADE, related_name="allocation_keys", verbose_name="Položka zásobníku")
+    allocation_type = models.CharField("Typ rozpočtu", max_length=20, choices=AllocationType.choices)
+    value = models.DecimalField("Hodnota", max_digits=12, decimal_places=4, null=True, blank=True)
+    meter = models.ForeignKey(Meter, null=True, blank=True, on_delete=models.SET_NULL, related_name="submeter_keys", verbose_name="Podružné měřidlo")
+    valid_from = models.DateField("Platnost od")
+    valid_to = models.DateField("Platnost do", null=True, blank=True)
+
+    class Meta:
+        verbose_name = "Klíč"
+        verbose_name_plural = "Klíče"
+        ordering = ["service_item", "client_card"]
+
+    def __str__(self):
+        return f"{self.client_card} – {self.service_item}"
+
+    def is_valid_for_period(self, period):
+        period_start, period_end = period.date_range()
+        if self.valid_from > period_end:
+            return False
+        if self.valid_to and self.valid_to < period_start:
+            return False
+        return True
+
+
+class CostEntry(models.Model):
+    service_item = models.ForeignKey(ServicePoolItem, on_delete=models.CASCADE, related_name="cost_entries", verbose_name="Položka zásobníku")
+    period = models.ForeignKey(Period, on_delete=models.CASCADE, related_name="cost_entries", verbose_name="Období")
+    amount = models.DecimalField("Částka (Kč)", max_digits=14, decimal_places=2)
+    note = models.CharField("Poznámka", max_length=300, blank=True)
+
+    class Meta:
+        verbose_name = "Náklad za období"
+        verbose_name_plural = "Náklady za období"
+        unique_together = ("service_item", "period")
+        ordering = ["-period", "service_item"]
+
+    def __str__(self):
+        return f"{self.service_item} – {self.period}: {self.amount} Kč"
+
+
+class BillingLine(models.Model):
+    client_card = models.ForeignKey(ClientCard, on_delete=models.CASCADE, related_name="billing_lines", verbose_name="Karta klienta")
+    period = models.ForeignKey(Period, on_delete=models.CASCADE, related_name="billing_lines", verbose_name="Období")
+    service_item = models.ForeignKey(ServicePoolItem, on_delete=models.CASCADE, related_name="billing_lines", verbose_name="Položka zásobníku")
+    amount = models.DecimalField("Částka (Kč)", max_digits=14, decimal_places=2)
+    share = models.DecimalField("Podíl", max_digits=8, decimal_places=6, null=True, blank=True)
+    calc_detail = models.JSONField("Detail výpočtu", default=dict, blank=True)
+
+    class Meta:
+        verbose_name = "Vyúčtovaná položka"
+        verbose_name_plural = "Vyúčtované položky"
+        unique_together = ("client_card", "period", "service_item")
+        ordering = ["-period", "client_card", "service_item"]
+
+    def __str__(self):
+        return f"{self.client_card} – {self.service_item} – {self.period}: {self.amount} Kč"
+
+    @property
+    def invoice_class(self):
+        return self.service_item.invoice_class
