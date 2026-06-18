@@ -325,14 +325,15 @@ class CardUnit(models.Model):
         Unit, on_delete=models.CASCADE, related_name="card_units", verbose_name="Plocha"
     )
 
-    class Meta:
+class Meta:
         verbose_name = "Plocha karty"
         verbose_name_plural = "Plochy karty"
         unique_together = ("card", "unit")
 
     def __str__(self):
         return f"{self.card} – {self.unit}"
-    class UnitService(models.Model):
+        
+class UnitService(models.Model):
     """
     Výchozí služby přiřazené k ploše - při přidání plochy na kartu
     se automaticky vytvoří klíče pro tyto služby.
@@ -356,7 +357,7 @@ class CardUnit(models.Model):
         related_name="unit_services", verbose_name="Měřidlo"
     )
 
-    class Meta:
+class Meta:
         verbose_name = "Výchozí služba plochy"
         verbose_name_plural = "Výchozí služby plochy"
         unique_together = ("unit", "service_item")
