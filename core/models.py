@@ -332,3 +332,34 @@ class CardUnit(models.Model):
 
     def __str__(self):
         return f"{self.card} – {self.unit}"
+    class UnitService(models.Model):
+    """
+    Výchozí služby přiřazené k ploše - při přidání plochy na kartu
+    se automaticky vytvoří klíče pro tyto služby.
+    """
+    unit = models.ForeignKey(
+        Unit, on_delete=models.CASCADE, related_name="unit_services", verbose_name="Plocha"
+    )
+    service_item = models.ForeignKey(
+        ServicePoolItem, on_delete=models.CASCADE, related_name="unit_services", verbose_name="Služba"
+    )
+    allocation_type = models.CharField(
+        "Typ rozpočtu", max_length=20,
+        choices=AllocationKey.AllocationType.choices,
+        default=AllocationKey.AllocationType.SUBMETER
+    )
+    value = models.DecimalField(
+        "Hodnota", max_digits=12, decimal_places=4, null=True, blank=True
+    )
+    meter = models.ForeignKey(
+        Meter, null=True, blank=True, on_delete=models.SET_NULL,
+        related_name="unit_services", verbose_name="Měřidlo"
+    )
+
+    class Meta:
+        verbose_name = "Výchozí služba plochy"
+        verbose_name_plural = "Výchozí služby plochy"
+        unique_together = ("unit", "service_item")
+
+    def __str__(self):
+        return f"{self.unit} – {self.service_item}"
