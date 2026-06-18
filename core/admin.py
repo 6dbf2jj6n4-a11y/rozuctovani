@@ -57,9 +57,22 @@ class AllocationKeyInlineBase(TabularInline):
 
 class AllocationKeyRentInline(AllocationKeyInlineBase):
     invoice_class = "rent"
-    verbose_name = "Klíč – Nájemné"
+    verbose_name = "Plocha / nájemné"
     verbose_name_plural = "Nájemné"
+    fields = ("service_item", "unit_m2", "unit_rate", "allocation_type", "value", "valid_from", "valid_to")
+    readonly_fields = ("unit_m2", "unit_rate")
 
+    def unit_m2(self, obj):
+        if obj.service_item and obj.service_item.unit:
+            return f"{obj.service_item.unit.area_m2} m²"
+        return "—"
+    unit_m2.short_description = "Výměra"
+
+    def unit_rate(self, obj):
+        if obj.service_item and obj.service_item.unit:
+            return f"{obj.service_item.unit.rate_per_m2_year} Kč/m²/rok"
+        return "—"
+    unit_rate.short_description = "Sazba"
 
 class AllocationKeyElectricityInline(AllocationKeyInlineBase):
     invoice_class = "electricity"
