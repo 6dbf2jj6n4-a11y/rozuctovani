@@ -106,9 +106,9 @@ class ClientCardAdmin(ModelAdmin):
                 CardUnit.objects.create(card=card, unit=cu.unit)
         self.message_user(request, f"Vytvořeno {queryset.count()} kopií karet.")
 
-    def change_view(self, request, object_id, form_url="", extra_context=None):
+   def change_view(self, request, object_id, form_url="", extra_context=None):
         extra_context = extra_context or {}
-        extra_context["kopie_url"] = f"../kopie/{object_id}/"
+        extra_context["kopie_url"] = f"/admin/core/clientcard/kopie/{object_id}/"
         return super().change_view(request, object_id, form_url, extra_context)
 
     def get_urls(self):
