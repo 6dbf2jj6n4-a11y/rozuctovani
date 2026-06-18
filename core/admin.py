@@ -85,9 +85,6 @@ class ClientCardAdmin(ModelAdmin):
     list_filter = ("client__is_active",)
     autocomplete_fields = ("client",)
     search_fields = ("client__name", "description")
-    formfield_overrides = {
-        models.TextField: {"widget": TextInput},
-    }
     fieldsets = (
         ("Základní údaje", {
             "fields": (("client", "description"), ("valid_from", "valid_to"), "note")
@@ -107,6 +104,32 @@ class ClientCardAdmin(ModelAdmin):
             for cu in units:
                 CardUnit.objects.create(card=card, unit=cu.unit)
         self.message_user(request, f"Vytvořeno {queryset.count()} kopií karet.")
+
+    def change_view(self, request, object_id, form_url="", extra_context=None):
+        extra_context = extra_context or {}
+        extra_context["kopie_url"] = f"../kopie/{object_id}/"
+        return super().change_view(request, object_id, form_url, extra_context)
+
+    def get_urls(self):
+        from django.urls import path
+        urls = super().get_urls()
+        custom = [
+            path("kopie/<int:card_id>/", self.admin_site.admin_view(self.kopie_view), name="core_clientcard_kopie"),
+        ]
+        return custom + urls
+
+    def kopie_view(self, request, card_id):
+        from django.shortcuts import redirect
+        card = ClientCard.objects.get(pk=card_id)
+        units = list(card.card_units.all())
+        card.pk = None
+        card.description = f"{card.description} (kopie)"
+        card.external_id = None
+        card.save()
+        for cu in units:
+            CardUnit.objects.create(card=card, unit=cu.unit)
+        self.message_user(request, f"Kopie karty byla vytvořena.")
+        return redirect(f"../../{card.pk}/change/")
 
 
 @admin.register(CardUnit)
