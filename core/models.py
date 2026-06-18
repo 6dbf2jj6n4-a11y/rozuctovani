@@ -82,6 +82,7 @@ class Client(models.Model):
         ordering = ["name"]
 
     def __str__(self):
+        return self.name
 class ClientCard(models.Model):
     """
     Karta klienta - vazba klienta na konkretni pronajaty prostor
