@@ -109,7 +109,7 @@ class ClientCard(models.Model):
         ordering = ["client", "valid_from"]
 
     def __str__(self):
-        return f"{self.client} – {self.unit} ({self.valid_from} – {self.valid_to or 'trvá'})"
+    return self.description or f"Karta {self.client}"
 
     def clean(self):
         if self.valid_to and self.valid_to < self.valid_from:
