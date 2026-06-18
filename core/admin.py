@@ -81,8 +81,8 @@ class ClientAdmin(ModelAdmin):
 
 @admin.register(ClientCard)
 class ClientCardAdmin(ModelAdmin):
-    list_display = ("client", "description", "valid_from", "valid_to")
-    list_filter = ("client__is_active",)
+    list_display = ("client", "description", "valid_from", "valid_to", "is_active")
+    list_filter = ("client__is_active", "is_active")
     autocomplete_fields = ("client",)
     search_fields = ("client__name", "description")
     fieldsets = (
@@ -97,19 +97,20 @@ class ClientCardAdmin(ModelAdmin):
     def kopie_karty(self, request, queryset):
         for card in queryset:
             units = list(card.card_units.all())
-            card.pk = None
-            card.description = f"{card.description} (kopie)"
-            card.external_id = None
-            card.is_active = False
-            card.save()
+            new_card = ClientCard(
+                client=card.client,
+                unit=card.unit,
+                valid_from=card.valid_from,
+                valid_to=card.valid_to,
+                note=card.note,
+                description=f"{card.description} (kopie)",
+                external_id=None,
+                is_active=False,
+            )
+            new_card.save()
             for cu in units:
-                CardUnit.objects.create(card=card, unit=cu.unit)
+                CardUnit.objects.create(card=new_card, unit=cu.unit)
         self.message_user(request, f"Vytvořeno {queryset.count()} kopií karet.")
-
-   def change_view(self, request, object_id, form_url="", extra_context=None):
-        extra_context = extra_context or {}
-        extra_context["kopie_url"] = f"/admin/core/clientcard/kopie/{object_id}/"
-        return super().change_view(request, object_id, form_url, extra_context)
 
     def get_urls(self):
         from django.urls import path
@@ -123,7 +124,6 @@ class ClientCardAdmin(ModelAdmin):
         from django.shortcuts import redirect
         original = ClientCard.objects.get(pk=card_id)
         units = list(original.card_units.all())
-        
         new_card = ClientCard(
             client=original.client,
             unit=original.unit,
@@ -139,6 +139,11 @@ class ClientCardAdmin(ModelAdmin):
             CardUnit.objects.create(card=new_card, unit=cu.unit)
         self.message_user(request, "Kopie karty byla vytvořena.")
         return redirect(f"/admin/core/clientcard/{new_card.pk}/change/")
+
+    def change_view(self, request, object_id, form_url="", extra_context=None):
+        extra_context = extra_context or {}
+        extra_context["kopie_url"] = f"/admin/core/clientcard/kopie/{object_id}/"
+        return super().change_view(request, object_id, form_url, extra_context)
 
 
 @admin.register(CardUnit)
