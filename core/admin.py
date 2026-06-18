@@ -1,7 +1,7 @@
 from django.contrib import admin
-from django.utils.html import format_html
+from django.db import models
+from django.forms import TextInput
 from unfold.admin import ModelAdmin, TabularInline
-from unfold.decorators import action
 
 from .models import (
     Client, ClientCard, Site, Unit, CardUnit,
@@ -48,7 +48,7 @@ class ClientAdmin(ModelAdmin):
     list_filter = ("is_active",)
     fieldsets = (
         ("Základní údaje", {
-            "fields": (("name", "code"), ("is_active", "is_landlord", "vat_payer"))
+            "fields": (("name", "code"), ("is_active", "vat_payer"))
         }),
         ("Sídlo", {
             "fields": (("street", "street_number"), ("zip_code", "city"))
@@ -75,6 +75,9 @@ class ClientCardAdmin(ModelAdmin):
     list_filter = ("client__is_active",)
     autocomplete_fields = ("client",)
     search_fields = ("client__name", "description")
+    formfield_overrides = {
+        models.TextField: {"widget": TextInput},
+    }
     fieldsets = (
         ("Základní údaje", {
             "fields": (("client", "description"), ("valid_from", "valid_to"), "note")
