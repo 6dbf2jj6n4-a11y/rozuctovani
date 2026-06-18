@@ -121,17 +121,24 @@ class ClientCardAdmin(ModelAdmin):
 
     def kopie_view(self, request, card_id):
         from django.shortcuts import redirect
-        card = ClientCard.objects.get(pk=card_id)
-        units = list(card.card_units.all())
-        card.pk = None
-        card.description = f"{card.description} (kopie)"
-        card.external_id = None
-        card.is_active = False
-        card.save()
+        original = ClientCard.objects.get(pk=card_id)
+        units = list(original.card_units.all())
+        
+        new_card = ClientCard(
+            client=original.client,
+            unit=original.unit,
+            valid_from=original.valid_from,
+            valid_to=original.valid_to,
+            note=original.note,
+            description=f"{original.description} (kopie)",
+            external_id=None,
+            is_active=False,
+        )
+        new_card.save()
         for cu in units:
-            CardUnit.objects.create(card=card, unit=cu.unit)
-        self.message_user(request, f"Kopie karty byla vytvořena.")
-        return redirect(f"../../{card.pk}/change/")
+            CardUnit.objects.create(card=new_card, unit=cu.unit)
+        self.message_user(request, "Kopie karty byla vytvořena.")
+        return redirect(f"/admin/core/clientcard/{new_card.pk}/change/")
 
 
 @admin.register(CardUnit)
