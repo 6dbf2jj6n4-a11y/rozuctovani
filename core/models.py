@@ -311,3 +311,20 @@ class BillingLine(models.Model):
     @property
     def invoice_class(self):
         return self.service_item.invoice_class
+class CardUnit(models.Model):
+    """Vazba karty klienta na plochu - karta může mít více ploch."""
+
+    card = models.ForeignKey(
+        ClientCard, on_delete=models.CASCADE, related_name="card_units", verbose_name="Karta"
+    )
+    unit = models.ForeignKey(
+        Unit, on_delete=models.CASCADE, related_name="card_units", verbose_name="Plocha"
+    )
+
+    class Meta:
+        verbose_name = "Plocha karty"
+        verbose_name_plural = "Plochy karty"
+        unique_together = ("card", "unit")
+
+    def __str__(self):
+        return f"{self.card} – {self.unit}"
