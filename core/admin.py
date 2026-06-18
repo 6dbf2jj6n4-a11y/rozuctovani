@@ -1,6 +1,7 @@
 from django.contrib import admin
 from django.db import models
-from django.forms import TextInput, Textarea
+from django.forms import TextInput, Textarea, ModelForm
+from django import forms
 from unfold.admin import ModelAdmin, TabularInline
 
 from .models import (
@@ -33,7 +34,55 @@ class CardUnitInline(TabularInline):
     extra = 0
     autocomplete_fields = ("unit",)
 
-from django import forms
+
+class AllocationKeyInlineBase(TabularInline):
+    model = AllocationKey
+    extra = 0
+    collapsible = True
+    fields = ("service_item", "allocation_type", "value", "meter", "valid_from", "valid_to")
+    autocomplete_fields = ("service_item", "meter")
+
+    def get_queryset(self, request):
+        return super().get_queryset(request).filter(
+            service_item__invoice_class=self.invoice_class
+        )
+
+    def formfield_for_foreignkey(self, db_field, request, **kwargs):
+        if db_field.name == "service_item":
+            kwargs["queryset"] = ServicePoolItem.objects.filter(
+                invoice_class=self.invoice_class
+            )
+        return super().formfield_for_foreignkey(db_field, request, **kwargs)
+
+
+class AllocationKeyRentInline(AllocationKeyInlineBase):
+    invoice_class = "rent"
+    verbose_name = "Klíč – Nájemné"
+    verbose_name_plural = "Nájemné"
+
+
+class AllocationKeyElectricityInline(AllocationKeyInlineBase):
+    invoice_class = "electricity"
+    verbose_name = "Klíč – Elektřina"
+    verbose_name_plural = "Elektřina"
+
+
+class AllocationKeyWaterInline(AllocationKeyInlineBase):
+    invoice_class = "water"
+    verbose_name = "Klíč – Voda"
+    verbose_name_plural = "Voda"
+
+
+class AllocationKeyHeatInline(AllocationKeyInlineBase):
+    invoice_class = "heat"
+    verbose_name = "Klíč – Teplo"
+    verbose_name_plural = "Teplo"
+
+
+class AllocationKeyOtherInline(AllocationKeyInlineBase):
+    invoice_class = "other"
+    verbose_name = "Klíč – Ostatní"
+    verbose_name_plural = "Ostatní"
 
 
 class ClientCardInlineForm(forms.ModelForm):
@@ -55,8 +104,10 @@ class ClientCardInlineForm(forms.ModelForm):
                 )
         return cleaned_data
 
+
 class ClientCardInline(TabularInline):
     model = ClientCard
+    form = ClientCardInlineForm
     extra = 0
     fields = ("description_link", "valid_from", "valid_to", "is_active", "note")
     readonly_fields = ("description_link",)
@@ -97,14 +148,7 @@ class ClientAdmin(ModelAdmin):
             "fields": ("note",)
         }),
     )
-    inlines = [
-        CardUnitInline,
-        AllocationKeyRentInline,
-        AllocationKeyElectricityInline,
-        AllocationKeyWaterInline,
-        AllocationKeyHeatInline,
-        AllocationKeyOtherInline,
-    ]
+    inlines = [ClientCardInline]
 
 
 @admin.register(ClientCard)
@@ -118,7 +162,14 @@ class ClientCardAdmin(ModelAdmin):
             "fields": (("client", "description"), ("valid_from", "valid_to"), "is_active", "note")
         }),
     )
-    inlines = [CardUnitInline]
+    inlines = [
+        CardUnitInline,
+        AllocationKeyRentInline,
+        AllocationKeyElectricityInline,
+        AllocationKeyWaterInline,
+        AllocationKeyHeatInline,
+        AllocationKeyOtherInline,
+    ]
     actions = ["kopie_karty"]
 
     @admin.action(description="Vytvořit kopii vybraných karet")
@@ -209,54 +260,6 @@ class ServicePoolItemAdmin(ModelAdmin):
     search_fields = ("name",)
     autocomplete_fields = ("unit", "meter")
 
-class AllocationKeyInlineBase(TabularInline):
-    model = AllocationKey
-    extra = 0
-    collapsible = True
-    fields = ("service_item", "allocation_type", "value", "meter", "valid_from", "valid_to")
-    autocomplete_fields = ("service_item", "meter")
-
-    def get_queryset(self, request):
-        return super().get_queryset(request).filter(
-            service_item__invoice_class=self.invoice_class
-        )
-
-    def formfield_for_foreignkey(self, db_field, request, **kwargs):
-        if db_field.name == "service_item":
-            kwargs["queryset"] = ServicePoolItem.objects.filter(
-                invoice_class=self.invoice_class
-            )
-        return super().formfield_for_foreignkey(db_field, request, **kwargs)
-
-
-class AllocationKeyRentInline(AllocationKeyInlineBase):
-    invoice_class = "rent"
-    verbose_name = "Klíč – Nájemné"
-    verbose_name_plural = "Nájemné"
-
-
-class AllocationKeyElectricityInline(AllocationKeyInlineBase):
-    invoice_class = "electricity"
-    verbose_name = "Klíč – Elektřina"
-    verbose_name_plural = "Elektřina"
-
-
-class AllocationKeyWaterInline(AllocationKeyInlineBase):
-    invoice_class = "water"
-    verbose_name = "Klíč – Voda"
-    verbose_name_plural = "Voda"
-
-
-class AllocationKeyHeatInline(AllocationKeyInlineBase):
-    invoice_class = "heat"
-    verbose_name = "Klíč – Teplo"
-    verbose_name_plural = "Teplo"
-
-
-class AllocationKeyOtherInline(AllocationKeyInlineBase):
-    invoice_class = "other"
-    verbose_name = "Klíč – Ostatní"
-    verbose_name_plural = "Ostatní"
 
 @admin.register(AllocationKey)
 class AllocationKeyAdmin(ModelAdmin):
