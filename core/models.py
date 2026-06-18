@@ -90,7 +90,8 @@ class ClientCard(models.Model):
         Client, on_delete=models.CASCADE, related_name="cards", verbose_name="Klient"
     )
     unit = models.ForeignKey(
-        Unit, on_delete=models.CASCADE, related_name="cards", verbose_name="Prostor"
+    Unit, on_delete=models.SET_NULL, related_name="cards", verbose_name="Prostor",
+    null=True, blank=True
     )
     valid_from = models.DateField("Platnost od")
     valid_to = models.DateField("Platnost do", null=True, blank=True)
