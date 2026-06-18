@@ -40,6 +40,13 @@ class ClientCardInline(TabularInline):
     fields = ("description", "valid_from", "valid_to", "note")
     show_change_link = True
     can_delete = True
+    def description_link(self, obj):
+        from django.urls import reverse
+        from django.utils.html import format_html
+        url = reverse("admin:core_clientcard_change", args=[obj.pk])
+        return format_html('<a href="{}">{}</a>', url, obj.description or "—")
+    description_link.short_description = "Popis karty"
+
 
 
 @admin.register(Client)
