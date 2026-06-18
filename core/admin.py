@@ -37,7 +37,7 @@ class CardUnitInline(TabularInline):
 class ClientCardInline(TabularInline):
     model = ClientCard
     extra = 0
-    fields = ("description", "valid_from", "valid_to", "note")
+    fields = ("description_link", "valid_from", "valid_to", "note")
     show_change_link = True
     can_delete = True
     def description_link(self, obj):
