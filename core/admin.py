@@ -1,6 +1,6 @@
 from django.contrib import admin
 from django.db import models
-from django.forms import TextInput
+from django.forms import TextInput, Textarea
 from unfold.admin import ModelAdmin, TabularInline
 
 from .models import (
@@ -41,7 +41,7 @@ class ClientCardInline(TabularInline):
     show_change_link = True
     can_delete = True
     formfield_overrides = {
-        models.TextField: {"widget": TextInput},
+        models.TextField: {"widget": Textarea(attrs={"rows": 1, "style": "resize:none;"})},
     }
 
 
