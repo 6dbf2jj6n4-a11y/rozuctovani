@@ -9,16 +9,6 @@ class Migration(migrations.Migration):
 
     operations = [
         migrations.AddField(
-            model_name="clientcard",
-            name="external_id",
-            field=models.IntegerField(blank=True, null=True, verbose_name="Původní ID (IDK)"),
-        ),
-        migrations.AddField(
-            model_name="clientcard",
-            name="description",
-            field=models.CharField(blank=True, max_length=200, verbose_name="Popis karty"),
-        ),
-        migrations.AddField(
             model_name="unit",
             name="code",
             field=models.CharField(blank=True, max_length=50, verbose_name="Kód / označení"),
