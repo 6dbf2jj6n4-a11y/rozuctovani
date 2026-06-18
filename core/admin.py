@@ -33,6 +33,27 @@ class CardUnitInline(TabularInline):
     extra = 0
     autocomplete_fields = ("unit",)
 
+from django import forms
+
+
+class ClientCardInlineForm(forms.ModelForm):
+    class Meta:
+        model = ClientCard
+        fields = "__all__"
+
+    def clean(self):
+        cleaned_data = super().clean()
+        is_active = cleaned_data.get("is_active")
+        if is_active and self.instance:
+            client = cleaned_data.get("client") or self.instance.client
+            qs = ClientCard.objects.filter(client=client, is_active=True)
+            if self.instance.pk:
+                qs = qs.exclude(pk=self.instance.pk)
+            if qs.exists():
+                raise forms.ValidationError(
+                    f"Klient již má aktivní kartu: {qs.first().description}. Nejprve deaktivujte stávající kartu."
+                )
+        return cleaned_data
 
 class ClientCardInline(TabularInline):
     model = ClientCard
