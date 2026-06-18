@@ -46,15 +46,15 @@ class ClientAdmin(ModelAdmin):
     list_display = ("name", "code", "ico", "contact_email", "contact_phone", "is_active")
     search_fields = ("name", "ico", "code")
     list_filter = ("is_active",)
-    fieldsets = (
+   fieldsets = (
         ("Základní údaje", {
-            "fields": (("name", "code"), ("is_active", "vat_payer"))
+            "fields": (("name", "code"), ("is_active",))
         }),
         ("Sídlo", {
             "fields": (("street", "street_number"), ("zip_code", "city"))
         }),
         ("Identifikace", {
-            "fields": (("ico", "dic"),)
+            "fields": (("ico", "dic"), "vat_payer")
         }),
         ("Bankovní spojení", {
             "fields": (("bank_name", "bank_account", "bank_code"),)
