@@ -33,7 +33,11 @@ class Unit(models.Model):
         "Výměra (m²)", max_digits=10, decimal_places=2, null=True, blank=True
     )
     description = models.TextField("Popis", blank=True)
-
+    code = models.CharField("Kód / označení", max_length=50, blank=True)
+    purpose = models.CharField("Účel", max_length=100, blank=True)
+    rate_per_m2_year = models.DecimalField("Sazba Kč/m²/rok", max_digits=10, decimal_places=2, null=True, blank=True)
+    unit_type = models.CharField("Jednotka", max_length=10, blank=True, default="m2")
+    
     class Meta:
         verbose_name = "Pronajímaný prostor"
         verbose_name_plural = "Pronajímané prostory"
