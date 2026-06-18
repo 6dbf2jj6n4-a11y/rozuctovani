@@ -46,9 +46,28 @@ class Unit(models.Model):
 class Client(models.Model):
     """Klient (najemce) - firma nebo osoba."""
 
+    code = models.CharField("Kód", max_length=20, unique=True, blank=True)
     name = models.CharField("Název / jméno", max_length=200)
+    is_active = models.BooleanField("Aktivní", default=True)
+    is_landlord = models.BooleanField("Pronajímatel", default=False)
+
+    # Sídlo
+    street = models.CharField("Ulice", max_length=200, blank=True)
+    street_number = models.CharField("Číslo", max_length=20, blank=True)
+    zip_code = models.CharField("PSČ", max_length=10, blank=True)
+    city = models.CharField("Město", max_length=100, blank=True)
+
+    # Identifikace
     ico = models.CharField("IČO", max_length=20, blank=True)
     dic = models.CharField("DIČ", max_length=20, blank=True)
+    vat_payer = models.BooleanField("Plátce DPH", default=False)
+
+    # Bankovní spojení
+    bank_name = models.CharField("Banka", max_length=50, blank=True)
+    bank_account = models.CharField("Číslo účtu", max_length=50, blank=True)
+    bank_code = models.CharField("Kód banky", max_length=10, blank=True)
+
+    # Kontakt
     contact_email = models.EmailField("E-mail", blank=True)
     contact_phone = models.CharField("Telefon", max_length=50, blank=True)
     note = models.TextField("Poznámka", blank=True)
@@ -60,8 +79,6 @@ class Client(models.Model):
 
     def __str__(self):
         return self.name
-
-
 class ClientCard(models.Model):
     """
     Karta klienta - vazba klienta na konkretni pronajaty prostor
