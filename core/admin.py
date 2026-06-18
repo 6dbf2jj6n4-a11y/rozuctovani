@@ -1,7 +1,11 @@
 from django.contrib import admin
 from unfold.admin import ModelAdmin, TabularInline
 
-from .models import Client, ClientCard, Site, Unit, Meter, MeterReading, Period, ServicePoolItem, AllocationKey, CostEntry, BillingLine
+from .models import (
+    Client, ClientCard, Site, Unit, CardUnit,
+    Meter, MeterReading, Period,
+    ServicePoolItem, AllocationKey, CostEntry, BillingLine
+)
 
 
 class UnitInline(TabularInline):
@@ -17,9 +21,15 @@ class SiteAdmin(ModelAdmin):
 
 @admin.register(Unit)
 class UnitAdmin(ModelAdmin):
-    list_display = ("name", "site", "area_m2")
+    list_display = ("code", "name", "site", "purpose", "area_m2", "unit_type")
     list_filter = ("site",)
-    search_fields = ("name",)
+    search_fields = ("name", "code")
+
+
+class CardUnitInline(TabularInline):
+    model = CardUnit
+    extra = 0
+    autocomplete_fields = ("unit",)
 
 
 class ClientCardInline(TabularInline):
@@ -29,17 +39,25 @@ class ClientCardInline(TabularInline):
 
 @admin.register(Client)
 class ClientAdmin(ModelAdmin):
-    list_display = ("name", "ico", "contact_email", "contact_phone")
-    search_fields = ("name", "ico")
+    list_display = ("name", "code", "ico", "contact_email", "contact_phone", "is_active")
+    search_fields = ("name", "ico", "code")
+    list_filter = ("is_active",)
     inlines = [ClientCardInline]
 
 
 @admin.register(ClientCard)
 class ClientCardAdmin(ModelAdmin):
-    list_display = ("client", "unit", "valid_from", "valid_to")
-    list_filter = ("unit__site",)
-    autocomplete_fields = ("client", "unit")
-    search_fields = ("client__name", "unit__name")
+    list_display = ("client", "description", "valid_from", "valid_to")
+    list_filter = ("client__is_active",)
+    autocomplete_fields = ("client",)
+    search_fields = ("client__name", "description")
+    inlines = [CardUnitInline]
+
+
+@admin.register(CardUnit)
+class CardUnitAdmin(ModelAdmin):
+    list_display = ("card", "unit")
+    autocomplete_fields = ("card", "unit")
 
 
 @admin.register(Meter)
