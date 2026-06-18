@@ -88,7 +88,7 @@ else:
     }
 
 
-AUTH_USER_MODEL = "accounts.User"
+AUTH_USER_MODEL = "core.User"
 
 AUTH_PASSWORD_VALIDATORS = [
     {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},
