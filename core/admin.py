@@ -202,6 +202,54 @@ class ServicePoolItemAdmin(ModelAdmin):
     search_fields = ("name",)
     autocomplete_fields = ("unit", "meter")
 
+class AllocationKeyInlineBase(TabularInline):
+    model = AllocationKey
+    extra = 0
+    collapsible = True
+    fields = ("service_item", "allocation_type", "value", "meter", "valid_from", "valid_to")
+    autocomplete_fields = ("service_item", "meter")
+
+    def get_queryset(self, request):
+        return super().get_queryset(request).filter(
+            service_item__invoice_class=self.invoice_class
+        )
+
+    def formfield_for_foreignkey(self, db_field, request, **kwargs):
+        if db_field.name == "service_item":
+            kwargs["queryset"] = ServicePoolItem.objects.filter(
+                invoice_class=self.invoice_class
+            )
+        return super().formfield_for_foreignkey(db_field, request, **kwargs)
+
+
+class AllocationKeyRentInline(AllocationKeyInlineBase):
+    invoice_class = "rent"
+    verbose_name = "Klíč – Nájemné"
+    verbose_name_plural = "Nájemné"
+
+
+class AllocationKeyElectricityInline(AllocationKeyInlineBase):
+    invoice_class = "electricity"
+    verbose_name = "Klíč – Elektřina"
+    verbose_name_plural = "Elektřina"
+
+
+class AllocationKeyWaterInline(AllocationKeyInlineBase):
+    invoice_class = "water"
+    verbose_name = "Klíč – Voda"
+    verbose_name_plural = "Voda"
+
+
+class AllocationKeyHeatInline(AllocationKeyInlineBase):
+    invoice_class = "heat"
+    verbose_name = "Klíč – Teplo"
+    verbose_name_plural = "Teplo"
+
+
+class AllocationKeyOtherInline(AllocationKeyInlineBase):
+    invoice_class = "other"
+    verbose_name = "Klíč – Ostatní"
+    verbose_name_plural = "Ostatní"
 
 @admin.register(AllocationKey)
 class AllocationKeyAdmin(ModelAdmin):
