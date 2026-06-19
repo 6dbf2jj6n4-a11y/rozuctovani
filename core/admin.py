@@ -1,4 +1,7 @@
 from django.contrib import admin
+from django.contrib.auth.models import Group
+
+admin.site.unregister(Group)
 from django import forms
 from unfold.admin import ModelAdmin, TabularInline
 
