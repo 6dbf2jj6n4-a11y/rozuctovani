@@ -372,7 +372,7 @@ class CardUnit(models.Model):
         unique_together = ("card", "unit")
 
     def __str__(self):
-        return self.unit.code or str(self.unit)
+        return ""
 
     @property
     def area_m2(self):
