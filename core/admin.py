@@ -103,8 +103,8 @@ class AllocationKeyOtherInline(AllocationKeyInlineBase):
 class CardUnitInline(TabularInline):
     model = CardUnit
     extra = 0
-    fields = ("unit", "vymera_zasobnik", "area_m2_override", "rate_per_m2")
-    readonly_fields = ("vymera_zasobnik",)
+    fields = ("unit", "vymera_zasobnik", "area_m2_override", "rate_per_m2", "rocni_najem", "mesicni_najem")
+    readonly_fields = ("vymera_zasobnik", "rocni_najem", "mesicni_najem")
     autocomplete_fields = ("unit",)
     verbose_name = "Plocha"
     verbose_name_plural = "Plochy a nájemné"
@@ -117,6 +117,18 @@ class CardUnitInline(TabularInline):
             return f"{obj.unit.area_m2} m²"
         return "—"
     vymera_zasobnik.short_description = "Výměra (zásobník)"
+
+    def rocni_najem(self, obj):
+        if obj.pk and obj.rate_per_m2 and obj.area_m2:
+            return f"{obj.area_m2 * obj.rate_per_m2:.2f} Kč"
+        return "—"
+    rocni_najem.short_description = "Nájemné/rok"
+
+    def mesicni_najem(self, obj):
+        if obj.pk and obj.monthly_rent:
+            return f"{obj.monthly_rent} Kč"
+        return "—"
+    mesicni_najem.short_description = "Nájemné/měsíc"
 
 
 class ClientCardInlineForm(forms.ModelForm):
