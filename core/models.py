@@ -357,6 +357,14 @@ class CardUnit(models.Model):
     rate_per_m2 = models.DecimalField(
         "Cena Kč/m²/rok", max_digits=10, decimal_places=2, null=True, blank=True
     )
+    area_m2_override = models.DecimalField(
+        "Výměra (m²) - úprava",
+        max_digits=10,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        help_text="Vyplnit jen pokud se liší od výměry v zásobníku (např. pronajatá část plochy).",
+    )
 
     class Meta:
         verbose_name = "Plocha karty"
@@ -368,12 +376,14 @@ class CardUnit(models.Model):
 
     @property
     def area_m2(self):
+        if self.area_m2_override is not None:
+            return self.area_m2_override
         return self.unit.area_m2
 
     @property
     def monthly_rent(self):
-        if self.rate_per_m2 and self.unit.area_m2:
-            return round(self.unit.area_m2 * self.rate_per_m2 / 12, 2)
+        if self.rate_per_m2 and self.area_m2:
+            return round(self.area_m2 * self.rate_per_m2 / 12, 2)
         return None
 
 
