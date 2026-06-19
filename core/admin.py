@@ -169,11 +169,26 @@ class ClientCardInline(TabularInline):
     description_link.short_description = "Popis karty"
 
 
+class SiteFilter(admin.SimpleListFilter):
+    title = "Areál"
+    parameter_name = "site"
+
+    def lookups(self, request, model_admin):
+        return [(s.id, s.name) for s in Site.objects.all()]
+
+    def queryset(self, request, queryset):
+        if self.value():
+            return queryset.filter(
+                cards__card_units__unit__site_id=self.value()
+            ).distinct()
+        return queryset
+
+
 @admin.register(Client)
 class ClientAdmin(ModelAdmin):
     list_display = ("name", "code", "ico", "contact_email", "contact_phone", "is_active")
     search_fields = ("name", "ico", "code")
-    list_filter = ("is_active",)
+    list_filter = ("is_active", SiteFilter)
     fieldsets = (
         ("Základní údaje", {
             "fields": (("name", "code"), ("is_active",))
