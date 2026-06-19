@@ -100,6 +100,10 @@ Pouziva django.jQuery kvuli kompatibilite se select2 (autocomplete).
     }
 
     function findContainer($select) {
+        var $table = $select.closest("table");
+        if ($table.length) {
+            return $table.parent();
+        }
         var $group = $select.closest('div[id$="-group"]');
         if ($group.length) {
             return $group;
