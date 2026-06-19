@@ -210,6 +210,20 @@ class ClientAdmin(ModelAdmin):
         }),
     )
     inlines = [ClientCardInline]
+    actions = ["export_emaily"]
+
+    @admin.action(description="Zobrazit e-maily vybraných klientů (pro BCC)")
+    def export_emaily(self, request, queryset):
+        from django.contrib import messages
+        emaily = [c.contact_email for c in queryset if c.contact_email]
+        if not emaily:
+            self.message_user(request, "Vybraní klienti nemají vyplněný e-mail.", level=messages.WARNING)
+            return
+        self.message_user(
+            request,
+            "E-maily (zkopíruj a vlož do BCC): " + "; ".join(emaily),
+            level=messages.SUCCESS,
+        )
 
 
 @admin.register(ClientCard)
