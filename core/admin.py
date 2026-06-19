@@ -257,6 +257,13 @@ class ClientCardAdmin(ModelAdmin):
         extra_context["kopie_url"] = f"/admin/core/clientcard/kopie/{object_id}/"
         return super().change_view(request, object_id, form_url, extra_context)
 
+    def response_change(self, request, obj):
+        from django.http import HttpResponseRedirect
+        if "_continue" not in request.POST and "_addanother" not in request.POST and "_saveasnew" not in request.POST:
+            return HttpResponseRedirect(request.path)
+        return super().response_change(request, obj)
+
+
 
 @admin.register(CardUnit)
 class CardUnitAdmin(ModelAdmin):
