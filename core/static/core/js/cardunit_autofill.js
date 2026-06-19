@@ -6,8 +6,16 @@
 3) Pod tabulkou zobrazi soucet za vsechny radky.
 
 Pouziva django.jQuery kvuli kompatibilite se select2 (autocomplete).
+Promenna $ je definovana JEDNOU na zacatku a sdilena vsemi funkcemi
+pres uzaver (closure) - predchozi verze mela chybu, kdy nekterre
+pomocne funkce pouzivaly $ bez pristupu k nemu.
 */
 (function () {
+    var $ = (window.django && window.django.jQuery) || window.jQuery;
+    if (!$) {
+        return;
+    }
+
     function parseNum(value) {
         if (!value) {
             return null;
@@ -113,100 +121,86 @@ Pouziva django.jQuery kvuli kompatibilite se select2 (autocomplete).
         );
     }
 
-    function attach($) {
-        // Autofill vymery pri vyberu plochy
-        $(document).on("select2:select change", 'select[id$="-unit"]', function () {
-            var $select = $(this);
-            var $row = $select.closest("tr");
-            if ($row.length === 0) {
-                return;
-            }
-            var unitId = $select.val();
-            if (!unitId) {
-                return;
-            }
+    // Autofill vymery pri vyberu plochy
+    $(document).on("select2:select change", 'select[id$="-unit"]', function () {
+        var $select = $(this);
+        var $row = $select.closest("tr");
+        if ($row.length === 0) {
+            return;
+        }
+        var unitId = $select.val();
+        if (!unitId) {
+            return;
+        }
 
-            var $areaInput = $row.find('input[id$="-area_m2_override"]');
-            var $readonlyCell = $row.find(".field-vymera_zasobnik p, .field-vymera_zasobnik");
+        var $areaInput = $row.find('input[id$="-area_m2_override"]');
+        var $readonlyCell = $row.find(".field-vymera_zasobnik p, .field-vymera_zasobnik");
 
-            fetch("/admin/core/unit/area-lookup/" + unitId + "/")
-                .then(function (response) {
-                    return response.json();
-                })
-                .then(function (data) {
-                    if (data.area === null || data.area === undefined) {
-                        return;
-                    }
-                    if ($areaInput.length && !$areaInput.val()) {
-                        $areaInput.val(data.area);
-                    }
-                    if ($readonlyCell.length) {
-                        $readonlyCell.first().text(data.area + " m²");
-                    }
-                    recalcRow($row);
-                    recalcTotals(findTable($select));
-                })
-                .catch(function () {
-                    /* ticho */
-                });
-        });
-
-        // Zivy prepocet pri editaci vymery nebo ceny
-        $(document).on(
-            "input change",
-            'input[id$="-area_m2_override"], input[id$="-rate_per_m2"]',
-            function () {
-                var $input = $(this);
-                var $row = $input.closest("tr");
-                if ($row.length === 0) {
+        fetch("/admin/core/unit/area-lookup/" + unitId + "/")
+            .then(function (response) {
+                return response.json();
+            })
+            .then(function (data) {
+                if (data.area === null || data.area === undefined) {
                     return;
                 }
-                recalcRow($row);
-                recalcTotals(findTable($input));
-            }
-        );
-
-        // Prepocet souctu i pri smazani radku (zaskrtnuti DELETE)
-        $(document).on("change", 'input[id$="-DELETE"]', function () {
-            var $row = $(this).closest("tr");
-            if ($row.length === 0) {
-                return;
-            }
-            if ($(this).is(":checked")) {
-                $row.removeAttr("data-rocni-najem");
-                $row.removeAttr("data-mesicni-najem");
-                $row.removeAttr("data-area");
-            } else {
-                recalcRow($row);
-            }
-            recalcTotals(findTable($row));
-        });
-
-        // Pocatecni vypocet po nacteni stranky pro kazdou tabulku CardUnit inline
-        $(function () {
-            $('select[id$="-unit"]').each(function () {
-                var $table = findTable($(this));
-                if ($table.length === 0 || $table.data("cardunit-initialized")) {
-                    return;
+                if ($areaInput.length && !$areaInput.val()) {
+                    $areaInput.val(data.area);
                 }
-                $table.data("cardunit-initialized", true);
-                $table.find("tr").each(function () {
-                    recalcRow($(this));
-                });
-                recalcTotals($table);
+                if ($readonlyCell.length) {
+                    $readonlyCell.first().text(data.area + " m²");
+                }
+                recalcRow($row);
+                recalcTotals(findTable($select));
+            })
+            .catch(function () {
+                /* ticho */
             });
-        });
-    }
+    });
 
-    if (window.django && window.django.jQuery) {
-        attach(window.django.jQuery);
-    } else if (window.jQuery) {
-        attach(window.jQuery);
-    } else {
-        document.addEventListener("DOMContentLoaded", function () {
-            if (window.django && window.django.jQuery) {
-                attach(window.django.jQuery);
+    // Zivy prepocet pri editaci vymery nebo ceny
+    $(document).on(
+        "input change",
+        'input[id$="-area_m2_override"], input[id$="-rate_per_m2"]',
+        function () {
+            var $input = $(this);
+            var $row = $input.closest("tr");
+            if ($row.length === 0) {
+                return;
             }
+            recalcRow($row);
+            recalcTotals(findTable($input));
+        }
+    );
+
+    // Prepocet souctu i pri smazani radku (zaskrtnuti DELETE)
+    $(document).on("change", 'input[id$="-DELETE"]', function () {
+        var $row = $(this).closest("tr");
+        if ($row.length === 0) {
+            return;
+        }
+        if ($(this).is(":checked")) {
+            $row.removeAttr("data-rocni-najem");
+            $row.removeAttr("data-mesicni-najem");
+            $row.removeAttr("data-area");
+        } else {
+            recalcRow($row);
+        }
+        recalcTotals(findTable($row));
+    });
+
+    // Pocatecni vypocet po nacteni stranky pro kazdou tabulku CardUnit inline
+    $(function () {
+        $('select[id$="-unit"]').each(function () {
+            var $table = findTable($(this));
+            if ($table.length === 0 || $table.data("cardunit-initialized")) {
+                return;
+            }
+            $table.data("cardunit-initialized", true);
+            $table.find("tr").each(function () {
+                recalcRow($(this));
+            });
+            recalcTotals($table);
         });
-    }
+    });
 })();
