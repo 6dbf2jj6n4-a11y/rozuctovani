@@ -33,6 +33,28 @@ class UnitAdmin(ModelAdmin):
     search_fields = ("name", "code")
     inlines = [UnitServiceInline]
 
+    def get_urls(self):
+        from django.urls import path
+        from django.http import JsonResponse
+
+        def area_lookup(request, unit_id):
+            area = (
+                Unit.objects.filter(pk=unit_id)
+                .values_list("area_m2", flat=True)
+                .first()
+            )
+            return JsonResponse({"area": str(area) if area is not None else None})
+
+        urls = super().get_urls()
+        custom = [
+            path(
+                "area-lookup/<int:unit_id>/",
+                self.admin_site.admin_view(area_lookup),
+                name="core_unit_area_lookup",
+            ),
+        ]
+        return custom + urls
+
 
 class AllocationKeyInlineBase(TabularInline):
     model = AllocationKey
@@ -86,6 +108,9 @@ class CardUnitInline(TabularInline):
     autocomplete_fields = ("unit",)
     verbose_name = "Plocha"
     verbose_name_plural = "Plochy a nájemné"
+
+    class Media:
+        js = ("core/js/cardunit_autofill.js",)
 
     def vymera_zasobnik(self, obj):
         if obj.unit and obj.unit.area_m2:
