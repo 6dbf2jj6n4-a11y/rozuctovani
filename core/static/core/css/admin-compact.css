@@ -1,0 +1,49 @@
+/*
+Zhusteni (compact) rozlozeni administrace - zmensuje odsazeni
+formularovych poli, radku tabulek a sekci, aby se na obrazovku
+veslo vice informaci najednou.
+*/
+
+/* Radky v tabulkach (zmenseny radkovani a padding bunek) */
+table td,
+table th {
+    padding-top: 4px !important;
+    padding-bottom: 4px !important;
+}
+
+/* Vstupni pole - mensi vyska a padding */
+input[type="text"],
+input[type="number"],
+input[type="email"],
+input[type="date"],
+select,
+textarea {
+    padding-top: 4px !important;
+    padding-bottom: 4px !important;
+    line-height: 1.3 !important;
+}
+
+/* Fieldset / sekce formulare - mensi mezery mezi sekcemi */
+fieldset.module {
+    margin-bottom: 10px !important;
+    padding-top: 8px !important;
+    padding-bottom: 8px !important;
+}
+
+/* Radky formulare (form-row) - mensi vertikalni mezery */
+.form-row {
+    padding-top: 6px !important;
+    padding-bottom: 6px !important;
+}
+
+/* Inline skupiny (tabulky karet, ploch, kliciu) - tesnejsi */
+.inline-group {
+    margin-bottom: 10px !important;
+}
+
+/* Nadpisy sekci - mensi padding */
+fieldset.module h2,
+.inline-group h2 {
+    padding-top: 6px !important;
+    padding-bottom: 6px !important;
+}
