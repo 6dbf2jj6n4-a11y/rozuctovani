@@ -42,6 +42,12 @@ Pouziva django.jQuery kvuli kompatibilite se select2 (autocomplete).
         var $rocni = $row.find(".field-rocni_najem p, .field-rocni_najem");
         var $mesicni = $row.find(".field-mesicni_najem p, .field-mesicni_najem");
 
+        if (area !== null) {
+            $row.attr("data-area", area);
+        } else {
+            $row.removeAttr("data-area");
+        }
+
         if (area !== null && rate !== null) {
             var rocniVal = area * rate;
             var mesicniVal = rocniVal / 12;
@@ -62,14 +68,19 @@ Pouziva django.jQuery kvuli kompatibilite se select2 (autocomplete).
     function recalcTotals($container) {
         var sumRocni = 0;
         var sumMesicni = 0;
+        var sumArea = 0;
         $container.find("tr").each(function () {
             var rocni = parseFloat($(this).attr("data-rocni-najem"));
             var mesicni = parseFloat($(this).attr("data-mesicni-najem"));
+            var area = parseFloat($(this).attr("data-area"));
             if (!isNaN(rocni)) {
                 sumRocni += rocni;
             }
             if (!isNaN(mesicni)) {
                 sumMesicni += mesicni;
+            }
+            if (!isNaN(area)) {
+                sumArea += area;
             }
         });
 
@@ -80,8 +91,10 @@ Pouziva django.jQuery kvuli kompatibilite se select2 (autocomplete).
             );
             $container.append($totals);
         }
+        var areaText = sumArea.toLocaleString("cs-CZ", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + " m²";
         $totals.html(
-            "Součet nájemné/rok: " + formatKc(sumRocni) +
+            "Součet výměr: " + areaText +
+            " &nbsp;&nbsp; Součet nájemné/rok: " + formatKc(sumRocni) +
             " &nbsp;&nbsp; Součet nájemné/měsíc: " + formatKc(sumMesicni)
         );
     }
@@ -156,6 +169,7 @@ Pouziva django.jQuery kvuli kompatibilite se select2 (autocomplete).
             if ($(this).is(":checked")) {
                 $row.removeAttr("data-rocni-najem");
                 $row.removeAttr("data-mesicni-najem");
+                $row.removeAttr("data-area");
             } else {
                 recalcRow($row);
             }
