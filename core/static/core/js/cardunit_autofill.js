@@ -65,11 +65,31 @@ Pouziva django.jQuery kvuli kompatibilite se select2 (autocomplete).
         }
     }
 
-    function recalcTotals($container) {
+    function findTable($el) {
+        return $el.closest("table");
+    }
+
+    function getOrCreateTotals($table) {
+        var $next = $table.next(".cardunit-totals");
+        if ($next.length) {
+            return $next;
+        }
+        var $div = $(
+            '<div class="cardunit-totals" style="margin:10px 0; padding:10px 14px; font-weight:600; ' +
+            'border:1px solid rgba(0,0,0,0.1); border-radius:6px; background:rgba(0,0,0,0.03);"></div>'
+        );
+        $table.after($div);
+        return $div;
+    }
+
+    function recalcTotals($table) {
+        if (!$table || $table.length === 0) {
+            return;
+        }
         var sumRocni = 0;
         var sumMesicni = 0;
         var sumArea = 0;
-        $container.find("tr").each(function () {
+        $table.find("tbody tr, tr").each(function () {
             var rocni = parseFloat($(this).attr("data-rocni-najem"));
             var mesicni = parseFloat($(this).attr("data-mesicni-najem"));
             var area = parseFloat($(this).attr("data-area"));
@@ -84,31 +104,13 @@ Pouziva django.jQuery kvuli kompatibilite se select2 (autocomplete).
             }
         });
 
-        var $totals = $container.find(".cardunit-totals");
-        if ($totals.length === 0) {
-            $totals = $(
-                '<div class="cardunit-totals" style="margin:8px 0; padding:8px 12px; font-weight:600;"></div>'
-            );
-            $container.append($totals);
-        }
+        var $totals = getOrCreateTotals($table);
         var areaText = sumArea.toLocaleString("cs-CZ", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + " m²";
         $totals.html(
             "Součet výměr: " + areaText +
             " &nbsp;&nbsp; Součet nájemné/rok: " + formatKc(sumRocni) +
             " &nbsp;&nbsp; Součet nájemné/měsíc: " + formatKc(sumMesicni)
         );
-    }
-
-    function findContainer($select) {
-        var $table = $select.closest("table");
-        if ($table.length) {
-            return $table.parent();
-        }
-        var $group = $select.closest('div[id$="-group"]');
-        if ($group.length) {
-            return $group;
-        }
-        return $select.closest("fieldset");
     }
 
     function attach($) {
@@ -142,7 +144,7 @@ Pouziva django.jQuery kvuli kompatibilite se select2 (autocomplete).
                         $readonlyCell.first().text(data.area + " m²");
                     }
                     recalcRow($row);
-                    recalcTotals(findContainer($select));
+                    recalcTotals(findTable($select));
                 })
                 .catch(function () {
                     /* ticho */
@@ -160,7 +162,7 @@ Pouziva django.jQuery kvuli kompatibilite se select2 (autocomplete).
                     return;
                 }
                 recalcRow($row);
-                recalcTotals(findContainer($row.find('select[id$="-unit"]')));
+                recalcTotals(findTable($input));
             }
         );
 
@@ -177,17 +179,21 @@ Pouziva django.jQuery kvuli kompatibilite se select2 (autocomplete).
             } else {
                 recalcRow($row);
             }
-            recalcTotals(findContainer($row.find('select[id$="-unit"]')));
+            recalcTotals(findTable($row));
         });
 
-        // Pocatecni vypocet po nacteni stranky
+        // Pocatecni vypocet po nacteni stranky pro kazdou tabulku CardUnit inline
         $(function () {
-            $('select[id$="-unit"]').first().each(function () {
-                var $container = findContainer($(this));
-                $container.find("tr").each(function () {
+            $('select[id$="-unit"]').each(function () {
+                var $table = findTable($(this));
+                if ($table.length === 0 || $table.data("cardunit-initialized")) {
+                    return;
+                }
+                $table.data("cardunit-initialized", true);
+                $table.find("tr").each(function () {
                     recalcRow($(this));
                 });
-                recalcTotals($container);
+                recalcTotals($table);
             });
         });
     }
