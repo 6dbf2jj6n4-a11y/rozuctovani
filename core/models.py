@@ -405,6 +405,29 @@ class CardUnit(models.Model):
     def __str__(self):
         return ""
 
+    def save(self, *args, **kwargs):
+        is_new = self.pk is None
+        super().save(*args, **kwargs)
+        if is_new:
+            self.create_default_keys()
+
+    def create_default_keys(self):
+        """
+        Pro kazdou vychozi sluzbu prirazenou teto plose (UnitService)
+        vytvori odpovidajici klic (AllocationKey) na karte klienta,
+        pokud uz na ni klient nema klic pro tutéž polozku zasobniku.
+        """
+        for unit_service in self.unit.unit_services.all():
+            AllocationKey.objects.get_or_create(
+                client_card=self.card,
+                service_item=unit_service.service_item,
+                defaults={
+                    "allocation_type": unit_service.allocation_type,
+                    "value": unit_service.value,
+                    "meter": unit_service.meter,
+                },
+            )
+
     @property
     def area_m2(self):
         if self.area_m2_override is not None:
