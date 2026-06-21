@@ -26,7 +26,10 @@ class SiteAdmin(ModelAdmin):
 class UnitServiceInline(TabularInline):
     model = UnitService
     extra = 0
-    autocomplete_fields = ("service_item", "meter")
+    autocomplete_fields = ("service_item",)
+
+    class Media:
+        js = ("core/js/unitservice_meter_filter.js",)
 
     def get_formset(self, request, obj=None, **kwargs):
         self.parent_obj = obj
@@ -350,6 +353,37 @@ class MeterAdmin(ModelAdmin):
         }),
     )
 
+    def get_urls(self):
+        from django.urls import path
+        from django.http import JsonResponse
+        from django.db.models import Q
+
+        def meter_search(request):
+            term = request.GET.get("term", "").strip()
+            site_id = request.GET.get("site_id")
+            meter_type = request.GET.get("meter_type")
+
+            qs = Meter.objects.all()
+            if site_id:
+                qs = qs.filter(site_id=site_id)
+            if meter_type:
+                qs = qs.filter(meter_type=meter_type)
+            if term:
+                qs = qs.filter(Q(name__icontains=term) | Q(code__icontains=term))
+
+            qs = qs.order_by("name")[:50]
+            return JsonResponse({"results": [{"id": m.id, "text": str(m)} for m in qs]})
+
+        urls = super().get_urls()
+        custom = [
+            path(
+                "search/",
+                self.admin_site.admin_view(meter_search),
+                name="core_meter_search",
+            ),
+        ]
+        return custom + urls
+
 
 @admin.register(Period)
 class PeriodAdmin(ModelAdmin):
@@ -371,6 +405,28 @@ class ServicePoolItemAdmin(ModelAdmin):
     list_filter = ("site", "invoice_class")
     search_fields = ("name",)
     autocomplete_fields = ("unit", "meter")
+
+    def get_urls(self):
+        from django.urls import path
+        from django.http import JsonResponse
+
+        def class_lookup(request, item_id):
+            invoice_class = (
+                ServicePoolItem.objects.filter(pk=item_id)
+                .values_list("invoice_class", flat=True)
+                .first()
+            )
+            return JsonResponse({"invoice_class": invoice_class})
+
+        urls = super().get_urls()
+        custom = [
+            path(
+                "class-lookup/<int:item_id>/",
+                self.admin_site.admin_view(class_lookup),
+                name="core_servicepoolitem_class_lookup",
+            ),
+        ]
+        return custom + urls
 
 
 @admin.register(AllocationKey)
