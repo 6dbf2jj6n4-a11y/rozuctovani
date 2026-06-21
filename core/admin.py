@@ -66,6 +66,9 @@ class AllocationKeyInlineBase(TabularInline):
     fields = ("service_item", "allocation_type", "value", "meter")
     autocomplete_fields = ("service_item", "meter")
 
+    class Media:
+        css = {"all": ("core/css/select_width_fix.css",)}
+
     def get_queryset(self, request):
         return super().get_queryset(request).filter(
             service_item__invoice_class=self.invoice_class
