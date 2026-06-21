@@ -28,6 +28,19 @@ class UnitServiceInline(TabularInline):
     extra = 0
     autocomplete_fields = ("service_item", "meter")
 
+    def get_formset(self, request, obj=None, **kwargs):
+        self.parent_obj = obj
+        return super().get_formset(request, obj, **kwargs)
+
+    def formfield_for_foreignkey(self, db_field, request, **kwargs):
+        parent = getattr(self, "parent_obj", None)
+        if parent is not None:
+            if db_field.name == "service_item":
+                kwargs["queryset"] = ServicePoolItem.objects.filter(site=parent.site)
+            elif db_field.name == "meter":
+                kwargs["queryset"] = Meter.objects.filter(site=parent.site)
+        return super().formfield_for_foreignkey(db_field, request, **kwargs)
+
 
 @admin.register(Unit)
 class UnitAdmin(ModelAdmin):
