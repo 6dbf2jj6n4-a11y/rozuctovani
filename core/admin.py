@@ -60,7 +60,13 @@ class UnitServiceInlineBase(TabularInline):
             else:
                 qs = Meter.objects.none()
             kwargs["queryset"] = qs
-        return super().formfield_for_foreignkey(db_field, request, **kwargs)
+
+        formfield = super().formfield_for_foreignkey(db_field, request, **kwargs)
+        if db_field.name == "meter" and hasattr(formfield.widget, "can_delete_related"):
+            formfield.widget.can_delete_related = False
+            formfield.widget.can_add_related = False
+            formfield.widget.can_change_related = False
+        return formfield
 
 
 class UnitServiceElectricityInline(UnitServiceInlineBase):
