@@ -415,16 +415,18 @@ class CardUnit(models.Model):
         """
         Pro kazdou vychozi sluzbu prirazenou teto plose (UnitService)
         vytvori odpovidajici klic (AllocationKey) na karte klienta,
-        pokud uz na ni klient nema klic pro tutéž polozku zasobniku.
+        pokud uz na ni klient nema stejny klic (stejna polozka
+        zasobniku A stejne mericí - jedna sluzba muze mit vic
+        mericí, napr. dva vodomery).
         """
         for unit_service in self.unit.unit_services.all():
             AllocationKey.objects.get_or_create(
                 client_card=self.card,
                 service_item=unit_service.service_item,
+                meter=unit_service.meter,
                 defaults={
                     "allocation_type": unit_service.allocation_type,
                     "value": unit_service.value,
-                    "meter": unit_service.meter,
                 },
             )
 
@@ -469,7 +471,7 @@ class UnitService(models.Model):
     class Meta:
         verbose_name = "Výchozí služba plochy"
         verbose_name_plural = "Výchozí služby plochy"
-        unique_together = ("unit", "service_item")
+        unique_together = ("unit", "service_item", "meter")
 
     def __str__(self):
         return f"{self.unit} – {self.service_item}"
