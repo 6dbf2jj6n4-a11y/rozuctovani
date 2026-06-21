@@ -28,6 +28,9 @@ class UnitServiceInlineBase(TabularInline):
     extra = 0
     collapsible = True
 
+    class Media:
+        css = {"all": ("core/css/select_width_fix.css",)}
+
     # Mapovani tridy sluzby na typ mericí (pro tridu "other" mericí nejsou)
     METER_TYPE_FOR_CLASS = {
         "electricity": "electricity",
@@ -148,7 +151,12 @@ class AllocationKeyInlineBase(TabularInline):
             kwargs["queryset"] = ServicePoolItem.objects.filter(
                 invoice_class=self.invoice_class
             )
-        return super().formfield_for_foreignkey(db_field, request, **kwargs)
+        formfield = super().formfield_for_foreignkey(db_field, request, **kwargs)
+        if db_field.name == "meter" and hasattr(formfield.widget, "can_delete_related"):
+            formfield.widget.can_delete_related = False
+            formfield.widget.can_add_related = False
+            formfield.widget.can_change_related = False
+        return formfield
 
 
 class AllocationKeyElectricityInline(AllocationKeyInlineBase):
