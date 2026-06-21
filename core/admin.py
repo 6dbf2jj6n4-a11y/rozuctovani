@@ -27,10 +27,13 @@ class UnitServiceInlineBase(TabularInline):
     model = UnitService
     extra = 0
     collapsible = True
-    autocomplete_fields = ("service_item",)
 
-    class Media:
-        js = ("core/js/unitservice_meter_filter.js",)
+    # Mapovani tridy sluzby na typ mericí (pro tridu "other" mericí nejsou)
+    METER_TYPE_FOR_CLASS = {
+        "electricity": "electricity",
+        "water": "water",
+        "heat": "heat",
+    }
 
     def get_formset(self, request, obj=None, **kwargs):
         self.parent_obj = obj
@@ -48,8 +51,15 @@ class UnitServiceInlineBase(TabularInline):
             if parent is not None:
                 qs = qs.filter(site=parent.site)
             kwargs["queryset"] = qs
-        elif db_field.name == "meter" and parent is not None:
-            kwargs["queryset"] = Meter.objects.filter(site=parent.site)
+        elif db_field.name == "meter":
+            meter_type = self.METER_TYPE_FOR_CLASS.get(self.invoice_class)
+            if meter_type:
+                qs = Meter.objects.filter(meter_type=meter_type)
+                if parent is not None:
+                    qs = qs.filter(site=parent.site)
+            else:
+                qs = Meter.objects.none()
+            kwargs["queryset"] = qs
         return super().formfield_for_foreignkey(db_field, request, **kwargs)
 
 
@@ -462,8 +472,32 @@ class ServicePoolItemAdmin(ModelAdmin):
                 self.admin_site.admin_view(class_lookup),
                 name="core_servicepoolitem_class_lookup",
             ),
+            path(
+                "search/",
+                self.admin_site.admin_view(self.service_item_search),
+                name="core_servicepoolitem_search",
+            ),
         ]
         return custom + urls
+
+    def service_item_search(self, request):
+        from django.http import JsonResponse
+        from django.db.models import Q
+
+        term = request.GET.get("term", "").strip()
+        site_id = request.GET.get("site_id")
+        invoice_class = request.GET.get("invoice_class")
+
+        qs = ServicePoolItem.objects.all()
+        if site_id:
+            qs = qs.filter(site_id=site_id)
+        if invoice_class:
+            qs = qs.filter(invoice_class=invoice_class)
+        if term:
+            qs = qs.filter(Q(name__icontains=term))
+
+        qs = qs.order_by("name")[:50]
+        return JsonResponse({"results": [{"id": i.id, "text": str(i)} for i in qs]})
 
 
 @admin.register(AllocationKey)
