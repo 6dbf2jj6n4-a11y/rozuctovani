@@ -317,10 +317,22 @@ class CardUnitAdmin(ModelAdmin):
 
 @admin.register(Meter)
 class MeterAdmin(ModelAdmin):
-    list_display = ("name", "site", "meter_type", "parent_meter", "unit_of_measure")
-    list_filter = ("site", "meter_type")
-    search_fields = ("name", "serial_number")
+    list_display = ("code", "name", "site", "meter_type", "parent_meter", "is_virtual", "unit_of_measure")
+    list_filter = ("site", "meter_type", "is_virtual")
+    search_fields = ("name", "code", "serial_number")
     autocomplete_fields = ("parent_meter",)
+    fieldsets = (
+        (None, {
+            "fields": (("site", "code", "name"), ("meter_type", "unit_of_measure", "serial_number"))
+        }),
+        ("Hierarchie", {
+            "fields": ("parent_meter",)
+        }),
+        ("Virtuální měřidlo", {
+            "fields": (("is_virtual", "formula"),),
+            "description": "Vyplnit pouze pokud se spotřeba nepočítá z odečtů, ale ze vzorce odkazujícího na kódy jiných měřidel (např. E_A1+E_AB1).",
+        }),
+    )
 
 
 @admin.register(Period)
@@ -339,7 +351,7 @@ class MeterReadingAdmin(ModelAdmin):
 
 @admin.register(ServicePoolItem)
 class ServicePoolItemAdmin(ModelAdmin):
-    list_display = ("name", "site", "invoice_class", "unit", "meter")
+    list_display = ("name", "site", "invoice_class", "unit", "meter", "default_allocation_type")
     list_filter = ("site", "invoice_class")
     search_fields = ("name",)
     autocomplete_fields = ("unit", "meter")
