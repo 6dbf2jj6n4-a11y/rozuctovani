@@ -23,9 +23,10 @@ class SiteAdmin(ModelAdmin):
     inlines = [UnitInline]
 
 
-class UnitServiceInline(TabularInline):
+class UnitServiceInlineBase(TabularInline):
     model = UnitService
     extra = 0
+    collapsible = True
     autocomplete_fields = ("service_item",)
 
     class Media:
@@ -35,14 +36,45 @@ class UnitServiceInline(TabularInline):
         self.parent_obj = obj
         return super().get_formset(request, obj, **kwargs)
 
+    def get_queryset(self, request):
+        return super().get_queryset(request).filter(
+            service_item__invoice_class=self.invoice_class
+        )
+
     def formfield_for_foreignkey(self, db_field, request, **kwargs):
         parent = getattr(self, "parent_obj", None)
-        if parent is not None:
-            if db_field.name == "service_item":
-                kwargs["queryset"] = ServicePoolItem.objects.filter(site=parent.site)
-            elif db_field.name == "meter":
-                kwargs["queryset"] = Meter.objects.filter(site=parent.site)
+        if db_field.name == "service_item":
+            qs = ServicePoolItem.objects.filter(invoice_class=self.invoice_class)
+            if parent is not None:
+                qs = qs.filter(site=parent.site)
+            kwargs["queryset"] = qs
+        elif db_field.name == "meter" and parent is not None:
+            kwargs["queryset"] = Meter.objects.filter(site=parent.site)
         return super().formfield_for_foreignkey(db_field, request, **kwargs)
+
+
+class UnitServiceElectricityInline(UnitServiceInlineBase):
+    invoice_class = "electricity"
+    verbose_name = "Služba – Elektřina"
+    verbose_name_plural = "Elektřina"
+
+
+class UnitServiceWaterInline(UnitServiceInlineBase):
+    invoice_class = "water"
+    verbose_name = "Služba – Voda"
+    verbose_name_plural = "Voda"
+
+
+class UnitServiceHeatInline(UnitServiceInlineBase):
+    invoice_class = "heat"
+    verbose_name = "Služba – Teplo"
+    verbose_name_plural = "Teplo"
+
+
+class UnitServiceOtherInline(UnitServiceInlineBase):
+    invoice_class = "other"
+    verbose_name = "Služba – Ostatní"
+    verbose_name_plural = "Ostatní"
 
 
 @admin.register(Unit)
@@ -50,7 +82,12 @@ class UnitAdmin(ModelAdmin):
     list_display = ("code", "name", "site", "purpose", "area_m2", "unit_type")
     list_filter = ("site",)
     search_fields = ("name", "code")
-    inlines = [UnitServiceInline]
+    inlines = [
+        UnitServiceElectricityInline,
+        UnitServiceWaterInline,
+        UnitServiceHeatInline,
+        UnitServiceOtherInline,
+    ]
 
     def get_urls(self):
         from django.urls import path
