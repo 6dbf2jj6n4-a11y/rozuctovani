@@ -46,7 +46,7 @@ class Unit(models.Model):
     area_m2 = models.DecimalField(
         "Výměra (m²)", max_digits=10, decimal_places=2, null=True, blank=True
     )
-    description = models.TextField("Popis", blank=True)
+    description = models.CharField("Popis", max_length=300, blank=True)
     code = models.CharField("Kód / označení", max_length=50, blank=True)
     purpose = models.CharField("Účel", max_length=100, blank=True)
     rate_per_m2_year = models.DecimalField(
