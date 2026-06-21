@@ -210,4 +210,3 @@ class Command(BaseCommand):
             f"\nHotovo. Měřidel zpracováno: {len(meters_by_key)}, "
             f"položek zásobníku vytvořeno: {items_created}."
         ))
-Done
