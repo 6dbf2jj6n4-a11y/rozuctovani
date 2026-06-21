@@ -213,10 +213,10 @@ class Meter(models.Model):
     class Meta:
         verbose_name = "Měřidlo"
         verbose_name_plural = "Měřidla"
-        ordering = ["site", "meter_type", "name"]
+        ordering = ["site", "meter_type", "code"]
 
     def __str__(self):
-        return f"{self.name} ({self.get_meter_type_display()})"
+        return self.code or self.name
 
     def consumption_for(self, period):
         current = self.readings.filter(period=period).first()
