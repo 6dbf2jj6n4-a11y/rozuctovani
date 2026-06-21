@@ -63,7 +63,7 @@ class AllocationKeyInlineBase(TabularInline):
     model = AllocationKey
     extra = 0
     collapsible = True
-    fields = ("service_item", "allocation_type", "value", "meter", "valid_from", "valid_to")
+    fields = ("service_item", "allocation_type", "value", "meter")
     autocomplete_fields = ("service_item", "meter")
 
     def get_queryset(self, request):
