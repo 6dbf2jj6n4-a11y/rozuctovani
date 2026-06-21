@@ -9,6 +9,18 @@ from django.core.exceptions import ValidationError
 from django.db import models
 
 
+# Typy rozpoctu - sdileno mezi ServicePoolItem (vychozi typ) a AllocationKey
+# (skutecny typ pouzity na konkretni karte klienta).
+ALLOCATION_TYPE_CHOICES = [
+    ("percent", "Procento"),
+    ("area_ratio", "Podle výměry (m²)"),
+    ("person_count", "Podle počtu osob"),
+    ("equal_split", "Rovným dílem"),
+    ("submeter", "Podružné měřidlo (1:1)"),
+    ("fixed_amount", "Pevná částka"),
+]
+
+
 class Site(models.Model):
     """Areal nebo objekt (prumyslovy areal, bytovy dum...)."""
 
@@ -181,10 +193,22 @@ class Meter(models.Model):
         "self", null=True, blank=True, on_delete=models.PROTECT,
         related_name="children", verbose_name="Nadřazené měřidlo"
     )
+    code = models.CharField(
+        "Kód", max_length=50, blank=True,
+        help_text="Kratky kod pro odkazovani ve vzorcich virtualnich mericu (napr. E_A1).",
+    )
     name = models.CharField("Název / označení", max_length=200)
     meter_type = models.CharField("Typ", max_length=20, choices=MeterType.choices)
     unit_of_measure = models.CharField("Měrná jednotka", max_length=20, default="kWh")
     serial_number = models.CharField("Výrobní číslo", max_length=100, blank=True)
+    is_virtual = models.BooleanField(
+        "Virtuální (vypočtené)", default=False,
+        help_text="Spotreba se nepocita z odectu, ale ze vzorce odkazujiciho na jine mericí (pole Vzorec).",
+    )
+    formula = models.CharField(
+        "Vzorec", max_length=300, blank=True,
+        help_text="Pouze pro virtualni mericí, napr. E_A1+E_AB1 (kody jinych mericí).",
+    )
 
     class Meta:
         verbose_name = "Měřidlo"
@@ -245,6 +269,10 @@ class ServicePoolItem(models.Model):
     name = models.CharField("Název", max_length=200)
     invoice_class = models.CharField(
         "Třída", max_length=20, choices=InvoiceClass.choices, default=InvoiceClass.OTHER
+    )
+    default_allocation_type = models.CharField(
+        "Výchozí typ rozpočtu", max_length=20, choices=ALLOCATION_TYPE_CHOICES, blank=True,
+        help_text="Predvyplni se pri zalozeni noveho klice na karte klienta pro tuto polozku.",
     )
 
     class Meta:
