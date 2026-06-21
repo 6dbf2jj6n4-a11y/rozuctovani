@@ -474,4 +474,4 @@ class UnitService(models.Model):
         unique_together = ("unit", "service_item", "meter")
 
     def __str__(self):
-        return f"{self.unit} – {self.service_item}"
+        return ""
