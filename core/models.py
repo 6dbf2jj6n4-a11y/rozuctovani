@@ -305,7 +305,10 @@ class AllocationKey(models.Model):
         Meter, null=True, blank=True, on_delete=models.SET_NULL,
         related_name="submeter_keys", verbose_name="Podružné měřidlo"
     )
-    valid_from = models.DateField("Platnost od")
+    valid_from = models.DateField(
+        "Platnost od", null=True, blank=True,
+        help_text="Volitelne - typicky se platnost resi na urovni cele Karty klienta.",
+    )
     valid_to = models.DateField("Platnost do", null=True, blank=True)
 
     class Meta:
@@ -318,7 +321,7 @@ class AllocationKey(models.Model):
 
     def is_valid_for_period(self, period):
         period_start, period_end = period.date_range()
-        if self.valid_from > period_end:
+        if self.valid_from and self.valid_from > period_end:
             return False
         if self.valid_to and self.valid_to < period_start:
             return False
