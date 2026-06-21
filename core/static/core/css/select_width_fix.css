@@ -1,0 +1,18 @@
+/*
+Rozsiruje select2 (autocomplete) rozbalovaci pole uvnitr inline
+tabulek (napr. vyber polozky zasobniku u klicu), kde je sloupec
+prilis uzky a text se nevejde.
+*/
+.select2-container {
+    min-width: 280px !important;
+}
+
+table td .select2-container {
+    width: 100% !important;
+    min-width: 260px !important;
+}
+
+/* Samotne rozbalovaci okno se seznamem moznosti - sirsi nez puvodni pole */
+.select2-dropdown {
+    min-width: 320px !important;
+}
