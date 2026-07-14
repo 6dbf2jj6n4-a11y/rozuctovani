@@ -328,14 +328,79 @@ class AllocationKey(models.Model):
         return True
 
 
-class CostEntry(models.Model):
+class PriceList(models.Model):
+    """
+    Ceník - cena za jednotku pro danou položku zásobníku v daném období.
+    Pokud pro aktuální období ceník neexistuje, použije se poslední platný
+    (viz metoda get_price_for_period) - není tedy nutné zadávat každý měsíc.
+    """
     service_item = models.ForeignKey(
-        ServicePoolItem, on_delete=models.CASCADE, related_name="cost_entries", verbose_name="Položka zásobníku"
+        ServicePoolItem, on_delete=models.CASCADE,
+        related_name="price_list", verbose_name="Položka zásobníku"
     )
     period = models.ForeignKey(
-        Period, on_delete=models.CASCADE, related_name="cost_entries", verbose_name="Období"
+        Period, on_delete=models.CASCADE,
+        related_name="price_list", verbose_name="Období"
     )
-    amount = models.DecimalField("Částka (Kč)", max_digits=14, decimal_places=2)
+    price_per_unit = models.DecimalField(
+        "Cena za jednotku (Kč)", max_digits=12, decimal_places=4
+    )
+    note = models.CharField("Poznámka", max_length=300, blank=True)
+
+    class Meta:
+        verbose_name = "Ceník"
+        verbose_name_plural = "Ceníky"
+        unique_together = ("service_item", "period")
+        ordering = ["-period", "service_item"]
+
+    def __str__(self):
+        return f"{self.service_item} – {self.period}: {self.price_per_unit} Kč/j"
+
+    @classmethod
+    def get_price_for_period(cls, service_item, period):
+        """
+        Vrátí cenu za jednotku pro dané nebo nejbližší předchozí období.
+        """
+        entry = cls.objects.filter(
+            service_item=service_item,
+        ).filter(
+            models.Q(period__year__lt=period.year) |
+            models.Q(period__year=period.year, period__month__lte=period.month)
+        ).order_by("-period__year", "-period__month").first()
+        return entry.price_per_unit if entry else None
+
+
+class CostEntry(models.Model):
+    """
+    Náklady/spotřeba za období.
+
+    Pro MĚŘENÉ služby (energie):
+      - amount_units = fakturované množství od dodavatele (kWh, m³, GJ...)
+      - amount_czk nechat prázdné - Kč se vypočítá přes PriceList
+    Pro NEMĚŘENÉ služby (úklid, ostraha...):
+      - amount_czk = přímá fakturovaná částka v Kč
+      - amount_units nechat prázdné
+    """
+    service_item = models.ForeignKey(
+        ServicePoolItem, on_delete=models.CASCADE,
+        related_name="cost_entries", verbose_name="Položka zásobníku"
+    )
+    period = models.ForeignKey(
+        Period, on_delete=models.CASCADE,
+        related_name="cost_entries", verbose_name="Období"
+    )
+    amount_units = models.DecimalField(
+        "Fakturované množství (jednotky)",
+        max_digits=14, decimal_places=3,
+        null=True, blank=True,
+        help_text="Pro měřené služby: kWh, m³, GJ... od dodavatele.",
+    )
+    amount_czk = models.DecimalField(
+        "Částka (Kč)",
+        max_digits=14, decimal_places=2,
+        null=True, blank=True,
+        help_text="Pro neměřené služby: přímá fakturovaná částka v Kč.",
+    )
     note = models.CharField("Poznámka", max_length=300, blank=True)
 
     class Meta:
@@ -345,7 +410,20 @@ class CostEntry(models.Model):
         ordering = ["-period", "service_item"]
 
     def __str__(self):
-        return f"{self.service_item} – {self.period}: {self.amount} Kč"
+        if self.amount_units is not None:
+            return f"{self.service_item} – {self.period}: {self.amount_units} j"
+        return f"{self.service_item} – {self.period}: {self.amount_czk} Kč"
+
+    def get_amount_czk(self, period=None):
+        """Vrátí částku v Kč - buď přímo, nebo přes ceník."""
+        if self.amount_czk is not None:
+            return self.amount_czk
+        if self.amount_units is not None:
+            p = period or self.period
+            price = PriceList.get_price_for_period(self.service_item, p)
+            if price:
+                return self.amount_units * price
+        return None
 
 
 class BillingLine(models.Model):
@@ -359,6 +437,11 @@ class BillingLine(models.Model):
         ServicePoolItem, on_delete=models.CASCADE, related_name="billing_lines", verbose_name="Položka zásobníku"
     )
     amount = models.DecimalField("Částka (Kč)", max_digits=14, decimal_places=2)
+    units = models.DecimalField(
+        "Množství (jednotky)", max_digits=14, decimal_places=3,
+        null=True, blank=True,
+        help_text="Přidělené jednotky (kWh, m³...) včetně poměrných ztrát.",
+    )
     share = models.DecimalField("Podíl", max_digits=8, decimal_places=6, null=True, blank=True)
     calc_detail = models.JSONField("Detail výpočtu", default=dict, blank=True)
 
@@ -412,13 +495,6 @@ class CardUnit(models.Model):
             self.create_default_keys()
 
     def create_default_keys(self):
-        """
-        Pro kazdou vychozi sluzbu prirazenou teto plose (UnitService)
-        vytvori odpovidajici klic (AllocationKey) na karte klienta,
-        pokud uz na ni klient nema stejny klic (stejna polozka
-        zasobniku A stejne mericí - jedna sluzba muze mit vic
-        mericí, napr. dva vodomery).
-        """
         for unit_service in self.unit.unit_services.all():
             AllocationKey.objects.get_or_create(
                 client_card=self.card,
