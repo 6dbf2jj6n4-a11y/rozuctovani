@@ -1,6 +1,5 @@
 """
 Vlastni uzivatelsky model s rolemi.
-
 - admin: pristup ke vsemu (typicky majitel/sprava firmy)
 - spravce: zadava odecty mericu a naklady, nevidi/neupravuje klice a sazby
 - klient: vidi pouze sve karty, spotreby a vyuctovani (cteni)
@@ -21,7 +20,6 @@ class User(AbstractUser):
         default=Role.KLIENT,
         verbose_name="Role",
     )
-
     # U uzivatelu s roli "klient" urcuje, ke kteremu klientovi (firme) patri
     # a tedy ktera data uvidi v klientskem portalu.
     client = models.ForeignKey(
@@ -31,6 +29,15 @@ class User(AbstractUser):
         on_delete=models.SET_NULL,
         related_name="users",
         verbose_name="Klient (firma)",
+    )
+    # U uzivatelu s roli "spravce" urcuje, ke kterym arealum ma pristup.
+    # Prazdne = pristup ke vsem arealum (pouziva se pro admina).
+    sites = models.ManyToManyField(
+        "core.Site",
+        blank=True,
+        related_name="managers",
+        verbose_name="Areály",
+        help_text="Areály ke kterým má správce přístup. Prázdné = přístup ke všem (admin).",
     )
 
     class Meta:
@@ -47,3 +54,10 @@ class User(AbstractUser):
     @property
     def is_spravce_role(self):
         return self.role in (self.Role.ADMIN, self.Role.SPRAVCE)
+
+    def get_accessible_sites(self):
+        """Vrátí areály ke kterým má uživatel přístup."""
+        from core.models import Site
+        if self.is_admin_role or not self.sites.exists():
+            return Site.objects.all()
+        return self.sites.all()
