@@ -9,13 +9,11 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
-        # Prejmenovani amount -> amount_czk v CostEntry
         migrations.RenameField(
             model_name="costentry",
             old_name="amount",
             new_name="amount_czk",
         ),
-        # Pridani amount_units pro merene sluzby
         migrations.AddField(
             model_name="costentry",
             name="amount_units",
@@ -28,7 +26,6 @@ class Migration(migrations.Migration):
                 help_text="Pro měřené služby: kWh, m³, GJ... od dodavatele.",
             ),
         ),
-        # Zpristupneni amount_czk jako nepovinne (pro merene sluzby)
         migrations.AlterField(
             model_name="costentry",
             name="amount_czk",
@@ -41,7 +38,6 @@ class Migration(migrations.Migration):
                 help_text="Pro neměřené služby: přímá fakturovaná částka v Kč.",
             ),
         ),
-        # Nova tabulka PriceList
         migrations.CreateModel(
             name="PriceList",
             fields=[
