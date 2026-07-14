@@ -3,8 +3,8 @@
 {% block object-tools-items %}
     {{ block.super }}
     {% if original %}
-    <li>
-        <a href="{{ kopie_url }}" class="button" title="Kopírovat kartu" style="background-color: #2563eb; color: white; font-weight: 600; padding: 8px 16px; border-radius: 6px;">
+    <li style="display: flex; align-items: center;">
+        <a href="{{ kopie_url }}" class="button" title="Kopírovat kartu" style="background-color: #2563eb; color: white; font-weight: 600; padding: 8px 16px; border-radius: 6px; display: inline-flex; align-items: center;">
             Kopie
         </a>
     </li>
