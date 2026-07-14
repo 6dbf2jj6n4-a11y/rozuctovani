@@ -124,7 +124,7 @@ CSRF_TRUSTED_ORIGINS = [
 ]
 UNFOLD = {
     "SITE_TITLE": "RENTE)(",
-    "SITE_HEADER": "Správa rozúčtování energií a služeb",
+    "SITE_HEADER": "RENTEX_2026",
 }
 LOGGING = {
     "version": 1,
