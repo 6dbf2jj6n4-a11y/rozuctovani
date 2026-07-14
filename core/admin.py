@@ -2,12 +2,6 @@ from django.contrib import admin
 from django.contrib.auth.models import Group
 
 admin.site.unregister(Group)
-from django.contrib.auth.models import User as AuthUser
-
-try:
-    admin.site.unregister(AuthUser)
-except admin.sites.NotRegistered:
-    pass
 from django import forms
 from unfold.admin import ModelAdmin, TabularInline
 
