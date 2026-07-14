@@ -123,8 +123,8 @@ CSRF_TRUSTED_ORIGINS = [
     "https://rozuctovani-production.up.railway.app",
 ]
 UNFOLD = {
-    "SITE_TITLE": "Rozúčtování",
-    "SITE_HEADER": "Správa rozúčtování",
+    "SITE_TITLE": "RENTE)(",
+    "SITE_HEADER": "Správa rozúčtování energií a služeb",
 }
 LOGGING = {
     "version": 1,
