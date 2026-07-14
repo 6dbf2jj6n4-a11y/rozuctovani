@@ -8,7 +8,7 @@ from unfold.admin import ModelAdmin, TabularInline
 from .models import (
     Client, ClientCard, Site, Unit, CardUnit,
     Meter, MeterReading, Period,
-    ServicePoolItem, AllocationKey, CostEntry, BillingLine, UnitService
+    ServicePoolItem, AllocationKey, PriceList, CostEntry, BillingLine, UnitService
 )
 
 
@@ -521,10 +521,18 @@ class AllocationKeyAdmin(ModelAdmin):
     autocomplete_fields = ("client_card", "service_item", "meter")
 
 
+@admin.register(PriceList)
+class PriceListAdmin(ModelAdmin):
+    list_display = ("service_item", "period", "price_per_unit", "note")
+    list_filter = ("period", "service_item__site")
+    autocomplete_fields = ("service_item",)
+    search_fields = ("service_item__name",)
+
+
 @admin.register(CostEntry)
 class CostEntryAdmin(ModelAdmin):
-    list_display = ("service_item", "period", "amount")
-    list_filter = ("period",)
+    list_display = ("service_item", "period", "amount_units", "amount_czk")
+    list_filter = ("period", "service_item__site")
     autocomplete_fields = ("service_item",)
 
 
