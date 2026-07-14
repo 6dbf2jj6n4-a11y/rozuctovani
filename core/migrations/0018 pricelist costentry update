@@ -1,0 +1,61 @@
+import django.db.models.deletion
+from django.db import migrations, models
+
+
+class Migration(migrations.Migration):
+
+    dependencies = [
+        ("core", "0017_unitservice_unique_with_meter"),
+    ]
+
+    operations = [
+        # Prejmenovani amount -> amount_czk v CostEntry
+        migrations.RenameField(
+            model_name="costentry",
+            old_name="amount",
+            new_name="amount_czk",
+        ),
+        # Pridani amount_units pro merene sluzby
+        migrations.AddField(
+            model_name="costentry",
+            name="amount_units",
+            field=models.DecimalField(
+                blank=True,
+                decimal_places=3,
+                max_digits=14,
+                null=True,
+                verbose_name="Fakturované množství (jednotky)",
+                help_text="Pro měřené služby: kWh, m³, GJ... od dodavatele.",
+            ),
+        ),
+        # Zpristupneni amount_czk jako nepovinne (pro merene sluzby)
+        migrations.AlterField(
+            model_name="costentry",
+            name="amount_czk",
+            field=models.DecimalField(
+                blank=True,
+                decimal_places=2,
+                max_digits=14,
+                null=True,
+                verbose_name="Částka (Kč)",
+                help_text="Pro neměřené služby: přímá fakturovaná částka v Kč.",
+            ),
+        ),
+        # Nova tabulka PriceList
+        migrations.CreateModel(
+            name="PriceList",
+            fields=[
+                ("id", models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name="ID")),
+                ("price_per_unit", models.DecimalField(decimal_places=4, max_digits=12, verbose_name="Cena za jednotku (Kč)")),
+                ("note", models.CharField(blank=True, max_length=300, verbose_name="Poznámka")),
+                ("period", models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name="price_list", to="core.period", verbose_name="Období")),
+                ("service_item", models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name="price_list", to="core.servicepoolitem", verbose_name="Položka zásobníku")),
+            ],
+            options={
+                "verbose_name": "Ceník",
+                "verbose_name_plural": "Ceníky",
+                "ordering": ["-period", "service_item"],
+                "unique_together": {("service_item", "period")},
+            },
+        ),
+    ]
