@@ -13,7 +13,7 @@ except admin.sites.NotRegistered:
 @admin.register(User)
 class CustomUserAdmin(ModelAdmin, UserAdmin):
     fieldsets = UserAdmin.fieldsets + (
-        ("Role a klient", {"fields": ("role", "client")}),
+        ("Role a přístup", {"fields": ("role", "client", "sites")}),
     )
     list_display = ("username", "email", "role", "client", "is_active")
     list_filter = ("role", "is_active")
