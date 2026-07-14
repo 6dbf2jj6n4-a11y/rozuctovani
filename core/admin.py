@@ -394,13 +394,6 @@ class ClientCardAdmin(ModelAdmin):
         return super().response_change(request, obj)
 
 
-
-@admin.register(CardUnit)
-class CardUnitAdmin(ModelAdmin):
-    list_display = ("card", "unit")
-    autocomplete_fields = ("card", "unit")
-
-
 @admin.register(Meter)
 class MeterAdmin(ModelAdmin):
     list_display = ("code", "name", "site", "meter_type", "parent_meter", "is_virtual", "unit_of_measure")
