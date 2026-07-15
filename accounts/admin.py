@@ -12,6 +12,12 @@ except admin.sites.NotRegistered:
 
 @admin.register(User)
 class CustomUserAdmin(ModelAdmin, UserAdmin):
+    add_fieldsets = (
+        (None, {
+            "classes": ("wide",),
+            "fields": ("username", "password1", "password2", "role", "sites", "client"),
+        }),
+    )
     fieldsets = UserAdmin.fieldsets + (
         ("Role a přístup", {"fields": ("role", "client", "sites")}),
     )
