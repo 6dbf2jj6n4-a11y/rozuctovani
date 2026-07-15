@@ -278,9 +278,6 @@ class ClientAdmin(ModelAdmin):
     list_display = ("name", "code", "ico", "contact_email", "contact_phone", "is_active")
     search_fields = ("name", "ico", "code")
     list_filter = ("is_active", SiteFilter)
-
-    class Media:
-        js = ("core/js/ares_lookup.js",)
     fieldsets = (
         ("Základní údaje", {
             "fields": (("name", "code"), ("is_active",))
@@ -289,7 +286,7 @@ class ClientAdmin(ModelAdmin):
             "fields": (("street", "street_number"), ("zip_code", "city"))
         }),
         ("Identifikace", {
-            "fields": (("ico", "dic", "vat_payer"), "ares_button")
+            "fields": (("ico", "dic"), ("vat_payer", "ares_button"))
         }),
         ("Bankovní spojení", {
             "fields": (("bank_name", "bank_account", "bank_code"),)
@@ -301,8 +298,46 @@ class ClientAdmin(ModelAdmin):
             "fields": ("note",)
         }),
     )
+    readonly_fields = ("ares_button",)
     inlines = [ClientCardInline]
     actions = ["export_emaily"]
+
+    class Media:
+        js = ("core/js/ares_lookup.js",)
+
+    def ares_button(self, obj):
+        from django.utils.html import format_html
+        return format_html(
+            '<button type="button" onclick="aresLookup()" '
+            'style="padding:6px 16px; border-radius:6px; background:#2563eb; '
+            'color:white; font-weight:600; border:none; cursor:pointer;">'
+            'Načíst z ARES</button>'
+            '<span id="ares-status" style="margin-left:8px; font-size:13px;"></span>'
+        )
+    ares_button.short_description = ""
+
+    def get_urls(self):
+        from django.urls import path
+        from django.http import JsonResponse
+
+        def ico_lookup(request):
+            ico = request.GET.get("ico", "").strip()
+            if not ico:
+                return JsonResponse({"exists": False})
+            client = Client.objects.filter(ico=ico).first()
+            if client:
+                return JsonResponse({
+                    "exists": True,
+                    "name": client.name,
+                    "url": f"/admin/core/client/{client.pk}/change/",
+                })
+            return JsonResponse({"exists": False})
+
+        urls = super().get_urls()
+        custom = [
+            path("ico-lookup/", self.admin_site.admin_view(ico_lookup), name="core_client_ico_lookup"),
+        ]
+        return custom + urls
 
     @admin.action(description="Zobrazit e-maily vybraných klientů (pro BCC)")
     def export_emaily(self, request, queryset):
