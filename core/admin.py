@@ -286,7 +286,7 @@ class ClientAdmin(ModelAdmin):
             "fields": (("street", "street_number"), ("zip_code", "city"))
         }),
         ("Identifikace", {
-            "fields": (("ico", "dic"), ("vat_payer", "ares_button"))
+            "fields": (("ico", "dic", "ares_button"), "vat_payer")
         }),
         ("Bankovní spojení", {
             "fields": (("bank_name", "bank_account", "bank_code"),)
