@@ -2,6 +2,12 @@ from django.contrib import admin
 from django.contrib.auth.models import Group
 
 admin.site.unregister(Group)
+from django.contrib.auth.models import User as AuthUser
+
+try:
+    admin.site.unregister(AuthUser)
+except admin.sites.NotRegistered:
+    pass
 from django import forms
 from unfold.admin import ModelAdmin, TabularInline
 
@@ -272,6 +278,9 @@ class ClientAdmin(ModelAdmin):
     list_display = ("name", "code", "ico", "contact_email", "contact_phone", "is_active")
     search_fields = ("name", "ico", "code")
     list_filter = ("is_active", SiteFilter)
+
+    class Media:
+        js = ("core/js/ares_lookup.js",)
     fieldsets = (
         ("Základní údaje", {
             "fields": (("name", "code"), ("is_active",))
