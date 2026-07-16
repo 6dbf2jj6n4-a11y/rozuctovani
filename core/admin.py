@@ -497,6 +497,14 @@ class MeterReadingAdmin(ModelAdmin):
     autocomplete_fields = ("meter",)
 
 
+def _jednotka_polozky(item):
+    """Merna jednotka polozky Zasobniku - u merenych polozek podle
+    napojeneho meridla, u nemerenych (Ostatni) se uctuje vzdy primo v Kc."""
+    if item.meter_id:
+        return item.meter.unit_of_measure or "-"
+    return "Kč"
+
+
 @admin.register(ServicePoolItem)
 class ServicePoolItemAdmin(ModelAdmin):
     list_display = ("name", "site", "invoice_class", "unit", "meter", "jednotka", "default_allocation_type")
@@ -506,11 +514,7 @@ class ServicePoolItemAdmin(ModelAdmin):
 
     @admin.display(description="Jednotka")
     def jednotka(self, obj):
-        """Merna jednotka - u merenych polozek podle napojeneho meridla,
-        u nemerenych (Ostatni) se uctuje vzdy primo v Kc."""
-        if obj.meter_id:
-            return obj.meter.unit_of_measure or "-"
-        return "Kč"
+        return _jednotka_polozky(obj)
 
     def get_urls(self):
         from django.urls import path
@@ -576,9 +580,31 @@ class PriceListAdmin(ModelAdmin):
 
 @admin.register(CostEntry)
 class CostEntryAdmin(ModelAdmin):
-    list_display = ("service_item", "period", "amount_units", "amount_czk")
+    list_display = (
+        "service_item", "period", "amount_units", "jednotka", "amount_czk", "kc_za_jednotku",
+    )
     list_filter = ("period", "service_item__site")
     autocomplete_fields = ("service_item",)
+
+    @admin.display(description="Jednotka")
+    def jednotka(self, obj):
+        return _jednotka_polozky(obj.service_item)
+
+    @admin.display(description="Kč/jednotka")
+    def kc_za_jednotku(self, obj):
+        """Efektivni cena za jednotku - primo z amount_czk/amount_units,
+        pripadne (u merenych polozek bez primo zadaneho amount_czk)
+        z aktualne platneho Ceniku pro dane obdobi."""
+        if obj.amount_units:
+            if obj.amount_czk is not None:
+                try:
+                    return round(obj.amount_czk / obj.amount_units, 2)
+                except (ZeroDivisionError, TypeError):
+                    pass
+            price = PriceList.get_price_for_period(obj.service_item, obj.period)
+            if price is not None:
+                return round(price, 4)
+        return "-"
 
 
 @admin.register(BillingLine)
