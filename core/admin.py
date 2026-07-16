@@ -507,7 +507,10 @@ def _jednotka_polozky(item):
 
 @admin.register(ServicePoolItem)
 class ServicePoolItemAdmin(ModelAdmin):
-    list_display = ("name", "site", "invoice_class", "unit", "meter", "jednotka", "default_allocation_type")
+    list_display = (
+        "name", "site", "invoice_class", "unit", "meter", "jednotka",
+        "default_allocation_type", "default_amount_czk",
+    )
     list_filter = ("site", "invoice_class")
     search_fields = ("name",)
     autocomplete_fields = ("unit", "meter")

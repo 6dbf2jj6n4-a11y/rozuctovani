@@ -47,7 +47,7 @@ from decimal import Decimal
 
 from django.db import transaction
 
-from .models import AllocationKey, BillingLine, CostEntry, ServicePoolItem
+from core.models import AllocationKey, BillingLine, CostEntry, ServicePoolItem
 
 
 def _weighted_shares(keys, period):
@@ -162,9 +162,21 @@ def calculate_period(period):
 
         for service_item in ServicePoolItem.objects.select_related("meter"):
             cost_entry = CostEntry.objects.filter(service_item=service_item, period=period).first()
-            if cost_entry is None:
-                continue  # napr. sezonni sluzba bez nakladu v tomto mesici
-            total_cost = cost_entry.amount
+            cost_source = None
+            if cost_entry is not None:
+                total_cost = cost_entry.get_amount_czk(period)
+                if total_cost is None:
+                    warnings.append(
+                        f"{service_item} / {period}: náklad je zadaný v jednotkách, ale chybí "
+                        f"cena v Ceníku - položka vynechána."
+                    )
+                    continue
+                cost_source = "naklad_za_obdobi"
+            elif service_item.default_amount_czk is not None:
+                total_cost = service_item.default_amount_czk
+                cost_source = "vychozi_castka_polozky"
+            else:
+                continue  # napr. sezonni sluzba bez nakladu v tomto mesici a bez vychozi castky
 
             all_keys = list(
                 service_item.allocation_keys.select_related("client_card", "client_card__unit", "meter")
@@ -213,6 +225,7 @@ def calculate_period(period):
                     share=share,
                     calc_detail={
                         "total_cost": str(total_cost),
+                        "cost_source": cost_source,
                         "fixed_amount": str(fixed_amounts.get(card_id, Decimal("0"))),
                         "remaining_cost": str(remaining_cost),
                         "share": str(share) if share is not None else None,

@@ -274,6 +274,16 @@ class ServicePoolItem(models.Model):
         "Výchozí typ rozpočtu", max_length=20, choices=ALLOCATION_TYPE_CHOICES, blank=True,
         help_text="Predvyplni se pri zalozeni noveho klice na karte klienta pro tuto polozku.",
     )
+    default_amount_czk = models.DecimalField(
+        "Výchozí měsíční částka (Kč)", max_digits=12, decimal_places=2, null=True, blank=True,
+        help_text=(
+            "Pouzije se pri vypoctu rozuctovani pro obdobi, pro ktere neni "
+            "zadany zadny Naklad za obdobi (CostEntry) - typicky pro sluzby "
+            "s neměnnou paušální cenou (ostraha, internet...), aby se nemusela "
+            "castka zadavat kazdy mesic rucne. Pokud je pro dane obdobi CostEntry "
+            "zadany, ma vzdy prednost pred touto vychozi castkou."
+        ),
+    )
 
     class Meta:
         verbose_name = "Položka zásobníku"
