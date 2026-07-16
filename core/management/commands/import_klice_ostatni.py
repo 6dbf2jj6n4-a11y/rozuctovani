@@ -7,16 +7,25 @@ Mapovani TYP_Polozky:
   K_PLOSE  -> fixed_amount  (hodnota = Mplochy * KCzaM / 12 = mesicni pausal)
   PEVNA_KC -> fixed_amount  (hodnota = sloupec PevnaKC primo, jiz mesicni castka)
 
-OSTATNI_KodOM je kod meridla - hleda se v Meter.code pro dany areal.
-ServicePoolItem se hleda podle meter.
+Polozky tridy OSTATNI v Zasobniku NEMAJI mericí (nejsou merene - ostraha,
+uklid, svoz odpadu apod.), takze na rozdil od Elektro/Voda/Teplo tu nejde
+hledat ServicePoolItem pres Meter. Misto toho se OSTATNI_KodOM (napr.
+OSTRAHA, INTERNET, UKLID_A) namapuje na nazev polozky (sloupec "Popis")
+pomoci zdrojoveho souboru Zasobnik_sluzeb.xlsx (sloupce OM / Popis / Areal
+/ class), ktery je stejny soubor jako pri importu import_zasobnik_sluzeb_v2,
+a ServicePoolItem se pak hleda podle (site, name, meter=None).
 
 Pouziti:
-  python manage.py import_klice_ostatni cesta/k/souboru.xlsx --site FM
+  python manage.py import_klice_ostatni cesta/k/Klice_Ostatni.xlsx --site FM
+  (volitelne --zasobnik cesta/k/Zasobnik_sluzeb.xlsx, jinak se hleda
+  ve stejne slozce jako tento management command)
 """
+from pathlib import Path
+
 import openpyxl
 from decimal import Decimal, ROUND_HALF_UP
 from django.core.management.base import BaseCommand
-from core.models import Site, Meter, ServicePoolItem, ClientCard, AllocationKey
+from core.models import Site, ServicePoolItem, ClientCard, AllocationKey
 
 
 TYP_TO_ALLOCATION = {
@@ -25,6 +34,8 @@ TYP_TO_ALLOCATION = {
     "PEVNA_KC": "fixed_amount",
 }
 
+DEFAULT_ZASOBNIK_NAME = "Zasobnik_sluzeb.xlsx"
+
 
 class Command(BaseCommand):
     help = "Importuje klice ostatni sluzby (AllocationKey) z Excel souboru"
@@ -32,12 +43,46 @@ class Command(BaseCommand):
     def add_arguments(self, parser):
         parser.add_argument("xlsx_path", type=str)
         parser.add_argument("--site", type=str, default="FM")
+        parser.add_argument(
+            "--zasobnik", type=str, default=None,
+            help="Cesta k Zasobnik_sluzeb.xlsx (pro dohledani nazvu polozky "
+                 "podle OM kodu). Vychozi: stejna slozka jako tento command.",
+        )
+
+    def load_om_to_name(self, zasobnik_path, site_code):
+        """Vrati dict {OM_kod: Popis} pro radky tridy OSTATNI a dany areal."""
+        wb = openpyxl.load_workbook(zasobnik_path, read_only=True, data_only=True)
+        ws = wb.active
+        headers = [str(c.value).strip() if c.value else "" for c in next(ws.iter_rows(min_row=1, max_row=1))]
+        idx = {h: i for i, h in enumerate(headers)}
+
+        mapping = {}
+        for row in ws.iter_rows(min_row=2, values_only=True):
+            if row[idx["class"]] != "OSTATNÍ":
+                continue
+            areal = str(row[idx["Areal"]] or "").strip()
+            if areal.upper() != site_code.upper():
+                continue
+            om = str(row[idx["OM"]] or "").strip()
+            popis = str(row[idx["Popis"]] or "").strip()
+            if om:
+                mapping[om] = popis
+        return mapping
 
     def handle(self, *args, **options):
         site = Site.objects.filter(name__icontains=options["site"]).first()
         if not site:
             self.stdout.write(self.style.ERROR(f"Areál '{options['site']}' nenalezen."))
             return
+
+        zasobnik_path = options["zasobnik"] or (Path(__file__).resolve().parent / DEFAULT_ZASOBNIK_NAME)
+        if not Path(zasobnik_path).exists():
+            self.stdout.write(self.style.ERROR(
+                f"Soubor se zásobníkem nenalezen: {zasobnik_path} "
+                f"(zadej --zasobnik cesta/k/Zasobnik_sluzeb.xlsx)"
+            ))
+            return
+        om_to_name = self.load_om_to_name(zasobnik_path, options["site"])
 
         wb = openpyxl.load_workbook(options["xlsx_path"], read_only=True, data_only=True)
         ws = wb.active
@@ -52,20 +97,20 @@ class Command(BaseCommand):
 
             card_desc = str(data.get("PopisKarty") or "").strip()
             aktivni = str(data.get("Aktivni") or "").strip().lower()
-            meter_code = str(data.get("OSTATNI_KodOM") or "").strip()
+            om_code = str(data.get("OSTATNI_KodOM") or "").strip()
             typ = str(data.get("TYP_Polozky") or "").strip()
             podil = data.get("Podil")
             mplochy = data.get("Mplochy")
             kczam = data.get("KCzaM")
             pevna_kc = data.get("PevnaKC")
 
-            if not card_desc or not meter_code or aktivni != "zapnuto":
+            if not card_desc or not om_code or aktivni != "zapnuto":
                 skipped += 1
                 continue
 
             allocation_type = TYP_TO_ALLOCATION.get(typ)
             if not allocation_type:
-                self.stdout.write(f"  Neznámý typ: {typ} ({card_desc} / {meter_code})")
+                self.stdout.write(f"  Neznámý typ: {typ} ({card_desc} / {om_code})")
                 skipped += 1
                 continue
 
@@ -75,23 +120,20 @@ class Command(BaseCommand):
                 skipped += 1
                 continue
 
-            meter = Meter.objects.filter(code=meter_code, site=site).first()
-            if not meter:
-                self.stdout.write(f"  Měřidlo nenalezeno: {meter_code}")
+            service_name = om_to_name.get(om_code)
+            if not service_name:
+                self.stdout.write(f"  OM kód nenalezen v zásobníku ({options['site']}): {om_code}")
                 skipped += 1
                 continue
 
-            # Najdeme ServicePoolItem pro toto meridlo
-            service_item = ServicePoolItem.objects.filter(meter=meter, site=site).first()
+            service_item = ServicePoolItem.objects.filter(
+                site=site, name=service_name, meter__isnull=True
+            ).first()
             if not service_item:
-                # Zkusime najit hlavni polozku (bez parent - root meridlo)
-                root = meter
-                while root.parent_meter:
-                    root = root.parent_meter
-                service_item = ServicePoolItem.objects.filter(meter=root, site=site).first()
-
-            if not service_item:
-                self.stdout.write(f"  ServicePoolItem nenalezen pro měřidlo: {meter_code}")
+                self.stdout.write(
+                    f"  ServicePoolItem nenalezen: '{service_name}' (OM {om_code}) - "
+                    f"zkontroluj, jestli je Zásobník naimportovaný z aktuálního Zasobnik_sluzeb.xlsx."
+                )
                 skipped += 1
                 continue
 
@@ -118,7 +160,7 @@ class Command(BaseCommand):
             key, was_created = AllocationKey.objects.update_or_create(
                 client_card=card,
                 service_item=service_item,
-                meter=meter if allocation_type == "percent" else None,
+                meter=None,
                 defaults={
                     "allocation_type": allocation_type,
                     "value": value,
@@ -127,7 +169,7 @@ class Command(BaseCommand):
 
             if was_created:
                 created += 1
-                self.stdout.write(f"  + {card_desc} / {meter_code} ({allocation_type}): {value}")
+                self.stdout.write(f"  + {card_desc} / {service_name} ({allocation_type}): {value}")
             else:
                 updated += 1
 
