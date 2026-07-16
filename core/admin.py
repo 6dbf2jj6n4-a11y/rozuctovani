@@ -499,10 +499,18 @@ class MeterReadingAdmin(ModelAdmin):
 
 @admin.register(ServicePoolItem)
 class ServicePoolItemAdmin(ModelAdmin):
-    list_display = ("name", "site", "invoice_class", "unit", "meter", "default_allocation_type")
+    list_display = ("name", "site", "invoice_class", "unit", "meter", "jednotka", "default_allocation_type")
     list_filter = ("site", "invoice_class")
     search_fields = ("name",)
     autocomplete_fields = ("unit", "meter")
+
+    @admin.display(description="Jednotka")
+    def jednotka(self, obj):
+        """Merna jednotka - u merenych polozek podle napojeneho meridla,
+        u nemerenych (Ostatni) se uctuje vzdy primo v Kc."""
+        if obj.meter_id:
+            return obj.meter.unit_of_measure or "-"
+        return "Kč"
 
     def get_urls(self):
         from django.urls import path
