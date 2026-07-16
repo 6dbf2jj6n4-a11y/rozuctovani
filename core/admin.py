@@ -581,7 +581,7 @@ class PriceListAdmin(ModelAdmin):
 @admin.register(CostEntry)
 class CostEntryAdmin(ModelAdmin):
     list_display = (
-        "service_item", "period", "amount_units", "jednotka", "amount_czk", "kc_za_jednotku",
+        "service_item", "period", "amount_units", "jednotka", "kc_za_jednotku", "amount_czk",
     )
     list_filter = ("period", "service_item__site")
     autocomplete_fields = ("service_item",)
