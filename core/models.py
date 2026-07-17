@@ -18,6 +18,7 @@ ALLOCATION_TYPE_CHOICES = [
     ("equal_split", "Rovným dílem"),
     ("submeter", "Podružné měřidlo (1:1)"),
     ("fixed_amount", "Pevná částka"),
+    ("weighted_count", "Podle váhy (počet jednotek)"),
 ]
 
 

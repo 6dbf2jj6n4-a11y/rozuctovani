@@ -146,6 +146,7 @@ class AllocationKeyInlineBase(TabularInline):
 
     class Media:
         css = {"all": ("core/css/select_width_fix.css",)}
+        js = ("core/js/allocationkey_default_type.js",)
 
     def get_queryset(self, request):
         return super().get_queryset(request).filter(
@@ -560,12 +561,12 @@ class ServicePoolItemAdmin(ModelAdmin):
         from django.http import JsonResponse
 
         def class_lookup(request, item_id):
-            invoice_class = (
+            data = (
                 ServicePoolItem.objects.filter(pk=item_id)
-                .values_list("invoice_class", flat=True)
+                .values("invoice_class", "default_allocation_type")
                 .first()
             )
-            return JsonResponse({"invoice_class": invoice_class})
+            return JsonResponse(data or {"invoice_class": None, "default_allocation_type": None})
 
         urls = super().get_urls()
         custom = [
