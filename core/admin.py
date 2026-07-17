@@ -1,4 +1,4 @@
-from django.contrib import admin
+from django.contrib import admin, messages
 from django.contrib.auth.models import Group
 
 admin.site.unregister(Group)
@@ -488,6 +488,20 @@ class PeriodAdmin(ModelAdmin):
     list_display = ("__str__", "status", "days_in_period")
     list_filter = ("status",)
     ordering = ("-year", "-month")
+    actions = ["spocitat_rozuctovani"]
+
+    @admin.action(description="Spočítat rozúčtování za vybraná období")
+    def spocitat_rozuctovani(self, request, queryset):
+        from billing.engine import calculate_period
+
+        for period in queryset:
+            result = calculate_period(period)
+            text = f"{period}: vytvořeno {result['created']} vyúčtovaných položek."
+            if result["warnings"]:
+                text += " Varování: " + " | ".join(result["warnings"])
+                self.message_user(request, text, level=messages.WARNING)
+            else:
+                self.message_user(request, text, level=messages.SUCCESS)
 
 
 @admin.register(MeterReading)
