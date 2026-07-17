@@ -195,19 +195,26 @@ def calculate_period(period):
 
             fixed_keys = [k for k in valid_keys if k.allocation_type == AllocationKey.AllocationType.FIXED_AMOUNT]
 
-            # 1) pevne castky - odecist z celkove castky
+            # 1) pevne castky - ty s deduct_from_pool=True se odectou z celkove castky,
+            # zbytek (deduct_from_pool=False) klient plati samostatne/navic a nema vliv
+            # na to, kolik zbyva k rozpocitani ostatnim kartam.
             remaining_cost = total_cost
             fixed_amounts = {}
             for key in fixed_keys:
                 amount = key.value or Decimal("0")
                 fixed_amounts[key.client_card_id] = fixed_amounts.get(key.client_card_id, Decimal("0")) + amount
-                remaining_cost -= amount
+                if key.deduct_from_pool:
+                    remaining_cost -= amount
 
             if remaining_cost < 0:
                 warnings.append(
-                    f"{service_item} / {period}: pevné částky ({total_cost - remaining_cost} Kč) "
-                    f"překračují celkový náklad ({total_cost} Kč)."
+                    f"{service_item} / {period}: pevné částky odečítané ze společného nákladu "
+                    f"překračují celkový náklad ({total_cost} Kč) - přebytek se nerozpočítává "
+                    f"ostatním kartám (jen informativní hláška, zvaž u některých klíčů vypnout "
+                    f"'Odečíst z celkového nákladu')."
                 )
+                # Prebytek se nerozpocitava jako "sleva" spotrebovym kartam.
+                remaining_cost = Decimal("0")
 
             # 2) podily na zbytku castky
             if service_item.meter:

@@ -339,6 +339,18 @@ class AllocationKey(models.Model):
         Meter, null=True, blank=True, on_delete=models.SET_NULL,
         related_name="submeter_keys", verbose_name="Podružné měřidlo"
     )
+    deduct_from_pool = models.BooleanField(
+        "Odečíst z celkového nákladu",
+        default=True,
+        help_text=(
+            "Jen pro typ 'Pevná částka'. Pokud ANO (výchozí): tato pevná částka se odečte "
+            "od celkového nákladu položky a zbytek se rozpočítá ostatním kartám podle jejich "
+            "klíčů (klient reálně snižuje sdílený náklad, napr. mel jiz vlastni smlouvu). "
+            "Pokud NE: klient zaplatí pevnou částku samostatně/navíc a celkový náklad se mezi "
+            "ostatní karty rozpočítá beze změny (typicky pausál, ktery nesouvisí se sdílenym "
+            "meridlem - napr. teplo bez pripojeni na hlavni odber)."
+        ),
+    )
     valid_from = models.DateField(
         "Platnost od", null=True, blank=True,
         help_text="Volitelne - typicky se platnost resi na urovni cele Karty klienta.",

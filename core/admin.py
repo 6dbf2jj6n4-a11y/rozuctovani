@@ -141,7 +141,7 @@ class AllocationKeyInlineBase(TabularInline):
     model = AllocationKey
     extra = 0
     collapsible = True
-    fields = ("service_item", "allocation_type", "value", "meter")
+    fields = ("service_item", "allocation_type", "value", "meter", "deduct_from_pool")
     autocomplete_fields = ("service_item", "meter")
 
     class Media:
@@ -605,8 +605,11 @@ class ServicePoolItemAdmin(ModelAdmin):
 
 @admin.register(AllocationKey)
 class AllocationKeyAdmin(ModelAdmin):
-    list_display = ("client_card", "service_item", "allocation_type", "value", "valid_from", "valid_to")
-    list_filter = ("allocation_type",)
+    list_display = (
+        "client_card", "service_item", "allocation_type", "value",
+        "deduct_from_pool", "valid_from", "valid_to",
+    )
+    list_filter = ("allocation_type", "deduct_from_pool")
     autocomplete_fields = ("client_card", "service_item", "meter")
 
 
