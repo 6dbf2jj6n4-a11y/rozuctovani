@@ -118,6 +118,13 @@ def _consumption_shares(service_item, period, warnings):
     shares = {}
     sum_submeters = Decimal("0")
     for key in submeter_keys:
+        if key.meter_id is None:
+            warnings.append(
+                f"{service_item}: klíč typu 'Podružné měřidlo' pro kartu {key.client_card} "
+                f"(AllocationKey #{key.id}) nemá nastavené měřidlo - tato karta vynechána. "
+                f"Buď doplň měřidlo u klíče, nebo změň typ klíče, pokud nemělo být 'submeter'."
+            )
+            continue
         sub_consumption = key.meter.consumption_for(period)
         if sub_consumption is None:
             warnings.append(
