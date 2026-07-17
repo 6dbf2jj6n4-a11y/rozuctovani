@@ -432,12 +432,20 @@ class ClientCardAdmin(ModelAdmin):
         return super().response_change(request, obj)
 
 
+class MeterReadingInline(TabularInline):
+    model = MeterReading
+    extra = 1
+    fields = ("period", "reading_date", "value", "is_estimate", "note")
+    ordering = ("-period",)
+
+
 @admin.register(Meter)
 class MeterAdmin(ModelAdmin):
     list_display = ("code", "name", "site", "meter_type", "parent_meter", "is_virtual", "unit_of_measure")
     list_filter = ("site", "meter_type", "is_virtual")
     search_fields = ("name", "code", "serial_number")
     autocomplete_fields = ("parent_meter",)
+    inlines = [MeterReadingInline]
     fieldsets = (
         (None, {
             "fields": (("site", "code", "name"), ("meter_type", "unit_of_measure", "serial_number"))
@@ -507,8 +515,10 @@ class PeriodAdmin(ModelAdmin):
 @admin.register(MeterReading)
 class MeterReadingAdmin(ModelAdmin):
     list_display = ("meter", "period", "reading_date", "value", "is_estimate")
-    list_filter = ("period", "meter__site", "is_estimate")
+    list_filter = ("meter__site", "meter__meter_type", "period", "is_estimate")
+    search_fields = ("meter__code", "meter__name")
     autocomplete_fields = ("meter",)
+    ordering = ("meter__code", "-period")
 
 
 def _jednotka_polozky(item):
