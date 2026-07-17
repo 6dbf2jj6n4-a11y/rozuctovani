@@ -3,11 +3,20 @@ Import klicu elektrina z Excel souboru Klice_Elektro.xlsx.
 Pro kazdy radek vytvori AllocationKey na prislusne karte klienta.
 
 Mapovani TYP_Polozky:
-  K_CELKU -> percent (podil = sloupec Podil)
+  K_CELKU -> vaha (hodnota = sloupec Jednotek, NE Podil - Podil je v
+             puvodnim Excelu jen dopocitany napovedny udaj = Jednotek /
+             soucet Jednotek pres vsechny karty se stejnym EL_KodOM;
+             pouzitim primo Jednotek si system podily dopocitava sam
+             a nezastarava pri zmene poctu najemcu). Typ klice je
+             weighted_count, nebo person_count pokud EL_KodOM
+             odpovida odberu na TUV (teplá užitková voda).
   K_PLOSE -> fixed_amount (hodnota = Mplochy * KCzaM / 12 = mesicni pausal)
 
 EL_KodOM je kod meridla - hleda se v Meter.code pro dany areal.
-ServicePoolItem se hleda podle meter.
+ServicePoolItem se hleda podle meter. U K_CELKU se meridlo (slave kod,
+napr. E_A1) uklada i do AllocationKey.meter - ne jako "podruzne meridlo"
+ve smyslu vypoctu, ale aby jedna karta mohla mit vice K_CELKU radku
+(ruzne kategorie/mistnosti) pro stejnou polozku Zasobniku soucasne.
 
 Pouziti:
   python manage.py import_klice_elektro cesta/k/souboru.xlsx --site FM
@@ -19,7 +28,7 @@ from core.models import Site, Meter, ServicePoolItem, ClientCard, AllocationKey
 
 
 TYP_TO_ALLOCATION = {
-    "K_CELKU": "percent",
+    "K_CELKU": "weighted_count",
     "K_PLOSE": "fixed_amount",
 }
 
@@ -52,7 +61,7 @@ class Command(BaseCommand):
             aktivni = str(data.get("Aktivni") or "").strip().lower()
             meter_code = str(data.get("EL_KodOM") or "").strip()
             typ = str(data.get("TYP_Polozky") or "").strip()
-            podil = data.get("Podil")
+            jednotek = data.get("Jednotek")
             mplochy = data.get("Mplochy")
             kczam = data.get("KCzaM")
 
@@ -93,8 +102,14 @@ class Command(BaseCommand):
                 continue
 
             # Vypocet hodnoty klice
-            if allocation_type == "percent":
-                value = Decimal(str(podil)).quantize(Decimal("0.000001")) if podil is not None else None
+            if typ == "K_CELKU":
+                jednotek_val = Decimal(str(jednotek)) if jednotek not in (None, "") else None
+                if not jednotek_val:
+                    self.stdout.write(f"  Přeskočeno (Jednotek=0/chybí): {card_desc} / {meter_code}")
+                    skipped += 1
+                    continue
+                value = jednotek_val.quantize(Decimal("0.0001"))
+                allocation_type = "person_count" if "TUV" in meter_code.upper() else "weighted_count"
             elif allocation_type == "fixed_amount":
                 if mplochy and kczam and float(kczam) > 0:
                     # mesicni pausal = plocha * cena/m2/rok / 12
@@ -109,7 +124,7 @@ class Command(BaseCommand):
             key, was_created = AllocationKey.objects.update_or_create(
                 client_card=card,
                 service_item=service_item,
-                meter=meter if allocation_type == "percent" else None,
+                meter=meter if typ == "K_CELKU" else None,
                 defaults={
                     "allocation_type": allocation_type,
                     "value": value,

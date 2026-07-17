@@ -3,7 +3,13 @@ Import klicu ostatni sluzby z Excel souboru Klice_Ostatni.xlsx.
 Pro kazdy radek vytvori AllocationKey na prislusne karte klienta.
 
 Mapovani TYP_Polozky:
-  K_CELKU  -> percent       (podil = sloupec Podil)
+  K_CELKU  -> vaha (hodnota = sloupec Jednotek, NE Podil - Podil je v
+              puvodnim Excelu jen dopocitany napovedny udaj = Jednotek /
+              soucet Jednotek pres vsechny karty se stejnym OSTATNI_KodOM;
+              pouzitim primo Jednotek si system podily dopocitava sam a
+              nezastarava pri zmene poctu najemcu). Typ klice je vzdy
+              weighted_count (u OSTATNI polozek zatim neni znamy kod
+              odpovidajici TUV).
   K_PLOSE  -> fixed_amount  (hodnota = Mplochy * KCzaM / 12 = mesicni pausal)
   PEVNA_KC -> podle sloupce Jednotek a PevnaKC:
               Jednotek == 0            -> klic se NEVYTVARI (polozka se aktualne
@@ -36,7 +42,7 @@ from core.models import Site, ServicePoolItem, ClientCard, AllocationKey
 
 
 TYP_TO_ALLOCATION = {
-    "K_CELKU": "percent",
+    "K_CELKU": "weighted_count",
     "K_PLOSE": "fixed_amount",
     "PEVNA_KC": "fixed_amount",
 }
@@ -106,7 +112,6 @@ class Command(BaseCommand):
             aktivni = str(data.get("Aktivni") or "").strip().lower()
             om_code = str(data.get("OSTATNI_KodOM") or "").strip()
             typ = str(data.get("TYP_Polozky") or "").strip()
-            podil = data.get("Podil")
             mplochy = data.get("Mplochy")
             kczam = data.get("KCzaM")
             pevna_kc = data.get("PevnaKC")
@@ -146,8 +151,13 @@ class Command(BaseCommand):
                 continue
 
             # Vypocet hodnoty klice
-            if allocation_type == "percent":
-                value = Decimal(str(podil)).quantize(Decimal("0.000001")) if podil is not None else None
+            if typ == "K_CELKU":
+                jednotek_val = Decimal(str(jednotek)) if jednotek not in (None, "") else None
+                if not jednotek_val:
+                    self.stdout.write(f"  Přeskočeno (Jednotek=0/chybí): {card_desc} / {service_name}")
+                    skipped += 1
+                    continue
+                value = jednotek_val.quantize(Decimal("0.0001"))
             elif typ == "K_PLOSE":
                 if mplochy and kczam and float(kczam) > 0:
                     # mesicni pausal = plocha * cena/m2/rok / 12
