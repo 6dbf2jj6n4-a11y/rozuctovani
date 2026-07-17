@@ -5,7 +5,14 @@ Pro kazdy radek vytvori AllocationKey na prislusne karte klienta.
 Mapovani TYP_Polozky:
   K_CELKU  -> percent       (podil = sloupec Podil)
   K_PLOSE  -> fixed_amount  (hodnota = Mplochy * KCzaM / 12 = mesicni pausal)
-  PEVNA_KC -> fixed_amount  (hodnota = sloupec PevnaKC primo, jiz mesicni castka)
+  PEVNA_KC -> podle sloupce Jednotek a PevnaKC:
+              Jednotek == 0            -> klic se NEVYTVARI (polozka se aktualne
+                                           neuctuje, napr. INTERNET u nekterych karet)
+              Jednotek != 0, PevnaKC == 0 -> weighted_count, hodnota = Jednotek
+                                           (Jednotek je vaha/pocet kusu pro rozpocet
+                                           nakladu zadaneho rucne, napr. pocet hasicich
+                                           pristroju u revize hasicich pristroju)
+              Jednotek != 0, PevnaKC != 0 -> fixed_amount, hodnota = PevnaKC primo
 
 Polozky tridy OSTATNI v Zasobniku NEMAJI mericí (nejsou merene - ostraha,
 uklid, svoz odpadu apod.), takze na rozdil od Elektro/Voda/Teplo tu nejde
@@ -103,6 +110,7 @@ class Command(BaseCommand):
             mplochy = data.get("Mplochy")
             kczam = data.get("KCzaM")
             pevna_kc = data.get("PevnaKC")
+            jednotek = data.get("Jednotek")
 
             if not card_desc or not om_code or aktivni != "zapnuto":
                 skipped += 1
@@ -149,11 +157,22 @@ class Command(BaseCommand):
                 else:
                     value = None
             elif typ == "PEVNA_KC":
-                # primo zadana mesicni pevna castka
-                value = (
-                    Decimal(str(pevna_kc)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
-                    if pevna_kc else None
-                )
+                jednotek_val = Decimal(str(jednotek)) if jednotek not in (None, "") else Decimal("0")
+                pevna_kc_val = Decimal(str(pevna_kc)) if pevna_kc not in (None, "") else Decimal("0")
+                if jednotek_val == 0:
+                    # Jednotek=0 = polozka se u teto karty aktualne neuctuje
+                    self.stdout.write(
+                        f"  Přeskočeno (Jednotek=0, neúčtuje se): {card_desc} / {service_name}"
+                    )
+                    skipped += 1
+                    continue
+                elif pevna_kc_val == 0:
+                    # castka se neplati primo - Jednotek je vaha pro rozpocet
+                    # nakladu, ktery se zada rucne (CostEntry / vychozi castka)
+                    allocation_type = "weighted_count"
+                    value = jednotek_val.quantize(Decimal("0.0001"))
+                else:
+                    value = pevna_kc_val.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
             else:
                 value = None
 

@@ -324,6 +324,7 @@ class AllocationKey(models.Model):
         EQUAL_SPLIT = "equal_split", "Rovným dílem"
         SUBMETER = "submeter", "Podružné měřidlo (1:1)"
         FIXED_AMOUNT = "fixed_amount", "Pevná částka"
+        WEIGHTED_COUNT = "weighted_count", "Podle váhy (počet jednotek)"
 
     client_card = models.ForeignKey(
         ClientCard, on_delete=models.CASCADE, related_name="allocation_keys", verbose_name="Karta klienta"

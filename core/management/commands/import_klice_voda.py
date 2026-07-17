@@ -5,7 +5,13 @@ Pro kazdy radek vytvori AllocationKey na prislusne karte klienta.
 Mapovani TYP_Polozky:
   K_CELKU  -> percent       (podil = sloupec Podil)
   K_PLOSE  -> fixed_amount  (hodnota = Mplochy * KCzaM / 12 = mesicni pausal)
-  PEVNA_KC -> fixed_amount  (hodnota = sloupec PevnaKC primo, jiz mesicni castka)
+  PEVNA_KC -> podle sloupce Jednotek a PevnaKC:
+              Jednotek == 0            -> klic se NEVYTVARI (polozka se aktualne
+                                           neuctuje)
+              Jednotek != 0, PevnaKC == 0 -> weighted_count, hodnota = Jednotek
+                                           (vaha/pocet kusu pro rozpocet nakladu
+                                           zadaneho rucne)
+              Jednotek != 0, PevnaKC != 0 -> fixed_amount, hodnota = PevnaKC primo
 
 VODA_KodOM je kod meridla - hleda se v Meter.code pro dany areal.
 ServicePoolItem se hleda podle meter.
@@ -58,6 +64,7 @@ class Command(BaseCommand):
             mplochy = data.get("Mplochy")
             kczam = data.get("KCzaM")
             pevna_kc = data.get("PevnaKC")
+            jednotek = data.get("Jednotek")
 
             if not card_desc or not meter_code or aktivni != "zapnuto":
                 skipped += 1
@@ -107,11 +114,19 @@ class Command(BaseCommand):
                 else:
                     value = None
             elif typ == "PEVNA_KC":
-                # primo zadana mesicni pevna castka
-                value = (
-                    Decimal(str(pevna_kc)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
-                    if pevna_kc else None
-                )
+                jednotek_val = Decimal(str(jednotek)) if jednotek not in (None, "") else Decimal("0")
+                pevna_kc_val = Decimal(str(pevna_kc)) if pevna_kc not in (None, "") else Decimal("0")
+                if jednotek_val == 0:
+                    self.stdout.write(
+                        f"  Přeskočeno (Jednotek=0, neúčtuje se): {card_desc} / {meter_code}"
+                    )
+                    skipped += 1
+                    continue
+                elif pevna_kc_val == 0:
+                    allocation_type = "weighted_count"
+                    value = jednotek_val.quantize(Decimal("0.0001"))
+                else:
+                    value = pevna_kc_val.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
             else:
                 value = None
 

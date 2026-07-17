@@ -70,7 +70,10 @@ def _weighted_shares(keys, period):
 
         if key.allocation_type == AllocationKey.AllocationType.AREA_RATIO:
             base = card.unit.area_m2 or Decimal("0")
-        elif key.allocation_type == AllocationKey.AllocationType.PERSON_COUNT:
+        elif key.allocation_type in (
+            AllocationKey.AllocationType.PERSON_COUNT,
+            AllocationKey.AllocationType.WEIGHTED_COUNT,
+        ):
             base = key.value or Decimal("0")
         elif key.allocation_type == AllocationKey.AllocationType.EQUAL_SPLIT:
             base = Decimal("1")
