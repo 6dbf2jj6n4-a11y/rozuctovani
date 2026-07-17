@@ -441,14 +441,26 @@ class MeterReadingInline(TabularInline):
 
 @admin.register(Meter)
 class MeterAdmin(ModelAdmin):
-    list_display = ("code", "name", "site", "meter_type", "parent_meter", "is_virtual", "unit_of_measure")
-    list_filter = ("site", "meter_type", "is_virtual")
+    list_display = (
+        "code", "name", "site", "meter_type", "parent_meter",
+        "reading_mode", "is_virtual", "unit_of_measure",
+    )
+    list_filter = ("site", "meter_type", "reading_mode", "is_virtual")
     search_fields = ("name", "code", "serial_number")
     autocomplete_fields = ("parent_meter",)
     inlines = [MeterReadingInline]
     fieldsets = (
         (None, {
             "fields": (("site", "code", "name"), ("meter_type", "unit_of_measure", "serial_number"))
+        }),
+        ("Odečty", {
+            "fields": ("reading_mode",),
+            "description": (
+                "Vetsina meridel hlasi kumulativni Stav. Pokud dodavatel hlasi "
+                "rovnou Spotrebu za obdobi (napr. hlavni odberne misto elektro), "
+                "prepni na 'Spotreba za obdobi' - pak staci zadavat odecet jen "
+                "za aktualni mesic, bez nutnosti znat predchozi stav."
+            ),
         }),
         ("Hierarchie", {
             "fields": ("parent_meter",)

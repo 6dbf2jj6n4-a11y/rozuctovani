@@ -188,6 +188,10 @@ class Meter(models.Model):
         HEAT = "heat", "Teplo"
         OTHER = "other", "Jiné"
 
+    class ReadingMode(models.TextChoices):
+        STATE = "state", "Stavy (kumulativní odečet, spotřeba = rozdíl mezi obdobími)"
+        CONSUMPTION = "consumption", "Spotřeba za období (dodavatel hlásí rovnou spotřebu, ne stav)"
+
     site = models.ForeignKey(Site, on_delete=models.CASCADE, related_name="meters", verbose_name="Areál")
     parent_meter = models.ForeignKey(
         "self", null=True, blank=True, on_delete=models.PROTECT,
@@ -200,6 +204,15 @@ class Meter(models.Model):
     name = models.CharField("Název / označení", max_length=200)
     meter_type = models.CharField("Typ", max_length=20, choices=MeterType.choices)
     unit_of_measure = models.CharField("Měrná jednotka", max_length=20, default="kWh")
+    reading_mode = models.CharField(
+        "Způsob zadávání odečtů", max_length=20, choices=ReadingMode.choices, default=ReadingMode.STATE,
+        help_text=(
+            "Vetsina meridel hlasi kumulativni Stav (spotreba se dopocita jako "
+            "rozdil vuci minulemu obdobi). Pokud dodavatel hlasi rovnou Spotrebu "
+            "za obdobi (napr. hlavni odberne misto elektro), prepni na tento rezim "
+            "- pak staci zadat odecet jen za aktualni obdobi, hodnota se pouzije primo."
+        ),
+    )
     serial_number = models.CharField("Výrobní číslo", max_length=100, blank=True)
     is_virtual = models.BooleanField(
         "Virtuální (vypočtené)", default=False,
@@ -222,6 +235,12 @@ class Meter(models.Model):
         current = self.readings.filter(period=period).first()
         if current is None:
             return None
+
+        if self.reading_mode == self.ReadingMode.CONSUMPTION:
+            # Dodavatel hlasi rovnou spotrebu za obdobi - zadana hodnota
+            # se pouzije primo, neni potreba znat predchozi obdobi.
+            return current.value
+
         prev_period = period.previous_period()
         if prev_period is None:
             return None
@@ -235,7 +254,10 @@ class MeterReading(models.Model):
     meter = models.ForeignKey(Meter, on_delete=models.CASCADE, related_name="readings", verbose_name="Měřidlo")
     period = models.ForeignKey(Period, on_delete=models.CASCADE, related_name="readings", verbose_name="Období")
     reading_date = models.DateField("Datum odečtu")
-    value = models.DecimalField("Stav měřidla", max_digits=14, decimal_places=3)
+    value = models.DecimalField(
+        "Stav / spotřeba", max_digits=14, decimal_places=3,
+        help_text="Podle nastaveni mericí: bud kumulativni stav, nebo rovnou spotreba za obdobi.",
+    )
     is_estimate = models.BooleanField("Odhad", default=False)
     note = models.CharField("Poznámka", max_length=300, blank=True)
 
