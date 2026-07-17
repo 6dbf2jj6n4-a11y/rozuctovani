@@ -2,7 +2,10 @@
 Import klicu-ploch z Excel souboru Klice_Plochy.xlsx.
 Pro kazdy radek:
 1. Najde ClientCard podle PopisKarty
-2. Najde Unit podle IDPLOCHY
+2. Najde Unit podle IDPLOCHY - pokud neexistuje, VYTVORI ji (napr. u
+   arealu NJ neni samostatny "plochy.xlsx" se zakladni vymerou jako
+   u FM, kazda IDPLOCHY tam patri prave jedne karte, takze se pouzije
+   primo sloupec PronajatoM jako vymera nove Plochy).
 3. Vytvori nebo aktualizuje CardUnit s vymerou a sazbou
 
 Pouziti:
@@ -20,6 +23,15 @@ class Command(BaseCommand):
     def add_arguments(self, parser):
         parser.add_argument("xlsx_path", type=str)
         parser.add_argument("--site", type=str, default="FM")
+        parser.add_argument(
+            "--create-units", action="store_true",
+            help=(
+                "Pokud Plocha (Unit) podle IDPLOCHY neexistuje, vytvorit ji rovnou "
+                "z tohoto souboru (vymera = PronajatoM, ucel = Ucel, jednotka = "
+                "Jednotka). Pouzij jen kdyz kazda IDPLOCHY v souboru patri prave "
+                "jedne karte (jinak by se vymera prepsala podle posledniho radku)."
+            ),
+        )
 
     def handle(self, *args, **options):
         site = Site.objects.filter(name__icontains=options["site"]).first()
@@ -40,6 +52,8 @@ class Command(BaseCommand):
 
             card_desc = str(data.get("PopisKarty") or "").strip()
             unit_code = str(data.get("IDPLOCHY") or "").strip()
+            ucel = str(data.get("Ucel") or "").strip()
+            jednotka = str(data.get("Jednotka") or "").strip() or "m2"
             pronajato = data.get("PronajatoM")
             sazba = data.get("SazbaKcMRok")
             aktivni = str(data.get("Aktivni") or "").strip().lower()
@@ -58,6 +72,16 @@ class Command(BaseCommand):
             if not unit:
                 # Zkusime hledat bez arealu (pro plochy bez site)
                 unit = Unit.objects.filter(code=unit_code).first()
+            if not unit and options["create_units"]:
+                unit = Unit.objects.create(
+                    site=site,
+                    code=unit_code,
+                    name=unit_code,
+                    purpose=ucel,
+                    area_m2=Decimal(str(pronajato)) if pronajato else None,
+                    unit_type=jednotka,
+                )
+                self.stdout.write(f"  ++ Plocha vytvořena: {unit_code} ({pronajato} {jednotka})")
             if not unit:
                 self.stdout.write(f"  Plocha nenalezena: {unit_code}")
                 skipped += 1
