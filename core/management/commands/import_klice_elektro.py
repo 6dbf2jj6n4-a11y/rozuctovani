@@ -11,6 +11,13 @@ Mapovani TYP_Polozky:
              weighted_count, nebo person_count pokud EL_KodOM
              odpovida odberu na TUV (teplá užitková voda).
   K_PLOSE -> fixed_amount (hodnota = Mplochy * KCzaM / 12 = mesicni pausal)
+  PEVNA_KC -> podle sloupce Jednotek a PevnaKC (stejne jako u Teplo/Voda/Ostatni):
+              Jednotek == 0            -> klic se NEVYTVARI (polozka se aktualne
+                                           neuctuje)
+              Jednotek != 0, PevnaKC == 0 -> weighted_count, hodnota = Jednotek
+              Jednotek != 0, PevnaKC != 0 -> fixed_amount, hodnota = PevnaKC / 12
+                                           (PevnaKC je ROCNI castka - potvrzeno
+                                           uzivatelem), deduct_from_pool=False
 
 EL_KodOM je kod meridla - hleda se v Meter.code pro dany areal.
 ServicePoolItem se hleda podle meter. U K_CELKU se meridlo (slave kod,
@@ -30,6 +37,7 @@ from core.models import Site, Meter, ServicePoolItem, ClientCard, AllocationKey
 TYP_TO_ALLOCATION = {
     "K_CELKU": "weighted_count",
     "K_PLOSE": "fixed_amount",
+    "PEVNA_KC": "fixed_amount",
 }
 
 
@@ -64,6 +72,7 @@ class Command(BaseCommand):
             jednotek = data.get("Jednotek")
             mplochy = data.get("Mplochy")
             kczam = data.get("KCzaM")
+            pevna_kc = data.get("PevnaKC")
 
             if not card_desc or not meter_code or aktivni != "zapnuto":
                 skipped += 1
@@ -102,6 +111,7 @@ class Command(BaseCommand):
                 continue
 
             # Vypocet hodnoty klice
+            deduct_from_pool = True
             if typ == "K_CELKU":
                 jednotek_val = Decimal(str(jednotek)) if jednotek not in (None, "") else None
                 if not jednotek_val:
@@ -110,7 +120,7 @@ class Command(BaseCommand):
                     continue
                 value = jednotek_val.quantize(Decimal("0.0001"))
                 allocation_type = "person_count" if "TUV" in meter_code.upper() else "weighted_count"
-            elif allocation_type == "fixed_amount":
+            elif typ == "K_PLOSE":
                 if mplochy and kczam and float(kczam) > 0:
                     # mesicni pausal = plocha * cena/m2/rok / 12
                     value = (Decimal(str(mplochy)) * Decimal(str(kczam)) / 12).quantize(
@@ -118,6 +128,23 @@ class Command(BaseCommand):
                     )
                 else:
                     value = None
+            elif typ == "PEVNA_KC":
+                jednotek_val = Decimal(str(jednotek)) if jednotek not in (None, "") else Decimal("0")
+                pevna_kc_val = Decimal(str(pevna_kc)) if pevna_kc not in (None, "") else Decimal("0")
+                if jednotek_val == 0:
+                    self.stdout.write(
+                        f"  Přeskočeno (Jednotek=0, neúčtuje se): {card_desc} / {meter_code}"
+                    )
+                    skipped += 1
+                    continue
+                elif pevna_kc_val == 0:
+                    allocation_type = "weighted_count"
+                    value = jednotek_val.quantize(Decimal("0.0001"))
+                else:
+                    # PevnaKC je rocni castka
+                    allocation_type = "fixed_amount"
+                    value = (pevna_kc_val / 12).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+                    deduct_from_pool = False
             else:
                 value = None
 
@@ -128,6 +155,7 @@ class Command(BaseCommand):
                 defaults={
                     "allocation_type": allocation_type,
                     "value": value,
+                    "deduct_from_pool": deduct_from_pool,
                 },
             )
 

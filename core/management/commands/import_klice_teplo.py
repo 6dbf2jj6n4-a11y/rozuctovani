@@ -17,10 +17,12 @@ Mapovani TYP_Polozky:
               Jednotek != 0, PevnaKC == 0 -> weighted_count, hodnota = Jednotek
                                            (vaha/pocet kusu pro rozpocet nakladu
                                            zadaneho rucne)
-              Jednotek != 0, PevnaKC != 0 -> fixed_amount, hodnota = PevnaKC primo,
-                                           deduct_from_pool=False (paušál je nezavisly
-                                           na hlavnim odberu - neodecita se ze sdileneho
-                                           nakladu, ostatni karty platí svuj normalni podil)
+              Jednotek != 0, PevnaKC != 0 -> fixed_amount, hodnota = PevnaKC / 12
+                                           (PevnaKC je ROCNI castka - potvrzeno
+                                           uzivatelem), deduct_from_pool=False (paušál
+                                           je nezavisly na hlavnim odberu - neodecita se
+                                           ze sdileneho nakladu, ostatni karty platí svuj
+                                           normalni podil)
 
 TEPLO_KodOM je kod meridla - hleda se v Meter.code pro dany areal.
 ServicePoolItem se hleda podle meter.
@@ -141,7 +143,8 @@ class Command(BaseCommand):
                     allocation_type = "weighted_count"
                     value = jednotek_val.quantize(Decimal("0.0001"))
                 else:
-                    value = pevna_kc_val.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+                    # PevnaKC je rocni castka
+                    value = (pevna_kc_val / 12).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
                     # Pausal nezavisly na hlavnim odberu - neodecitat ze sdileneho nakladu
                     deduct_from_pool = False
             else:

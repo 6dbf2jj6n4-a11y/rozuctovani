@@ -17,7 +17,9 @@ Mapovani TYP_Polozky:
               Jednotek != 0, PevnaKC == 0 -> weighted_count, hodnota = Jednotek
                                            (vaha/pocet kusu pro rozpocet nakladu
                                            zadaneho rucne)
-              Jednotek != 0, PevnaKC != 0 -> fixed_amount, hodnota = PevnaKC primo
+              Jednotek != 0, PevnaKC != 0 -> fixed_amount, hodnota = PevnaKC / 12
+                                           (PevnaKC je ROCNI castka - potvrzeno
+                                           uzivatelem), deduct_from_pool=False
 
 VODA_KodOM je kod meridla - hleda se v Meter.code pro dany areal.
 ServicePoolItem se hleda podle meter.
@@ -108,6 +110,7 @@ class Command(BaseCommand):
                 continue
 
             # Vypocet hodnoty klice
+            deduct_from_pool = True
             if typ == "K_CELKU":
                 jednotek_val = Decimal(str(jednotek)) if jednotek not in (None, "") else None
                 if not jednotek_val:
@@ -137,7 +140,10 @@ class Command(BaseCommand):
                     allocation_type = "weighted_count"
                     value = jednotek_val.quantize(Decimal("0.0001"))
                 else:
-                    value = pevna_kc_val.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+                    # PevnaKC je rocni castka
+                    allocation_type = "fixed_amount"
+                    value = (pevna_kc_val / 12).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+                    deduct_from_pool = False
             else:
                 value = None
 
@@ -148,6 +154,7 @@ class Command(BaseCommand):
                 defaults={
                     "allocation_type": allocation_type,
                     "value": value,
+                    "deduct_from_pool": deduct_from_pool,
                 },
             )
 
