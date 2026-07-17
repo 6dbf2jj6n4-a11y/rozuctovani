@@ -17,7 +17,9 @@ FM-specifickeho prikazu:
     PEVNA_KC -> podle Jednotek a PevnaKC:
                 Jednotek == 0 -> klic se nevytvari (neuctuje se)
                 Jednotek != 0, PevnaKC == 0 -> weighted_count, hodnota=Jednotek
-                Jednotek != 0, PevnaKC != 0 -> fixed_amount, hodnota=PevnaKC,
+                Jednotek != 0, PevnaKC != 0 -> fixed_amount, hodnota=PevnaKC/12
+                (POZOR: u NJ je PevnaKC rocni castka, na rozdil od FM
+                Klice_*.xlsx, kde uz je to mesicni - potvrzeno uzivatelem),
                 deduct_from_pool=False (pausal nezavisly na hlavnim odberu)
 
   OSTATNÍ (nemerene - ostraha, uklid, svoz odpadu...): OM kod se
@@ -191,12 +193,13 @@ class Command(BaseCommand):
                     allocation_type = "weighted_count"
                     value = jednotek_val.quantize(Decimal("0.0001"))
                 else:
+                    # U NJ je PevnaKC u pevnych castek ROCNI cena (potvrzeno uzivatelem,
+                    # na rozdil od FM Klice_*.xlsx, kde uz je to mesicni castka primo)
                     allocation_type = "fixed_amount"
-                    value = pevna_kc_val.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+                    value = (pevna_kc_val / 12).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
                     deduct_from_pool = False
                     self.stdout.write(
-                        f"  POZOR - zkontroluj, jestli {pevna_kc_val} Kč u '{card_desc}' / {om_code} "
-                        f"je MĚSÍČNÍ částka (import ji tak bere) - pokud je to roční, uprav rucne."
+                        f"  + pausal {card_desc} / {om_code}: {pevna_kc_val} Kč/rok -> {value} Kč/měsíc"
                     )
             else:
                 self.stdout.write(f"  Neznámý typ: {typ} ({card_desc} / {om_code})")
