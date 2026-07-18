@@ -141,8 +141,8 @@ class AllocationKeyInlineBase(TabularInline):
     model = AllocationKey
     extra = 0
     collapsible = True
-    fields = ("service_item", "allocation_type", "value", "meter", "deduct_from_pool")
-    autocomplete_fields = ("service_item", "meter")
+    fields = ("service_item", "allocation_type", "value", "meter", "unit", "deduct_from_pool")
+    autocomplete_fields = ("service_item", "meter", "unit")
 
     class Media:
         css = {"all": ("core/css/select_width_fix.css",)}
@@ -159,7 +159,7 @@ class AllocationKeyInlineBase(TabularInline):
                 invoice_class=self.invoice_class
             )
         formfield = super().formfield_for_foreignkey(db_field, request, **kwargs)
-        if db_field.name == "meter" and hasattr(formfield.widget, "can_delete_related"):
+        if db_field.name in ("meter", "unit") and hasattr(formfield.widget, "can_delete_related"):
             formfield.widget.can_delete_related = False
             formfield.widget.can_add_related = False
             formfield.widget.can_change_related = False
@@ -607,10 +607,10 @@ class ServicePoolItemAdmin(ModelAdmin):
 class AllocationKeyAdmin(ModelAdmin):
     list_display = (
         "client_card", "service_item", "allocation_type", "value",
-        "deduct_from_pool", "valid_from", "valid_to",
+        "unit", "deduct_from_pool", "valid_from", "valid_to",
     )
     list_filter = ("allocation_type", "deduct_from_pool")
-    autocomplete_fields = ("client_card", "service_item", "meter")
+    autocomplete_fields = ("client_card", "service_item", "meter", "unit")
 
 
 @admin.register(PriceList)

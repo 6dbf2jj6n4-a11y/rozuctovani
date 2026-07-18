@@ -10,7 +10,9 @@ Mapovani TYP_Polozky:
               nezastarava pri zmene poctu najemcu). Typ klice je
               weighted_count, nebo person_count pokud TEPLO_KodOM
               odpovida odberu na TUV (teplá užitková voda, napr. T_TUV).
-  K_PLOSE  -> fixed_amount  (hodnota = Mplochy * KCzaM / 12 = mesicni pausal)
+  K_PLOSE  -> fixed_amount  (hodnota = Mplochy * KCzaM / 12 = mesicni pausal;
+              pokud IDPLOCHY oznacuje jednu konkretni mistnost, dohleda se
+              i Unit a ulozi se do AllocationKey.unit - jen informativni)
   PEVNA_KC -> podle sloupce Jednotek a PevnaKC:
               Jednotek == 0            -> klic se NEVYTVARI (polozka se aktualne
                                            neuctuje)
@@ -33,7 +35,7 @@ Pouziti:
 import openpyxl
 from decimal import Decimal, ROUND_HALF_UP
 from django.core.management.base import BaseCommand
-from core.models import Site, Meter, ServicePoolItem, ClientCard, AllocationKey
+from core.models import Site, Meter, ServicePoolItem, ClientCard, AllocationKey, Unit
 
 
 TYP_TO_ALLOCATION = {
@@ -75,6 +77,7 @@ class Command(BaseCommand):
             kczam = data.get("KCzaM")
             pevna_kc = data.get("PevnaKC")
             jednotek = data.get("Jednotek")
+            idplochy = str(data.get("IDPLOCHY") or "").strip()
 
             if not card_desc or not meter_code or aktivni != "zapnuto":
                 skipped += 1
@@ -114,6 +117,7 @@ class Command(BaseCommand):
 
             # Vypocet hodnoty klice
             deduct_from_pool = True
+            unit = None
             if typ == "K_CELKU":
                 jednotek_val = Decimal(str(jednotek)) if jednotek not in (None, "") else None
                 if not jednotek_val:
@@ -128,6 +132,11 @@ class Command(BaseCommand):
                     value = (Decimal(str(mplochy)) * Decimal(str(kczam)) / 12).quantize(
                         Decimal("0.01"), rounding=ROUND_HALF_UP
                     )
+                    # IDPLOCHY oznacuje konkretni plochu jen pokud je to jedna
+                    # mistnost - u souctove castky pres vice ploch byva 0/prazdne
+                    # a plocha se nedoplni.
+                    if idplochy and idplochy != "0":
+                        unit = Unit.objects.filter(site=site, name=idplochy).first()
                 else:
                     value = None
             elif typ == "PEVNA_KC":
@@ -158,6 +167,7 @@ class Command(BaseCommand):
                     "allocation_type": allocation_type,
                     "value": value,
                     "deduct_from_pool": deduct_from_pool,
+                    "unit": unit,
                 },
             )
 

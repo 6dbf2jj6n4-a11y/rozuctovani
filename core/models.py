@@ -339,6 +339,15 @@ class AllocationKey(models.Model):
         Meter, null=True, blank=True, on_delete=models.SET_NULL,
         related_name="submeter_keys", verbose_name="Podružné měřidlo"
     )
+    unit = models.ForeignKey(
+        Unit, null=True, blank=True, on_delete=models.SET_NULL,
+        related_name="allocation_keys", verbose_name="Plocha",
+        help_text=(
+            "Jen informativní - u pevné částky (fixed_amount) počítané z výměry (K_PLOSE) "
+            "označuje konkrétní plochu, ze které se paušál spočítal. Pokud se pevná částka "
+            "vztahuje na součet více ploch karty (napr. srážkové vody), zůstává prázdné."
+        ),
+    )
     deduct_from_pool = models.BooleanField(
         "Odečíst z celkového nákladu",
         default=True,
