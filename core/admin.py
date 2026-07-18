@@ -26,6 +26,7 @@ class UnitInline(TabularInline):
 @admin.register(Site)
 class SiteAdmin(ModelAdmin):
     list_display = ("name", "address")
+    search_fields = ("name",)
     inlines = [UnitInline]
 
 
@@ -285,12 +286,12 @@ class SiteFilter(admin.SimpleListFilter):
 
 @admin.register(Client)
 class ClientAdmin(ModelAdmin):
-    list_display = ("name", "code", "ico", "contact_email", "contact_phone", "is_active")
+    list_display = ("name", "code", "ico", "contact_email", "contact_phone", "is_active", "is_landlord")
     search_fields = ("name", "ico", "code")
-    list_filter = ("is_active", SiteFilter)
+    list_filter = ("is_active", "is_landlord", SiteFilter)
     fieldsets = (
         ("Základní údaje", {
-            "fields": (("name", "code"), ("is_active",))
+            "fields": (("name", "code"), ("is_active", "is_landlord"))
         }),
         ("Sídlo", {
             "fields": (("street", "street_number"), ("zip_code", "city"))
@@ -368,10 +369,61 @@ class ContractAdmin(ModelAdmin):
     list_display = ("client", "number", "valid_from", "valid_to", "deposit_paid", "has_inflation_clause")
     list_filter = ("deposit_paid", "has_inflation_clause")
     search_fields = ("number", "client__name", "client__ico")
-    autocomplete_fields = ("client",)
+    autocomplete_fields = ("client", "site")
+    actions = ["generate_document"]
+
+    @admin.action(description="Vygenerovat dokument smlouvy (.docx)")
+    def generate_document(self, request, queryset):
+        from io import BytesIO
+        from django.core.files.base import ContentFile
+        from core.contract_generator import fill_contract_template
+
+        generated, skipped = 0, []
+        for contract in queryset:
+            client = contract.client
+            address = " ".join(p for p in (client.street, client.street_number) if p)
+            if client.zip_code or client.city:
+                address = f"{address}, {client.zip_code} {client.city}".strip(", ")
+
+            data = {
+                "site_name": str(contract.site) if contract.site else "",
+                "client_name": client.name,
+                "client_address": address,
+                "client_ico": client.ico,
+                "client_dic": client.dic,
+                "registry_court": client.registry_court,
+                "registry_section": client.registry_section,
+                "registry_insert": client.registry_insert,
+                "representative_name": contract.representative_name,
+                "representative_role": contract.representative_role,
+                "invoicing_email": contract.invoicing_email,
+                "signed_on": contract.signed_on,
+                "valid_from": contract.valid_from,
+                "notice_period_months": contract.notice_period_months,
+                "insurance_amount_czk": contract.insurance_amount_czk,
+                "deposit_czk": contract.deposit_czk,
+                "inflation_increase_from": contract.inflation_increase_from,
+            }
+            try:
+                buf = BytesIO()
+                fill_contract_template(data, buf)
+            except Exception as exc:
+                skipped.append(f"{contract}: {exc}")
+                continue
+            filename = f"smlouva_{client.code or client.pk}_{contract.pk}.docx"
+            contract.document.save(filename, ContentFile(buf.getvalue()), save=True)
+            generated += 1
+
+        text = f"Vygenerováno {generated} dokumentů."
+        if skipped:
+            text += " Přeskočeno: " + " | ".join(skipped)
+            self.message_user(request, text, level=messages.WARNING)
+        else:
+            self.message_user(request, text, level=messages.SUCCESS)
+
     fieldsets = (
         ("Základní údaje", {
-            "fields": (("client", "number"), "signed_on")
+            "fields": (("client", "site", "number"), "signed_on")
         }),
         ("Platnost", {
             "fields": (("valid_from", "valid_to"), "notice_period_months")

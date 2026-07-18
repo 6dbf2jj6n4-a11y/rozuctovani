@@ -111,6 +111,11 @@ class Contract(models.Model):
     client = models.ForeignKey(
         Client, on_delete=models.CASCADE, related_name="contracts", verbose_name="Klient"
     )
+    site = models.ForeignKey(
+        Site, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="contracts", verbose_name="Areál",
+        help_text="Potřeba pro záhlaví generovaného dokumentu smlouvy.",
+    )
     number = models.CharField("Číslo smlouvy", max_length=50, blank=True)
     signed_on = models.DateField("Datum podpisu", null=True, blank=True)
     valid_from = models.DateField("Platnost od", null=True, blank=True)
