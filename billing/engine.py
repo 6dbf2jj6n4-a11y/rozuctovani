@@ -195,12 +195,18 @@ def calculate_period(period):
 
             fixed_keys = [k for k in valid_keys if k.allocation_type == AllocationKey.AllocationType.FIXED_AMOUNT]
 
+            period_start, period_end = period.date_range()
+
             # 1) pevne castky - ty s deduct_from_pool=True se odectou z celkove castky,
             # zbytek (deduct_from_pool=False) klient plati samostatne/navic a nema vliv
             # na to, kolik zbyva k rozpocitani ostatnim kartam.
+            # Karta mimo svou platnost (valid_from/valid_to) v tomto obdobi pausal neplati -
+            # stejna podminka jako u vazenych podilu (_weighted_shares).
             remaining_cost = total_cost
             fixed_amounts = {}
             for key in fixed_keys:
+                if key.client_card.active_days_in_period(period_start, period_end) <= 0:
+                    continue
                 amount = key.value or Decimal("0")
                 fixed_amounts[key.client_card_id] = fixed_amounts.get(key.client_card_id, Decimal("0")) + amount
                 if key.deduct_from_pool:
