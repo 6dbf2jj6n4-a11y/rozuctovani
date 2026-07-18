@@ -511,13 +511,33 @@ class PeriodAdmin(ModelAdmin):
     ordering = ("-year", "-month")
     actions = ["spocitat_rozuctovani"]
 
-    @admin.action(description="Spočítat rozúčtování za vybraná období")
+    def get_actions(self, request):
+        actions = super().get_actions(request)
+        for site in Site.objects.all():
+            action_name = f"spocitat_rozuctovani_site_{site.pk}"
+            actions[action_name] = (
+                self._site_action(site),
+                action_name,
+                f"Spočítat rozúčtování za vybraná období – jen {site}",
+            )
+        return actions
+
+    def _site_action(self, site):
+        def action(modeladmin, request, queryset):
+            modeladmin._spocitat_rozuctovani(request, queryset, site=site)
+        return action
+
+    @admin.action(description="Spočítat rozúčtování za vybraná období (všechny areály)")
     def spocitat_rozuctovani(self, request, queryset):
+        self._spocitat_rozuctovani(request, queryset, site=None)
+
+    def _spocitat_rozuctovani(self, request, queryset, site=None):
         from billing.engine import calculate_period
 
         for period in queryset:
-            result = calculate_period(period)
-            text = f"{period}: vytvořeno {result['created']} vyúčtovaných položek."
+            result = calculate_period(period, site=site)
+            label = f"{period} / {site}" if site else str(period)
+            text = f"{label}: vytvořeno {result['created']} vyúčtovaných položek."
             if result["warnings"]:
                 text += " Varování: " + " | ".join(result["warnings"])
                 self.message_user(request, text, level=messages.WARNING)

@@ -156,11 +156,16 @@ def _consumption_shares(service_item, period, warnings):
     return shares
 
 
-def calculate_period(period):
+def calculate_period(period, site=None):
     """
-    Spocita rozuctovani vsech polozek Zasobniku pro dane obdobi
-    a ulozi vysledky do BillingLine (existujici radky pro toto
-    obdobi se nahradi).
+    Spocita rozuctovani polozek Zasobniku pro dane obdobi a ulozi
+    vysledky do BillingLine (existujici radky pro toto obdobi se
+    nahradi).
+
+    Pokud je zadany `site`, pocita se jen za tento areal - smazou a
+    prepocitaji se jen BillingLine patrici polozkam tohoto arealu,
+    vysledky ostatnich arealu pro stejne obdobi zustanou beze zmeny.
+    Bez `site` se pocita (a maze/prepisuje) za vsechny arealy najednou.
 
     Vraci dict se souhrnem: {"created": int, "warnings": [str, ...]}.
     """
@@ -168,9 +173,14 @@ def calculate_period(period):
     created = 0
 
     with transaction.atomic():
-        BillingLine.objects.filter(period=period).delete()
+        billing_lines = BillingLine.objects.filter(period=period)
+        service_items = ServicePoolItem.objects.select_related("meter")
+        if site is not None:
+            billing_lines = billing_lines.filter(service_item__site=site)
+            service_items = service_items.filter(site=site)
+        billing_lines.delete()
 
-        for service_item in ServicePoolItem.objects.select_related("meter"):
+        for service_item in service_items:
             cost_entry = CostEntry.objects.filter(service_item=service_item, period=period).first()
             cost_source = None
             if cost_entry is not None:

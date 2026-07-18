@@ -372,7 +372,7 @@ class AllocationKey(models.Model):
         ordering = ["service_item", "client_card"]
 
     def __str__(self):
-        return str(self.service_item)
+        return ""
 
     def is_valid_for_period(self, period):
         period_start, period_end = period.date_range()
