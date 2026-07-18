@@ -12,7 +12,7 @@ from django import forms
 from unfold.admin import ModelAdmin, TabularInline
 
 from .models import (
-    Client, ClientCard, Site, Unit, CardUnit,
+    Client, ClientCard, Contract, Site, Unit, CardUnit,
     Meter, MeterReading, Period,
     ServicePoolItem, AllocationKey, PriceList, CostEntry, BillingLine, UnitService
 )
@@ -259,6 +259,15 @@ class ClientCardInline(TabularInline):
     description_link.short_description = "Popis karty"
 
 
+class ContractInline(TabularInline):
+    model = Contract
+    extra = 0
+    fields = ("number", "valid_from", "valid_to", "signed_on", "deposit_paid", "has_inflation_clause")
+    show_change_link = True
+    verbose_name = "Smlouva"
+    verbose_name_plural = "Smlouvy"
+
+
 class SiteFilter(admin.SimpleListFilter):
     title = "Areál"
     parameter_name = "site"
@@ -287,7 +296,7 @@ class ClientAdmin(ModelAdmin):
             "fields": (("street", "street_number"), ("zip_code", "city"))
         }),
         ("Identifikace", {
-            "fields": (("ico", "dic", "ares_button"), "vat_payer")
+            "fields": (("ico", "dic", "ares_button"), "vat_payer", ("registry_court", "registry_section", "registry_insert"))
         }),
         ("Bankovní spojení", {
             "fields": (("bank_name", "bank_account", "bank_code"),)
@@ -300,7 +309,7 @@ class ClientAdmin(ModelAdmin):
         }),
     )
     readonly_fields = ("ares_button",)
-    inlines = [ClientCardInline]
+    inlines = [ClientCardInline, ContractInline]
     actions = ["export_emaily"]
 
     class Media:
@@ -352,6 +361,37 @@ class ClientAdmin(ModelAdmin):
             "E-maily (zkopíruj a vlož do BCC): " + "; ".join(emaily),
             level=messages.SUCCESS,
         )
+
+
+@admin.register(Contract)
+class ContractAdmin(ModelAdmin):
+    list_display = ("client", "number", "valid_from", "valid_to", "deposit_paid", "has_inflation_clause")
+    list_filter = ("deposit_paid", "has_inflation_clause")
+    search_fields = ("number", "client__name", "client__ico")
+    autocomplete_fields = ("client",)
+    fieldsets = (
+        ("Základní údaje", {
+            "fields": (("client", "number"), "signed_on")
+        }),
+        ("Platnost", {
+            "fields": (("valid_from", "valid_to"), "notice_period_months")
+        }),
+        ("Kauce a pojištění", {
+            "fields": (("deposit_czk", "deposit_paid"), "insurance_amount_czk")
+        }),
+        ("Inflační doložka", {
+            "fields": (("has_inflation_clause", "inflation_increase_from"),)
+        }),
+        ("Fakturace a zastoupení", {
+            "fields": ("invoicing_email", ("representative_name", "representative_role"))
+        }),
+        ("Dokument", {
+            "fields": ("document",)
+        }),
+        ("Poznámka", {
+            "fields": ("note",)
+        }),
+    )
 
 
 @admin.register(ClientCard)

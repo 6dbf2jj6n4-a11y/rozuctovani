@@ -39,6 +39,23 @@
                             if (s.psc) $("#id_zip_code").val(String(s.psc));
                             if (s.nazevObce) $("#id_city").val(s.nazevObce);
                         }
+                        return fetch("https://ares.gov.cz/ekonomicke-subjekty-v-be/rest/ekonomicke-subjekty-vr/" + ico)
+                            .then(function (r) { return r.ok ? r.json() : null; })
+                            .then(function (vr) {
+                                var zaznam = vr && vr.zaznamy && vr.zaznamy[0];
+                                var sz = zaznam && zaznam.spisovaZnacka && zaznam.spisovaZnacka[0];
+                                if (sz) {
+                                    if (sz.soud) $("#id_registry_court").val(sz.soud);
+                                    if (sz.oddil) $("#id_registry_section").val(sz.oddil);
+                                    if (sz.vlozka) $("#id_registry_insert").val(String(sz.vlozka));
+                                }
+                            })
+                            .catch(function () {
+                                // Verejny rejstrik nemusi byt dostupny pro vsechny typy
+                                // subjektu (napr. OSVC) - jmeno/sidlo uz mame, nevadi.
+                            });
+                    })
+                    .then(function () {
                         $status.text("✓ Načteno z ARES").css("color", "green");
                     });
             })

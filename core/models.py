@@ -81,6 +81,13 @@ class Client(models.Model):
     dic = models.CharField("DIČ", max_length=20, blank=True)
     vat_payer = models.BooleanField("Plátce DPH", default=False)
 
+    registry_court = models.CharField(
+        "Rejstříkový soud", max_length=100, blank=True,
+        help_text="Napr. 'Krajský soud v Ostravě' - lze dohledat/overit pres ARES podle IČO.",
+    )
+    registry_section = models.CharField("Oddíl", max_length=20, blank=True)
+    registry_insert = models.CharField("Vložka", max_length=20, blank=True)
+
     bank_name = models.CharField("Banka", max_length=50, blank=True)
     bank_account = models.CharField("Číslo účtu", max_length=50, blank=True)
     bank_code = models.CharField("Kód banky", max_length=10, blank=True)
@@ -96,6 +103,63 @@ class Client(models.Model):
 
     def __str__(self):
         return self.name
+
+
+class Contract(models.Model):
+    """Smlouva (najemni) uzavrena s klientem."""
+
+    client = models.ForeignKey(
+        Client, on_delete=models.CASCADE, related_name="contracts", verbose_name="Klient"
+    )
+    number = models.CharField("Číslo smlouvy", max_length=50, blank=True)
+    signed_on = models.DateField("Datum podpisu", null=True, blank=True)
+    valid_from = models.DateField("Platnost od", null=True, blank=True)
+    valid_to = models.DateField(
+        "Platnost do", null=True, blank=True,
+        help_text="Prázdné = na dobu neurčitou.",
+    )
+    notice_period_months = models.PositiveIntegerField(
+        "Výpovědní lhůta (měsíce)", null=True, blank=True
+    )
+
+    deposit_czk = models.DecimalField(
+        "Kauce (Kč)", max_digits=12, decimal_places=2, null=True, blank=True
+    )
+    deposit_paid = models.BooleanField("Kauce zaplacena", default=False)
+
+    insurance_amount_czk = models.DecimalField(
+        "Částka pojištění (Kč)", max_digits=12, decimal_places=2, null=True, blank=True
+    )
+
+    has_inflation_clause = models.BooleanField("Inflační doložka", default=False)
+    inflation_increase_from = models.DateField(
+        "Inflační navýšení platí od", null=True, blank=True,
+        help_text="Jen pokud je zaškrtnutá inflační doložka.",
+    )
+
+    invoicing_email = models.EmailField(
+        "E-mail pro elektronickou fakturaci", blank=True,
+        help_text="Pokud se liší od kontaktního e-mailu klienta.",
+    )
+
+    representative_name = models.CharField("Zastupuje (jméno)", max_length=200, blank=True)
+    representative_role = models.CharField(
+        "Zastupuje (funkce)", max_length=100, blank=True,
+        help_text="Napr. 'jednatel', 'na základě plné moci'.",
+    )
+
+    document = models.FileField(
+        "Vygenerovaný dokument", upload_to="smlouvy/", null=True, blank=True
+    )
+    note = models.TextField("Poznámka", blank=True)
+
+    class Meta:
+        verbose_name = "Smlouva"
+        verbose_name_plural = "Smlouvy"
+        ordering = ["-valid_from"]
+
+    def __str__(self):
+        return self.number or f"Smlouva {self.client} ({self.valid_from or '?'})"
 
 
 class ClientCard(models.Model):
