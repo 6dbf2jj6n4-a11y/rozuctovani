@@ -324,7 +324,7 @@ class ClientAdmin(ModelAdmin):
         ("Poznámka", {
             "fields": ("note",)
         }),
-        ("Smlouvy", {
+        ("Nová smlouva", {
             "fields": ("add_contract_button",)
         }),
     )
