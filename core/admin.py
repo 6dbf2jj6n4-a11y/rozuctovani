@@ -261,12 +261,21 @@ class ClientCardInline(TabularInline):
 
 
 class ContractInline(TabularInline):
+    """Jen prehled uz existujicich Smluv klienta - kliknutim na cislo se
+    otevre plny formular Smlouvy. Pridavani nove Smlouvy tady zamerne neni
+    (viz ClientAdmin.add_contract_button) - Django admin neumi mit v inline
+    radek zaroven editovatelny pro pridani a klikaci odkaz pro existujici
+    zaznamy, tak se pridava rovnou na vlastni strance Smlouvy."""
     model = Contract
     extra = 0
     fields = ("number_link", "valid_from", "valid_to", "signed_on", "deposit_paid", "has_inflation_clause")
     readonly_fields = ("number_link",)
+    show_change_link = False
     verbose_name = "Smlouva"
     verbose_name_plural = "Smlouvy"
+
+    def has_add_permission(self, request, obj=None):
+        return False
 
     def number_link(self, obj):
         from django.urls import reverse
@@ -315,8 +324,11 @@ class ClientAdmin(ModelAdmin):
         ("Poznámka", {
             "fields": ("note",)
         }),
+        ("Smlouvy", {
+            "fields": ("add_contract_button",)
+        }),
     )
-    readonly_fields = ("ares_button",)
+    readonly_fields = ("ares_button", "add_contract_button")
     inlines = [ClientCardInline, ContractInline]
     actions = ["export_emaily"]
 
@@ -333,6 +345,21 @@ class ClientAdmin(ModelAdmin):
             '<span id="ares-status" style="margin-left:8px; font-size:13px;"></span>'
         )
     ares_button.short_description = ""
+
+    def add_contract_button(self, obj):
+        from django.urls import reverse
+        from django.utils.html import format_html
+        if not obj or not obj.pk:
+            return "Nejprve klienta uložte."
+        url = reverse("admin:core_contract_add") + f"?client={obj.pk}"
+        return format_html(
+            '<a href="{}" '
+            'style="padding:6px 16px; border-radius:6px; background:#2563eb; '
+            'color:white; font-weight:600; text-decoration:none; display:inline-block;">'
+            '+ Přidat smlouvu</a>',
+            url,
+        )
+    add_contract_button.short_description = ""
 
     def get_urls(self):
         from django.urls import path
