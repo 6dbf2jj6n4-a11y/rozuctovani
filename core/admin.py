@@ -263,10 +263,17 @@ class ClientCardInline(TabularInline):
 class ContractInline(TabularInline):
     model = Contract
     extra = 0
-    fields = ("number", "valid_from", "valid_to", "signed_on", "deposit_paid", "has_inflation_clause")
-    show_change_link = True
+    fields = ("number_link", "valid_from", "valid_to", "signed_on", "deposit_paid", "has_inflation_clause")
+    readonly_fields = ("number_link",)
     verbose_name = "Smlouva"
     verbose_name_plural = "Smlouvy"
+
+    def number_link(self, obj):
+        from django.urls import reverse
+        from django.utils.html import format_html
+        url = reverse("admin:core_contract_change", args=[obj.pk])
+        return format_html('<a href="{}">{}</a>', url, obj.number or "—")
+    number_link.short_description = "Číslo smlouvy"
 
 
 class SiteFilter(admin.SimpleListFilter):
