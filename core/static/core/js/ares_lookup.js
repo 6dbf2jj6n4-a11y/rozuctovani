@@ -13,6 +13,24 @@
         if (!$field.val()) { $field.val(value); }
     }
 
+    // ARES vraci soud jen jako zkratku (napr. "KSOS") - obchodni rejstrik
+    // v CR vede jen techto 8 soudu, mapa je tedy uzavrena a stabilni.
+    var COURT_NAMES = {
+        MSPH: "Městský soud v Praze",
+        KSPH: "Krajský soud v Praze",
+        KSCB: "Krajský soud v Českých Budějovicích",
+        KSPL: "Krajský soud v Plzni",
+        KSUL: "Krajský soud v Ústí nad Labem",
+        KSHK: "Krajský soud v Hradci Králové",
+        KSBR: "Krajský soud v Brně",
+        KSOS: "Krajský soud v Ostravě",
+    };
+
+    function courtName(code) {
+        if (!code) { return code; }
+        return COURT_NAMES[code] || code;
+    }
+
     window.aresLookup = function () {
         var ico = $("#id_ico").val().trim().replace(/\s/g, "");
         var $status = $("#ares-status");
@@ -63,7 +81,7 @@
                                 var zaznam = vr && vr.zaznamy && vr.zaznamy[0];
                                 var sz = zaznam && zaznam.spisovaZnacka && zaznam.spisovaZnacka[0];
                                 if (sz) {
-                                    fillIfEmpty("#id_registry_court", sz.soud);
+                                    fillIfEmpty("#id_registry_court", courtName(sz.soud));
                                     fillIfEmpty("#id_registry_section", sz.oddil);
                                     if (sz.vlozka) fillIfEmpty("#id_registry_insert", String(sz.vlozka));
                                 }
