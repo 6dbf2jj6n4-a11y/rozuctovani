@@ -57,7 +57,7 @@
                             if (s.psc) fillIfEmpty("#id_zip_code", String(s.psc));
                             fillIfEmpty("#id_city", s.nazevObce);
                         }
-                        return fetch("https://ares.gov.cz/ekonomicke-subjekty-v-be/rest/ekonomicke-subjekty-vr/" + ico)
+                        var vrLookup = fetch("https://ares.gov.cz/ekonomicke-subjekty-v-be/rest/ekonomicke-subjekty-vr/" + ico)
                             .then(function (r) { return r.ok ? r.json() : null; })
                             .then(function (vr) {
                                 var zaznam = vr && vr.zaznamy && vr.zaznamy[0];
@@ -72,9 +72,31 @@
                                 // Verejny rejstrik nemusi byt dostupny pro vsechny typy
                                 // subjektu (napr. OSVC) - jmeno/sidlo uz mame, nevadi.
                             });
+
+                        var dphLookup = fetch("/admin/core/client/dph-lookup/?ico=" + ico)
+                            .then(function (r) { return r.json(); })
+                            .then(function (dph) {
+                                if (!dph.found) { return ""; }
+                                var acc = dph.accounts && dph.accounts[0];
+                                if (acc) {
+                                    fillIfEmpty("#id_bank_account", acc.cislo_uctu);
+                                    fillIfEmpty("#id_bank_code", acc.kod_banky);
+                                    fillIfEmpty("#id_bank_name", acc.nazev_banky);
+                                }
+                                return dph.nespolehlivy_platce === "ANO"
+                                    ? " ⚠ NESPOLEHLIVÝ PLÁTCE DPH!"
+                                    : "";
+                            })
+                            .catch(function () { return ""; });
+
+                        return Promise.all([vrLookup, dphLookup]).then(function (results) {
+                            return results[1] || "";
+                        });
                     })
-                    .then(function () {
-                        $status.text("✓ Načteno z ARES (doplněna jen prázdná pole)").css("color", "green");
+                    .then(function (warning) {
+                        $status.text("✓ Načteno z ARES (doplněna jen prázdná pole)" + (warning || "")).css(
+                            "color", warning ? "red" : "green"
+                        );
                     });
             })
             .catch(function (err) {

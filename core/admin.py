@@ -355,9 +355,21 @@ class ClientAdmin(ModelAdmin):
                 })
             return JsonResponse({"exists": False})
 
+        def dph_lookup(request):
+            from core.dph_registry import lookup_vat_payer
+
+            ico = request.GET.get("ico", "").strip()
+            if not ico:
+                return JsonResponse({"found": False})
+            result = lookup_vat_payer(ico)
+            if not result:
+                return JsonResponse({"found": False})
+            return JsonResponse({"found": True, **result})
+
         urls = super().get_urls()
         custom = [
             path("ico-lookup/", self.admin_site.admin_view(ico_lookup), name="core_client_ico_lookup"),
+            path("dph-lookup/", self.admin_site.admin_view(dph_lookup), name="core_client_dph_lookup"),
         ]
         return custom + urls
 
