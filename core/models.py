@@ -164,7 +164,7 @@ class Contract(models.Model):
         ordering = ["-valid_from"]
 
     def __str__(self):
-        return self.number or f"Smlouva {self.client} ({self.valid_from or '?'})"
+        return ""
 
 
 class ClientCard(models.Model):
@@ -190,7 +190,7 @@ class ClientCard(models.Model):
         ordering = ["client", "valid_from"]
 
     def __str__(self):
-        return self.description or f"Karta {self.client}"
+        return ""
 
     def clean(self):
         if self.valid_to and self.valid_to < self.valid_from:

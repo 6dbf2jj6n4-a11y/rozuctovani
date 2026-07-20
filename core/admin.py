@@ -457,6 +457,14 @@ class ClientCardAdmin(ModelAdmin):
             "fields": (("client", "description"), ("valid_from", "valid_to"), "is_active", "note")
         }),
     )
+
+    def serialize_result(self, obj, to_field_name):
+        # ClientCard.__str__ je schvalne prazdny (kvuli nadpisu v inline sekcich
+        # na karte klienta) - autocomplete jinde (napr. u Klice) potrebuje
+        # smysluplny popisek, proto se sestavuje tady zvlast.
+        result = super().serialize_result(obj, to_field_name)
+        result["text"] = obj.description or f"Karta {obj.client}"
+        return result
     inlines = [
         CardUnitInline,
         AllocationKeyElectricityInline,
@@ -718,11 +726,15 @@ class ServicePoolItemAdmin(ModelAdmin):
 @admin.register(AllocationKey)
 class AllocationKeyAdmin(ModelAdmin):
     list_display = (
-        "client_card", "service_item", "allocation_type", "value",
+        "client_card_display", "service_item", "allocation_type", "value",
         "unit", "deduct_from_pool", "valid_from", "valid_to",
     )
     list_filter = ("allocation_type", "deduct_from_pool")
     autocomplete_fields = ("client_card", "service_item", "meter", "unit")
+
+    @admin.display(description="Karta klienta", ordering="client_card")
+    def client_card_display(self, obj):
+        return obj.client_card.description or f"Karta {obj.client_card.client}"
 
 
 @admin.register(PriceList)
@@ -764,9 +776,13 @@ class CostEntryAdmin(ModelAdmin):
 
 @admin.register(BillingLine)
 class BillingLineAdmin(ModelAdmin):
-    list_display = ("client_card", "service_item", "period", "amount", "share")
+    list_display = ("client_card_display", "service_item", "period", "amount", "share")
     list_filter = ("period",)
-    readonly_fields = ("client_card", "period", "service_item", "amount", "share", "calc_detail")
+    readonly_fields = ("client_card_display", "period", "service_item", "amount", "share", "calc_detail")
+
+    @admin.display(description="Karta klienta", ordering="client_card")
+    def client_card_display(self, obj):
+        return obj.client_card.description or f"Karta {obj.client_card.client}"
 
     def has_add_permission(self, request):
         return False
