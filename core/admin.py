@@ -231,13 +231,13 @@ class ClientCardInlineForm(forms.ModelForm):
         cleaned_data = super().clean()
         is_active = cleaned_data.get("is_active")
         if is_active and self.instance:
-            client = cleaned_data.get("client") or self.instance.client
-            qs = ClientCard.objects.filter(client=client, is_active=True)
-            if self.instance.pk:
-                qs = qs.exclude(pk=self.instance.pk)
-            if qs.exists():
+            self.instance.client = cleaned_data.get("client") or self.instance.client
+            self.instance.is_active = True
+            conflict = self.instance.active_card_conflict()
+            if conflict:
                 raise forms.ValidationError(
-                    f"Klient již má aktivní kartu: {qs.first().description}. Nejprve deaktivujte stávající kartu."
+                    f"Klient už má aktivní kartu ve stejném areálu: {conflict.description}. "
+                    "Nejprve deaktivujte stávající kartu."
                 )
         return cleaned_data
 

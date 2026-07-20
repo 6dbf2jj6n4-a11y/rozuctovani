@@ -196,14 +196,33 @@ class ClientCard(models.Model):
         if self.valid_to and self.valid_to < self.valid_from:
             raise ValidationError("Datum 'platnost do' nesmí být dříve než 'platnost od'.")
         if self.is_active:
-            qs = ClientCard.objects.filter(client=self.client, is_active=True)
-            if self.pk:
-                qs = qs.exclude(pk=self.pk)
-            if qs.exists():
+            conflict = self.active_card_conflict()
+            if conflict:
                 raise ValidationError(
-                    f"Klient {self.client} již má aktivní kartu: {qs.first().description}. "
-                    "Nejprve deaktivujte stávající kartu."
+                    f"Klient {self.client} už má aktivní kartu ve stejném areálu: "
+                    f"{conflict.description}. Nejprve deaktivujte stávající kartu."
                 )
+
+    def sites(self):
+        """Arealy, do kterych karta zasahuje - podle ulozenych Ploch (CardUnit)."""
+        return Site.objects.filter(units__card_units__card_id=self.pk).distinct()
+
+    def active_card_conflict(self):
+        """Vrati jinou aktivni kartu stejneho klienta ve stejnem arealu, pokud
+        existuje - jinak None. Areal karty se pozna jen podle jiz ulozenych
+        Ploch (CardUnit), takze u nove karty bez ulozenych ploch (self.pk je
+        None, nebo karta jeste zadne Plochy nema) konflikt zjistit nejde -
+        zkontroluje se az pri pristim ulozeni, kdy uz Plochy existuji."""
+        if not self.pk:
+            return None
+        my_sites = set(self.sites())
+        if not my_sites:
+            return None
+        others = ClientCard.objects.filter(client_id=self.client_id, is_active=True).exclude(pk=self.pk)
+        for other in others:
+            if my_sites & set(other.sites()):
+                return other
+        return None
 
     def active_days_in_period(self, period_start, period_end):
         start = max(self.valid_from, period_start)
