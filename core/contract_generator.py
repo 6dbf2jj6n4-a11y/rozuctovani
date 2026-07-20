@@ -67,6 +67,36 @@ def format_czk(amount):
     return f"{amount:,}".replace(",", " ") + " Kč"
 
 
+def contract_to_template_data(contract):
+    """Sestavi `data` dict pro fill_contract_template() z instance Contract
+    (a jejiho navazaneho Client) - sdileno mezi hromadnou akci v seznamu
+    Smluv a tlacitkem generovani na detailu jedne Smlouvy."""
+    client = contract.client
+    address = " ".join(p for p in (client.street, client.street_number) if p)
+    if client.zip_code or client.city:
+        address = f"{address}, {client.zip_code} {client.city}".strip(", ")
+
+    return {
+        "site_name": str(contract.site) if contract.site else "",
+        "client_name": client.name,
+        "client_address": address,
+        "client_ico": client.ico,
+        "client_dic": client.dic,
+        "registry_court": client.registry_court,
+        "registry_section": client.registry_section,
+        "registry_insert": client.registry_insert,
+        "representative_name": contract.representative_name,
+        "representative_role": contract.representative_role,
+        "invoicing_email": contract.invoicing_email,
+        "signed_on": contract.signed_on,
+        "valid_from": contract.valid_from,
+        "notice_period_months": contract.notice_period_months,
+        "insurance_amount_czk": contract.insurance_amount_czk,
+        "deposit_czk": contract.deposit_czk,
+        "inflation_increase_from": contract.inflation_increase_from,
+    }
+
+
 def format_months(n):
     if n is None:
         return ""

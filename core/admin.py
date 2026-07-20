@@ -383,41 +383,17 @@ class ContractAdmin(ModelAdmin):
     def generate_document(self, request, queryset):
         from io import BytesIO
         from django.core.files.base import ContentFile
-        from core.contract_generator import fill_contract_template
+        from core.contract_generator import contract_to_template_data, fill_contract_template
 
         generated, skipped = 0, []
         for contract in queryset:
-            client = contract.client
-            address = " ".join(p for p in (client.street, client.street_number) if p)
-            if client.zip_code or client.city:
-                address = f"{address}, {client.zip_code} {client.city}".strip(", ")
-
-            data = {
-                "site_name": str(contract.site) if contract.site else "",
-                "client_name": client.name,
-                "client_address": address,
-                "client_ico": client.ico,
-                "client_dic": client.dic,
-                "registry_court": client.registry_court,
-                "registry_section": client.registry_section,
-                "registry_insert": client.registry_insert,
-                "representative_name": contract.representative_name,
-                "representative_role": contract.representative_role,
-                "invoicing_email": contract.invoicing_email,
-                "signed_on": contract.signed_on,
-                "valid_from": contract.valid_from,
-                "notice_period_months": contract.notice_period_months,
-                "insurance_amount_czk": contract.insurance_amount_czk,
-                "deposit_czk": contract.deposit_czk,
-                "inflation_increase_from": contract.inflation_increase_from,
-            }
             try:
                 buf = BytesIO()
-                fill_contract_template(data, buf)
+                fill_contract_template(contract_to_template_data(contract), buf)
             except Exception as exc:
                 skipped.append(f"{contract}: {exc}")
                 continue
-            filename = f"smlouva_{client.code or client.pk}_{contract.pk}.docx"
+            filename = f"smlouva_{contract.client.code or contract.client.pk}_{contract.pk}.docx"
             contract.document.save(filename, ContentFile(buf.getvalue()), save=True)
             generated += 1
 
@@ -427,6 +403,55 @@ class ContractAdmin(ModelAdmin):
             self.message_user(request, text, level=messages.WARNING)
         else:
             self.message_user(request, text, level=messages.SUCCESS)
+
+    def get_urls(self):
+        from django.urls import path
+        urls = super().get_urls()
+        custom = [
+            path(
+                "<int:contract_id>/generovat/",
+                self.admin_site.admin_view(self.generate_and_download),
+                name="core_contract_generovat",
+            ),
+        ]
+        return custom + urls
+
+    def generate_and_download(self, request, contract_id):
+        from io import BytesIO
+        from django.core.files.base import ContentFile
+        from django.http import HttpResponse
+        from django.shortcuts import get_object_or_404
+        from core.contract_generator import contract_to_template_data, fill_contract_template
+
+        contract = get_object_or_404(Contract, pk=contract_id)
+        buf = BytesIO()
+        fill_contract_template(contract_to_template_data(contract), buf)
+        filename = f"smlouva_{contract.client.code or contract.client.pk}_{contract.pk}.docx"
+        contract.document.save(filename, ContentFile(buf.getvalue()), save=True)
+
+        response = HttpResponse(
+            buf.getvalue(),
+            content_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        )
+        response["Content-Disposition"] = f'attachment; filename="{filename}"'
+        return response
+
+    def generate_button(self, obj):
+        from django.urls import reverse
+        from django.utils.html import format_html
+        if not obj.pk:
+            return "Nejprve smlouvu uložte."
+        url = reverse("admin:core_contract_generovat", args=[obj.pk])
+        return format_html(
+            '<a href="{}" '
+            'style="padding:6px 16px; border-radius:6px; background:#2563eb; '
+            'color:white; font-weight:600; text-decoration:none; display:inline-block;">'
+            'Generovat smlouvu (.docx)</a>',
+            url,
+        )
+    generate_button.short_description = ""
+
+    readonly_fields = ("generate_button",)
 
     fieldsets = (
         ("Základní údaje", {
@@ -445,7 +470,7 @@ class ContractAdmin(ModelAdmin):
             "fields": ("invoicing_email", ("representative_name", "representative_role"))
         }),
         ("Dokument", {
-            "fields": ("document",)
+            "fields": ("generate_button", "document")
         }),
         ("Poznámka", {
             "fields": ("note",)
