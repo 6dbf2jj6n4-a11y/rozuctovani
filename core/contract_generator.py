@@ -14,6 +14,7 @@ from decimal import Decimal
 from pathlib import Path
 
 import docx
+from docx.enum.text import WD_COLOR_INDEX
 from docx.opc.constants import RELATIONSHIP_TYPE as _RT
 from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
@@ -120,16 +121,37 @@ def _set_paragraph_text(paragraph, text):
         paragraph.add_run(text)
 
 
-def _replace_substring(paragraph, old, new):
-    _set_paragraph_text(paragraph, paragraph.text.replace(old, new))
-
-
 def _clear_paragraph(paragraph):
     for run in list(paragraph.runs):
         run._element.getparent().remove(run._element)
 
 
-def _add_hyperlink(paragraph, url, text):
+def _set_paragraph_runs(paragraph, parts):
+    """Prepise odstavec podle `parts` = seznam dvojic (text, zvyraznit).
+    Kazda dvojice se stane samostatnym runem; zvyraznit=True dostane zluty
+    zvyraznovac (font.highlight_color), aby bylo v dokumentu na prvni pohled
+    videt, ktere hodnoty se doplnily z dat Smlouvy/Klienta."""
+    _clear_paragraph(paragraph)
+    for text, highlight in parts:
+        if not text:
+            continue
+        run = paragraph.add_run(text)
+        if highlight:
+            run.font.highlight_color = WD_COLOR_INDEX.YELLOW
+
+
+def _replace_substring_highlighted(paragraph, old, new):
+    """Nahradi vyskyt `old` v odstavci za `new` a zvyrazni jen `new` cast -
+    okolni puvodni text vety zustane beze zmeny stylu."""
+    text = paragraph.text
+    idx = text.find(old)
+    if idx == -1:
+        return
+    before, after = text[:idx], text[idx + len(old):]
+    _set_paragraph_runs(paragraph, [(before, False), (new, True), (after, False)])
+
+
+def _add_hyperlink(paragraph, url, text, highlight=False):
     """Prida klikatelny odkaz (napr. mailto:) na konec odstavce jako novy run."""
     part = paragraph.part
     r_id = part.relate_to(url, _RT.HYPERLINK, is_external=True)
@@ -145,6 +167,10 @@ def _add_hyperlink(paragraph, url, text):
     underline = OxmlElement("w:u")
     underline.set(qn("w:val"), "single")
     rpr.append(underline)
+    if highlight:
+        hl = OxmlElement("w:highlight")
+        hl.set(qn("w:val"), "yellow")
+        rpr.append(hl)
     run.append(rpr)
 
     t = OxmlElement("w:t")
@@ -173,48 +199,55 @@ def fill_contract_template(data, output_path, template_path=TEMPLATE_PATH):
 
     client_name = data.get("client_name") or ""
 
+    # Zahlavi dokumentu (nahoře na kazde strance) se NEZVYRAZNUJE - jen
+    # identifikuje areal/smluvni strany, neni to "doplneny udaj" smlouvy.
     header_para = doc.sections[0].header.paragraphs[0]
     _set_paragraph_text(header_para, f"{data.get('site_name') or ''}\t\t{LANDLORD_NAME} / {client_name}")
 
-    # --- blok Najemce v zahlavi (odstavce 19-25) ---
-    _set_paragraph_text(p[19], client_name)
-    _set_paragraph_text(p[20], f"se sídlem {data.get('client_address') or ''}")
-    _set_paragraph_text(p[21], f"IČ: {data.get('client_ico') or ''}")
+    # --- blok Najemce v tele smlouvy (odstavce 19-25) - doplnene udaje zvyrazneny zlute ---
+    _set_paragraph_runs(p[19], [(client_name, True)])
+    _set_paragraph_runs(p[20], [("se sídlem ", False), (data.get("client_address") or "", True)])
+    _set_paragraph_runs(p[21], [("IČ: ", False), (data.get("client_ico") or "", True)])
 
     dic = (data.get("client_dic") or "").strip()
     dic_digits = dic[2:] if dic.upper().startswith("CZ") else dic
-    _set_paragraph_text(p[22], f"DIČ: CZ{dic_digits}")
+    _set_paragraph_runs(p[22], [("DIČ: CZ", False), (dic_digits, True)])
 
     court = _court_instrumental(data.get("registry_court"))
     section = data.get("registry_section") or ""
     insert = data.get("registry_insert") or ""
-    _set_paragraph_text(
-        p[23],
-        f"společnost zapsaná v obchodním rejstříku vedeném {court}, oddíl {section}, vložka {insert}",
-    )
+    _set_paragraph_runs(p[23], [
+        ("společnost zapsaná v obchodním rejstříku vedeném ", False), (court, True),
+        (", oddíl ", False), (section, True),
+        (", vložka ", False), (insert, True),
+    ])
 
-    _set_paragraph_text(
-        p[24],
-        f"zastoupena {data.get('representative_name') or ''}, {data.get('representative_role') or ''}",
-    )
+    _set_paragraph_runs(p[24], [
+        ("zastoupena ", False), (data.get("representative_name") or "", True),
+        (", ", False), (data.get("representative_role") or "", True),
+    ])
+
     email = data.get("invoicing_email") or ""
     _clear_paragraph(p[25])
     p[25].add_run("e-mailová adresa pro elektronickou fakturaci: ")
     if email:
-        _add_hyperlink(p[25], f"mailto:{email}", email)
+        _add_hyperlink(p[25], f"mailto:{email}", email, highlight=True)
 
     # --- promenne udaje v telu smlouvy (indexy overeny proti aktualni sablone) ---
-    _replace_substring(p[61], "[datum podpisu]", format_date_cz(data.get("signed_on")))
-    _replace_substring(p[74], "1. ledna 2025", format_date_cz(data.get("inflation_increase_from")))
-    _replace_substring(p[106], "XXXX Kč", format_czk(data.get("insurance_amount_czk")))
-    _replace_substring(p[132], "1. prosince 2019", format_date_cz(data.get("valid_from")))
-    _replace_substring(p[135], "6 měsíců", format_months(data.get("notice_period_months")))
-    _replace_substring(p[159], "XX.XXX Kč", format_czk(data.get("deposit_czk")))
-    _replace_substring(p[201], "3. února 2024", format_date_cz(data.get("signed_on")))
+    _replace_substring_highlighted(p[61], "[datum podpisu]", format_date_cz(data.get("signed_on")))
+    _replace_substring_highlighted(p[74], "1. ledna 2025", format_date_cz(data.get("inflation_increase_from")))
+    _replace_substring_highlighted(p[106], "XXXX Kč", format_czk(data.get("insurance_amount_czk")))
+    _replace_substring_highlighted(p[132], "1. prosince 2019", format_date_cz(data.get("valid_from")))
+    _replace_substring_highlighted(p[135], "6 měsíců", format_months(data.get("notice_period_months")))
+    _replace_substring_highlighted(p[159], "XX.XXX Kč", format_czk(data.get("deposit_czk")))
+    _replace_substring_highlighted(p[201], "3. února 2024", format_date_cz(data.get("signed_on")))
 
     # --- podpisovy radek (odstavce 208-209 jsou pozustatek puvodni smlouvy) ---
     tenant_rep = data.get("representative_name") or ""
-    _set_paragraph_text(p[208], f"\tza Pronajímatele: {LANDLORD_REPRESENTATIVE}\tza Nájemce: {tenant_rep}")
+    _set_paragraph_runs(p[208], [
+        (f"\tza Pronajímatele: {LANDLORD_REPRESENTATIVE}\tza Nájemce: ", False),
+        (tenant_rep, True),
+    ])
     _set_paragraph_text(p[209], "")
 
     # python-docx prijima jak cestu (str/Path), tak zapisovatelny stream (napr. BytesIO)

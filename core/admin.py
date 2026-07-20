@@ -267,7 +267,7 @@ class ContractInline(TabularInline):
     strance Smlouvy - tam vede odkaz "Zmenit" (show_change_link)."""
     model = Contract
     extra = 0
-    fields = ("number", "site", "valid_from", "valid_to", "signed_on", "deposit_czk", "deposit_paid", "has_inflation_clause")
+    fields = ("number", "site", "valid_from", "signed_on", "deposit_czk", "deposit_paid", "has_inflation_clause")
     autocomplete_fields = ("site",)
     show_change_link = True
     verbose_name = "Smlouva"
@@ -401,6 +401,9 @@ class ContractAdmin(ModelAdmin):
 
         generated, skipped = 0, []
         for contract in queryset:
+            if not contract.site_id:
+                skipped.append(f"{contract} (#{contract.pk}): chybí Areál")
+                continue
             try:
                 buf = BytesIO()
                 fill_contract_template(contract_to_template_data(contract), buf)
@@ -434,10 +437,17 @@ class ContractAdmin(ModelAdmin):
         from io import BytesIO
         from django.core.files.base import ContentFile
         from django.http import HttpResponse
-        from django.shortcuts import get_object_or_404
+        from django.shortcuts import get_object_or_404, redirect
         from core.contract_generator import contract_to_template_data, fill_contract_template
 
         contract = get_object_or_404(Contract, pk=contract_id)
+        if not contract.site_id:
+            self.message_user(
+                request,
+                "Nejprve vyplň Areál - je potřeba pro záhlaví dokumentu.",
+                level=messages.ERROR,
+            )
+            return redirect("admin:core_contract_change", contract.pk)
         buf = BytesIO()
         fill_contract_template(contract_to_template_data(contract), buf)
         filename = f"smlouva_{contract.client.code or contract.client.pk}_{contract.pk}.docx"
