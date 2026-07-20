@@ -289,11 +289,44 @@ class SiteFilter(admin.SimpleListFilter):
         return queryset
 
 
+class ActiveClientFilter(admin.SimpleListFilter):
+    """Vychozi zobrazeni jen aktivnich klientu - "Vse"/"Neaktivni" musi
+    uzivatel vybrat sam. Na rozdil od beznych list_filter na is_active,
+    kde je vychozi stav "Vse", tady je vychozi stav "Aktivni"."""
+    title = "Aktivní"
+    parameter_name = "is_active"
+
+    def lookups(self, request, model_admin):
+        return (
+            ("1", "Aktivní"),
+            ("0", "Neaktivní"),
+            ("all", "Vše"),
+        )
+
+    def choices(self, changelist):
+        value = self.value()
+        for lookup, title in self.lookup_choices:
+            selected = value == lookup or (value is None and lookup == "1")
+            yield {
+                "selected": selected,
+                "query_string": changelist.get_query_string({self.parameter_name: lookup}),
+                "display": title,
+            }
+
+    def queryset(self, request, queryset):
+        value = self.value()
+        if value == "0":
+            return queryset.filter(is_active=False)
+        if value == "all":
+            return queryset
+        return queryset.filter(is_active=True)
+
+
 @admin.register(Client)
 class ClientAdmin(ModelAdmin):
     list_display = ("name", "code", "ico", "contact_email", "contact_phone", "is_active", "is_landlord")
     search_fields = ("name", "ico", "code")
-    list_filter = ("is_active", "is_landlord", SiteFilter)
+    list_filter = (ActiveClientFilter, "is_landlord", SiteFilter)
     fieldsets = (
         ("Základní údaje", {
             "fields": (("name", "code"), ("is_active", "is_landlord"))
