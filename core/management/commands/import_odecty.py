@@ -83,8 +83,16 @@ class Command(BaseCommand):
 
             for row in rows[1:]:
                 code = str(row[0]).strip() if row[0] else ""
-                if not code or code == "STAVY" or code == "SPOTREBY":
+                if not code or code == "STAVY":
                     continue
+                if code == "SPOTŘEBY":
+                    # Pod tabulkou STAVY nasleduje samostatna tabulka SPOTREBY se
+                    # stejnymi kody meridel, ale jinymi sloupci (Koef mista Jedn.,
+                    # data od 2022) - kdybychom pokracovali dal, presly bychom
+                    # tyhle radky se STEJNYMI indexy sloupcu jako STAVY tabulka a
+                    # tise prepsali spravne odecty spatnymi cisly. Zbytek listu
+                    # (SPOTREBY + souhrnove radky pod ni) se tedy preskoci cely.
+                    break
 
                 meter = Meter.objects.filter(site=site, code=code).first()
                 if not meter:
