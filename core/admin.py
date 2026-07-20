@@ -342,7 +342,11 @@ class ClientAdmin(ModelAdmin):
             ico = request.GET.get("ico", "").strip()
             if not ico:
                 return JsonResponse({"exists": False})
-            client = Client.objects.filter(ico=ico).first()
+            qs = Client.objects.filter(ico=ico)
+            exclude_id = request.GET.get("exclude_id", "").strip()
+            if exclude_id.isdigit():
+                qs = qs.exclude(pk=exclude_id)
+            client = qs.first()
             if client:
                 return JsonResponse({
                     "exists": True,
