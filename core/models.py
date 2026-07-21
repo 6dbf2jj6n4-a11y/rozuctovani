@@ -20,6 +20,7 @@ ALLOCATION_TYPE_CHOICES = [
     ("submeter", "Podružné měřidlo (1:1)"),
     ("fixed_amount", "Pevná částka"),
     ("weighted_count", "Podle váhy (počet jednotek)"),
+    ("area_price", "Plocha × cena/m² (dynamicky)"),
 ]
 
 
@@ -445,6 +446,7 @@ class AllocationKey(models.Model):
         SUBMETER = "submeter", "Podružné měřidlo (1:1)"
         FIXED_AMOUNT = "fixed_amount", "Pevná částka"
         WEIGHTED_COUNT = "weighted_count", "Podle váhy (počet jednotek)"
+        AREA_PRICE = "area_price", "Plocha × cena/m² (dynamicky)"
 
     client_card = models.ForeignKey(
         ClientCard, on_delete=models.CASCADE, related_name="allocation_keys", verbose_name="Karta klienta"
@@ -453,7 +455,14 @@ class AllocationKey(models.Model):
         ServicePoolItem, on_delete=models.CASCADE, related_name="allocation_keys", verbose_name="Položka zásobníku"
     )
     allocation_type = models.CharField("Typ rozpočtu", max_length=20, choices=AllocationType.choices)
-    value = models.DecimalField("Hodnota", max_digits=12, decimal_places=4, null=True, blank=True)
+    value = models.DecimalField(
+        "Hodnota", max_digits=12, decimal_places=4, null=True, blank=True,
+        help_text=(
+            "Vyznam zavisi na typu: u 'Pevna castka' jde o hotovou Kc castku/mesic, "
+            "u 'Plocha x cena/m2' jde o vymeru v m2 (cena/m2/rok se bere z Ceniku "
+            "polozky pro dane obdobi), u ostatnich typu jde o vahu/procento."
+        ),
+    )
     meter = models.ForeignKey(
         Meter, null=True, blank=True, on_delete=models.SET_NULL,
         related_name="submeter_keys", verbose_name="Podružné měřidlo"
@@ -471,12 +480,12 @@ class AllocationKey(models.Model):
         "Odečíst z celkového nákladu",
         default=True,
         help_text=(
-            "Jen pro typ 'Pevná částka'. Pokud ANO (výchozí): tato pevná částka se odečte "
-            "od celkového nákladu položky a zbytek se rozpočítá ostatním kartám podle jejich "
-            "klíčů (klient reálně snižuje sdílený náklad, napr. mel jiz vlastni smlouvu). "
-            "Pokud NE: klient zaplatí pevnou částku samostatně/navíc a celkový náklad se mezi "
-            "ostatní karty rozpočítá beze změny (typicky pausál, ktery nesouvisí se sdílenym "
-            "meridlem - napr. teplo bez pripojeni na hlavni odber)."
+            "Jen pro typ 'Pevná částka' a 'Plocha × cena/m²'. Pokud ANO (výchozí): tato "
+            "částka se odečte od celkového nákladu položky a zbytek se rozpočítá ostatním "
+            "kartám podle jejich klíčů (klient reálně snižuje sdílený náklad, napr. mel jiz "
+            "vlastni smlouvu). Pokud NE: klient zaplatí částku samostatně/navíc a celkový "
+            "náklad se mezi ostatní karty rozpočítá beze změny (typicky pausál, ktery "
+            "nesouvisí se sdílenym meridlem - napr. teplo bez pripojeni na hlavni odber)."
         ),
     )
     valid_from = models.DateField(
@@ -670,13 +679,20 @@ class CardUnit(models.Model):
 
     def create_default_keys(self):
         for unit_service in self.unit.unit_services.all():
+            if unit_service.allocation_type == AllocationKey.AllocationType.AREA_PRICE:
+                # Hodnota klice = skutecna vymera teto plochy na karte (vc.
+                # pripadneho area_m2_override), ne rucne zadana hodnota v
+                # UnitService - cena/m2 se pak bere z Ceniku polozky.
+                value = self.area_m2
+            else:
+                value = unit_service.value
             AllocationKey.objects.get_or_create(
                 client_card=self.card,
                 service_item=unit_service.service_item,
                 meter=unit_service.meter,
                 defaults={
                     "allocation_type": unit_service.allocation_type,
-                    "value": unit_service.value,
+                    "value": value,
                 },
             )
 

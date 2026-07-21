@@ -47,7 +47,29 @@ from decimal import Decimal
 
 from django.db import transaction
 
-from core.models import AllocationKey, BillingLine, CostEntry, ServicePoolItem
+from core.models import AllocationKey, BillingLine, CostEntry, PriceList, ServicePoolItem
+
+# Typy klicu, ktere prispivaji absolutni Kc castkou primo (mimo vazene podily) -
+# 'Pevna castka' ma castku ulozenou primo, 'Plocha x cena/m2' se dopocitava
+# z Ceniku pro dane obdobi (viz _fixed_amount_for).
+ABSOLUTE_AMOUNT_TYPES = (
+    AllocationKey.AllocationType.FIXED_AMOUNT,
+    AllocationKey.AllocationType.AREA_PRICE,
+)
+
+
+def _fixed_amount_for(key, service_item, period, warnings):
+    """Vrati absolutni mesicni Kc castku pro klic typu FIXED_AMOUNT/AREA_PRICE."""
+    if key.allocation_type == AllocationKey.AllocationType.AREA_PRICE:
+        price = PriceList.get_price_for_period(service_item, period)
+        if price is None:
+            warnings.append(
+                f"{service_item}: klíč 'Plocha × cena/m²' pro kartu {key.client_card} "
+                f"nemá cenu v Ceníku pro toto ani žádné dřívější období - karta vynechána."
+            )
+            return None
+        return ((key.value or Decimal("0")) * price / 12).quantize(Decimal("0.01"))
+    return key.value or Decimal("0")
 
 
 def _weighted_shares(keys, period):
@@ -112,7 +134,7 @@ def _consumption_shares(service_item, period, warnings):
 
     keys = [
         k for k in service_item.allocation_keys.select_related("client_card", "client_card__unit", "meter")
-        if k.is_valid_for_period(period) and k.allocation_type != AllocationKey.AllocationType.FIXED_AMOUNT
+        if k.is_valid_for_period(period) and k.allocation_type not in ABSOLUTE_AMOUNT_TYPES
     ]
 
     submeter_keys = [k for k in keys if k.allocation_type == AllocationKey.AllocationType.SUBMETER]
@@ -203,21 +225,23 @@ def calculate_period(period, site=None):
             )
             valid_keys = [k for k in all_keys if k.is_valid_for_period(period)]
 
-            fixed_keys = [k for k in valid_keys if k.allocation_type == AllocationKey.AllocationType.FIXED_AMOUNT]
+            fixed_keys = [k for k in valid_keys if k.allocation_type in ABSOLUTE_AMOUNT_TYPES]
 
             period_start, period_end = period.date_range()
 
-            # 1) pevne castky - ty s deduct_from_pool=True se odectou z celkove castky,
-            # zbytek (deduct_from_pool=False) klient plati samostatne/navic a nema vliv
-            # na to, kolik zbyva k rozpocitani ostatnim kartam.
-            # Karta mimo svou platnost (valid_from/valid_to) v tomto obdobi pausal neplati -
-            # stejna podminka jako u vazenych podilu (_weighted_shares).
+            # 1) pevne castky (a plocha x cena/m2) - ty s deduct_from_pool=True se
+            # odectou z celkove castky, zbytek (deduct_from_pool=False) klient plati
+            # samostatne/navic a nema vliv na to, kolik zbyva k rozpocitani ostatnim
+            # kartam. Karta mimo svou platnost (valid_from/valid_to) v tomto obdobi
+            # pausal neplati - stejna podminka jako u vazenych podilu (_weighted_shares).
             remaining_cost = total_cost
             fixed_amounts = {}
             for key in fixed_keys:
                 if key.client_card.active_days_in_period(period_start, period_end) <= 0:
                     continue
-                amount = key.value or Decimal("0")
+                amount = _fixed_amount_for(key, service_item, period, warnings)
+                if amount is None:
+                    continue
                 fixed_amounts[key.client_card_id] = fixed_amounts.get(key.client_card_id, Decimal("0")) + amount
                 if key.deduct_from_pool:
                     remaining_cost -= amount
@@ -237,7 +261,7 @@ def calculate_period(period, site=None):
                 shares = _consumption_shares(service_item, period, warnings)
             else:
                 weight_keys = [
-                    k for k in valid_keys if k.allocation_type != AllocationKey.AllocationType.FIXED_AMOUNT
+                    k for k in valid_keys if k.allocation_type not in ABSOLUTE_AMOUNT_TYPES
                 ]
                 shares = _weighted_shares(weight_keys, period)
                 if not shares and remaining_cost != 0:
