@@ -97,6 +97,9 @@ class Command(BaseCommand):
                 meter = Meter.objects.filter(site=site, code=code).first()
                 if not meter:
                     skipped += 1
+                    self.stdout.write(self.style.WARNING(
+                        f"  {sheet_name}: měřidlo '{code}' nenalezeno v databázi"
+                    ))
                     continue
 
                 for month, col_idx in col_indices.items():
