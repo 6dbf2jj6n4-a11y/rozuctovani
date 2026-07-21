@@ -9,6 +9,12 @@ Pouziva django.jQuery kvuli kompatibilite se select2 (autocomplete).
 Promenna $ je definovana JEDNOU na zacatku a sdilena vsemi funkcemi
 pres uzaver (closure) - predchozi verze mela chybu, kdy nekterre
 pomocne funkce pouzivaly $ bez pristupu k nemu.
+
+Selektor 'select[id^="id_card_units-"][id$="-unit"]' je zamerne uzsi
+nez jen 'select[id$="-unit"]' - AllocationKey ma taky pole "unit"
+(Plocha u K_PLOSE pausalu), ktere by jinak stejny selektor zachytilo
+i v sekcich Elektrina/Voda/Teplo/Ostatni a vkladalo tam zbytecny
+soucet vymer/najemneho, ktery tam nedava smysl.
 */
 (function () {
     var $ = (window.django && window.django.jQuery) || window.jQuery;
@@ -122,7 +128,7 @@ pomocne funkce pouzivaly $ bez pristupu k nemu.
     }
 
     // Autofill vymery pri vyberu plochy
-    $(document).on("select2:select change", 'select[id$="-unit"]', function () {
+    $(document).on("select2:select change", 'select[id^="id_card_units-"][id$="-unit"]', function () {
         var $select = $(this);
         var $row = $select.closest("tr");
         if ($row.length === 0) {
@@ -191,7 +197,7 @@ pomocne funkce pouzivaly $ bez pristupu k nemu.
 
     // Pocatecni vypocet po nacteni stranky pro kazdou tabulku CardUnit inline
     $(function () {
-        $('select[id$="-unit"]').each(function () {
+        $('select[id^="id_card_units-"][id$="-unit"]').each(function () {
             var $table = findTable($(this));
             if ($table.length === 0 || $table.data("cardunit-initialized")) {
                 return;
