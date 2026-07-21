@@ -3,6 +3,7 @@ Zakladni entity: arealy/objekty, pronajimane prostory, klienti
 a jejich karty (najemni vztahy s platnosti).
 """
 import calendar
+import re
 from datetime import date
 
 from django.core.exceptions import ValidationError
@@ -321,6 +322,9 @@ class Meter(models.Model):
         return self.code or self.name
 
     def consumption_for(self, period):
+        if self.is_virtual:
+            return self._formula_consumption_for(period)
+
         current = self.readings.filter(period=period).first()
         if current is None:
             return None
@@ -337,6 +341,33 @@ class Meter(models.Model):
         if previous is None:
             return None
         return current.value - previous.value
+
+    def _formula_consumption_for(self, period):
+        """Vyhodnoti pole Vzorec, napr. '668NT+668VT' - secte/odecte
+        spotrebu jinych mericí stejneho arealu podle jejich kodu."""
+        if not self.formula:
+            return None
+        tokens = re.findall(r"[+-]?[^+-]+", self.formula)
+        total = None
+        for raw_token in tokens:
+            token = raw_token.strip()
+            sign = 1
+            if token.startswith("-"):
+                sign = -1
+                token = token[1:].strip()
+            elif token.startswith("+"):
+                token = token[1:].strip()
+            if not token:
+                continue
+            meter = Meter.objects.filter(site=self.site, code=token).first()
+            if meter is None:
+                continue
+            value = meter.consumption_for(period)
+            if value is None:
+                continue
+            signed_value = sign * value
+            total = signed_value if total is None else total + signed_value
+        return total
 
 
 class MeterReading(models.Model):
