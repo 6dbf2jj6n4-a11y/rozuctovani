@@ -2,10 +2,11 @@
 Generovani dokumentu Karty najemce (PDF) - Priloha c. 1 ke Smlouve.
 
 Cernobile, bezpatkove (DejaVu Sans - viz core/pdf_fonts.py), maly font
-(~10pt), kompaktni tabulky bez mezer mezi radky - vzhled odpovida
-poznamkovemu prehledu k podpisu, ne reprezentativnimu dokumentu.
+(~8pt), tabulky zarovnane doleva a bez mezer mezi radky - vzhled
+odpovida poznamkovemu prehledu k podpisu, ne reprezentativnimu
+dokumentu. Klient/Karta/Platnost od jsou vyrazeny tucne a o neco
+vetsim pismem nez zbytek.
 """
-import math
 from decimal import ROUND_CEILING, Decimal
 
 from reportlab.lib import colors
@@ -19,12 +20,14 @@ from core.models import AllocationKey, ServicePoolItem
 from core.pdf_fonts import FONT_BOLD, FONT_REGULAR
 
 _CLASS_ORDER = [code for code, _ in ServicePoolItem.InvoiceClass.choices]
-_FONT_SIZE = 10
+_FONT_SIZE = 8
 
 _STYLE_HEADER = ParagraphStyle("CardHeader", fontName=FONT_BOLD, fontSize=_FONT_SIZE, alignment=2)  # 2 = right
-_STYLE_INFO = ParagraphStyle("CardInfo", fontName=FONT_REGULAR, fontSize=_FONT_SIZE, leading=13)
+_STYLE_INFO = ParagraphStyle("CardInfo", fontName=FONT_BOLD, fontSize=_FONT_SIZE + 2, leading=_FONT_SIZE + 5)
 _STYLE_H2 = ParagraphStyle("CardH2", fontName=FONT_BOLD, fontSize=_FONT_SIZE + 1, spaceBefore=4 * mm, spaceAfter=1 * mm)
-_STYLE_SIG = ParagraphStyle("CardSig", fontName=FONT_REGULAR, fontSize=_FONT_SIZE)
+_STYLE_SIG_LABEL = ParagraphStyle("CardSigLabel", fontName=FONT_BOLD, fontSize=_FONT_SIZE, alignment=1)  # 1 = center
+_STYLE_SIG_LINE = ParagraphStyle("CardSigLine", fontName=FONT_REGULAR, fontSize=_FONT_SIZE, alignment=1)
+_STYLE_SIG_NAME = ParagraphStyle("CardSigName", fontName=FONT_REGULAR, fontSize=_FONT_SIZE, alignment=1)
 
 _TABLE_BASE_STYLE = [
     ("FONTNAME", (0, 0), (-1, -1), FONT_REGULAR),
@@ -81,12 +84,12 @@ def generate_client_card_document(card, output_path):
     elements = [Paragraph("Příloha č. 1", _STYLE_HEADER), Spacer(1, 4 * mm)]
 
     info_lines = [
-        f"<b>Klient:</b> {card.client}",
-        f"<b>Karta:</b> {card.description or f'Karta {card.client}'}",
-        f"<b>Platnost od:</b> {format_date_cz(card.valid_from)}",
+        f"Klient: {card.client}",
+        f"Karta: {card.description or f'Karta {card.client}'}",
+        f"Platnost od: {format_date_cz(card.valid_from)}",
     ]
     if card.valid_to:
-        info_lines.append(f"<b>Platnost do:</b> {format_date_cz(card.valid_to)}")
+        info_lines.append(f"Platnost do: {format_date_cz(card.valid_to)}")
     elements.append(Paragraph("<br/>".join(info_lines), _STYLE_INFO))
 
     # --- Plochy ---
@@ -123,7 +126,6 @@ def generate_client_card_document(card, output_path):
         *_TABLE_BASE_STYLE,
         ("FONTNAME", (0, 0), (-1, 0), FONT_BOLD),
         ("FONTNAME", (0, -1), (-1, -1), FONT_BOLD),
-        ("ALIGN", (1, 0), (-1, -1), "RIGHT"),
     ]))
     elements.append(units_table)
 
@@ -157,7 +159,6 @@ def generate_client_card_document(card, output_path):
     keys_style = [
         *_TABLE_BASE_STYLE,
         ("FONTNAME", (0, 0), (-1, 0), FONT_BOLD),
-        ("ALIGN", (-1, 0), (-1, -1), "RIGHT"),
     ]
     for row_idx in class_header_rows:
         keys_style.append(("SPAN", (0, row_idx), (-1, row_idx)))
@@ -169,14 +170,21 @@ def generate_client_card_document(card, output_path):
         keys_table.setStyle(TableStyle(keys_style))
         elements.append(keys_table)
 
-    # --- Podpisy ---
+    # --- Podpisy: nadpis strany / čára / jméno zástupce pod čarou ---
     elements.append(Spacer(1, 10 * mm))
-    elements.append(Paragraph("_" * 30 + "&nbsp;" * 15 + "_" * 30, _STYLE_SIG))
-    elements.append(Paragraph(
-        f"za Pronajímatele: {LANDLORD_REPRESENTATIVE}"
-        + "&nbsp;" * 15 + f"za Nájemce: {card.client}",
-        _STYLE_SIG,
-    ))
+    sig_rows = [
+        [Paragraph("Pronajímatel", _STYLE_SIG_LABEL), Paragraph("Nájemce", _STYLE_SIG_LABEL)],
+        [Paragraph("_" * 35, _STYLE_SIG_LINE), Paragraph("_" * 35, _STYLE_SIG_LINE)],
+        [Paragraph(LANDLORD_REPRESENTATIVE, _STYLE_SIG_NAME), Paragraph(str(card.client), _STYLE_SIG_NAME)],
+    ]
+    sig_table = Table(sig_rows, colWidths=[85 * mm, 85 * mm])
+    sig_table.setStyle(TableStyle([
+        ("TOPPADDING", (0, 0), (-1, -1), 1),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 1),
+        ("LEFTPADDING", (0, 0), (-1, -1), 0),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 0),
+    ]))
+    elements.append(sig_table)
 
     doc.build(elements)
     return output_path
