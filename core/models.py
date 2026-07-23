@@ -185,6 +185,9 @@ class ClientCard(models.Model):
     external_id = models.IntegerField("Původní ID (IDK)", null=True, blank=True)
     description = models.CharField("Popis karty", max_length=200, blank=True)
     is_active = models.BooleanField("Aktivní", default=True)
+    document = models.FileField(
+        "Vygenerovaný dokument (Karta nájemce)", upload_to="karty/", null=True, blank=True
+    )
 
     class Meta:
         verbose_name = "Karta klienta"

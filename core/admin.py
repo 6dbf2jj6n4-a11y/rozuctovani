@@ -613,7 +613,11 @@ class ClientCardAdmin(ModelAdmin):
         ("Základní údaje", {
             "fields": (("client", "description"), ("valid_from", "valid_to"), "is_active", "note")
         }),
+        ("Karta nájemce (Příloha č. 1)", {
+            "fields": ("generate_card_button", "document")
+        }),
     )
+    readonly_fields = ("generate_card_button",)
 
     def serialize_result(self, obj, to_field_name):
         # ClientCard.__str__ je schvalne prazdny (kvuli nadpisu v inline sekcich
@@ -646,8 +650,47 @@ class ClientCardAdmin(ModelAdmin):
                 "kopie-klient/<int:card_id>/", self.admin_site.admin_view(self.kopie_klient_view),
                 name="core_clientcard_kopie_klient",
             ),
+            path(
+                "generovat-kartu/<int:card_id>/", self.admin_site.admin_view(self.generate_card_and_download),
+                name="core_clientcard_generovat",
+            ),
         ]
         return custom + urls
+
+    def generate_card_and_download(self, request, card_id):
+        from io import BytesIO
+        from django.core.files.base import ContentFile
+        from django.http import HttpResponse
+        from django.shortcuts import get_object_or_404
+        from core.client_card_generator import generate_client_card_document
+
+        card = get_object_or_404(ClientCard, pk=card_id)
+        buf = BytesIO()
+        generate_client_card_document(card, buf)
+        filename = f"karta_najemce_{card.client.code or card.client.pk}_{card.pk}.docx"
+        card.document.save(filename, ContentFile(buf.getvalue()), save=True)
+
+        response = HttpResponse(
+            buf.getvalue(),
+            content_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        )
+        response["Content-Disposition"] = f'attachment; filename="{filename}"'
+        return response
+
+    def generate_card_button(self, obj):
+        from django.urls import reverse
+        from django.utils.html import format_html
+        if not obj.pk:
+            return "Nejprve kartu uložte."
+        url = reverse("admin:core_clientcard_generovat", args=[obj.pk])
+        return format_html(
+            '<a href="{}" '
+            'style="padding:6px 16px; border-radius:6px; background:#2563eb; '
+            'color:white; font-weight:600; text-decoration:none; display:inline-block;">'
+            'Generovat Kartu nájemce (.docx)</a>',
+            url,
+        )
+    generate_card_button.short_description = ""
 
     def kopie_view(self, request, card_id):
         """Obycejna kopie - stejny klient, okamzite, bez potvrzeni."""
