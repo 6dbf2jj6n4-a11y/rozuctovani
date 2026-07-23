@@ -3,9 +3,12 @@
 {% block object-tools-items %}
     {{ block.super }}
     {% if original %}
-    <li style="display: flex; align-items: center;">
-        <a href="{{ kopie_url }}" class="button" title="Kopírovat kartu" style="background-color: #2563eb; color: white; font-weight: 600; padding: 8px 16px; border-radius: 6px; display: inline-flex; align-items: center;">
+    <li style="display: flex; align-items: center; gap: 8px;">
+        <a href="{{ kopie_url }}" class="button" title="Kopírovat kartu na stejného klienta" style="background-color: #2563eb; color: white; font-weight: 600; padding: 8px 16px; border-radius: 6px; display: inline-flex; align-items: center;">
             Kopie
+        </a>
+        <a href="{{ kopie_klient_url }}" class="button" title="Kopírovat kartu na jiného klienta" style="background-color: #2563eb; color: white; font-weight: 600; padding: 8px 16px; border-radius: 6px; display: inline-flex; align-items: center;">
+            Kopie &rarr; Klient
         </a>
     </li>
     {% endif %}

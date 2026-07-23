@@ -618,10 +618,23 @@ class ClientCardAdmin(ModelAdmin):
         urls = super().get_urls()
         custom = [
             path("kopie/<int:card_id>/", self.admin_site.admin_view(self.kopie_view), name="core_clientcard_kopie"),
+            path(
+                "kopie-klient/<int:card_id>/", self.admin_site.admin_view(self.kopie_klient_view),
+                name="core_clientcard_kopie_klient",
+            ),
         ]
         return custom + urls
 
     def kopie_view(self, request, card_id):
+        """Obycejna kopie - stejny klient, okamzite, bez potvrzeni."""
+        from django.shortcuts import redirect
+        original = ClientCard.objects.get(pk=card_id)
+        new_card = self._copy_card_exact(original)
+        self.message_user(request, "Kopie karty byla vytvořena.")
+        return redirect(f"/admin/core/clientcard/{new_card.pk}/change/")
+
+    def kopie_klient_view(self, request, card_id):
+        """Kopie na jineho klienta - napr. kdyz si prostor pronajme novy najemce."""
         from django.shortcuts import redirect, render
         original = ClientCard.objects.get(pk=card_id)
 
@@ -646,6 +659,7 @@ class ClientCardAdmin(ModelAdmin):
     def change_view(self, request, object_id, form_url="", extra_context=None):
         extra_context = extra_context or {}
         extra_context["kopie_url"] = f"/admin/core/clientcard/kopie/{object_id}/"
+        extra_context["kopie_klient_url"] = f"/admin/core/clientcard/kopie-klient/{object_id}/"
         return super().change_view(request, object_id, form_url, extra_context)
 
     def response_change(self, request, obj):
