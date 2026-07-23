@@ -751,11 +751,21 @@ def _jednotka_polozky(item):
     return "Kč"
 
 
+def _format_kc(value, decimals=2):
+    """Cesky format meny: '1 234,50 Kč' (mezera jako oddelovac tisicu,
+    carka jako desetinny oddelovac)."""
+    if value is None:
+        return "-"
+    text = f"{value:,.{decimals}f}"
+    text = text.replace(",", "\x00").replace(".", ",").replace("\x00", " ")
+    return f"{text} Kč"
+
+
 @admin.register(ServicePoolItem)
 class ServicePoolItemAdmin(ModelAdmin):
     list_display = (
         "name", "site", "invoice_class", "unit", "meter", "jednotka",
-        "default_allocation_type", "default_amount_czk",
+        "default_allocation_type", "default_amount_czk_display",
     )
     list_filter = ("site", "invoice_class")
     search_fields = ("name",)
@@ -764,6 +774,10 @@ class ServicePoolItemAdmin(ModelAdmin):
     @admin.display(description="Jednotka")
     def jednotka(self, obj):
         return _jednotka_polozky(obj)
+
+    @admin.display(description="Výchozí měsíční částka (Kč)", ordering="default_amount_czk")
+    def default_amount_czk_display(self, obj):
+        return _format_kc(obj.default_amount_czk)
 
     def get_urls(self):
         from django.urls import path
@@ -815,7 +829,7 @@ class ServicePoolItemAdmin(ModelAdmin):
 @admin.register(AllocationKey)
 class AllocationKeyAdmin(ModelAdmin):
     list_display = (
-        "client_card_display", "service_item", "allocation_type", "value",
+        "client_card_display", "service_item", "allocation_type", "value_display",
         "unit", "deduct_from_pool", "valid_from", "valid_to",
     )
     list_filter = ("allocation_type", "deduct_from_pool")
@@ -825,19 +839,33 @@ class AllocationKeyAdmin(ModelAdmin):
     def client_card_display(self, obj):
         return obj.client_card.description or f"Karta {obj.client_card.client}"
 
+    @admin.display(description="Hodnota", ordering="value")
+    def value_display(self, obj):
+        # Vyznam pole "value" zavisi na typu klice - jen u Pevne castky jde
+        # skutecne o Kc, u Plocha x cena/m2 jde o m2, u ostatnich o vahu/procento.
+        if obj.allocation_type == AllocationKey.AllocationType.FIXED_AMOUNT:
+            return _format_kc(obj.value)
+        if obj.allocation_type == AllocationKey.AllocationType.AREA_PRICE:
+            return "-" if obj.value is None else f"{obj.value} m²"
+        return obj.value
+
 
 @admin.register(PriceList)
 class PriceListAdmin(ModelAdmin):
-    list_display = ("service_item", "period", "price_per_unit", "note")
+    list_display = ("service_item", "period", "price_per_unit_display", "note")
     list_filter = ("period", "service_item__site")
     autocomplete_fields = ("service_item",)
     search_fields = ("service_item__name",)
+
+    @admin.display(description="Cena za jednotku (Kč)", ordering="price_per_unit")
+    def price_per_unit_display(self, obj):
+        return _format_kc(obj.price_per_unit, decimals=4)
 
 
 @admin.register(CostEntry)
 class CostEntryAdmin(ModelAdmin):
     list_display = (
-        "service_item", "period", "amount_units", "jednotka", "kc_za_jednotku", "amount_czk",
+        "service_item", "period", "amount_units", "jednotka", "kc_za_jednotku", "amount_czk_display",
     )
     list_filter = ("period", "service_item__site")
     autocomplete_fields = ("service_item",)
@@ -854,24 +882,32 @@ class CostEntryAdmin(ModelAdmin):
         if obj.amount_units:
             if obj.amount_czk is not None:
                 try:
-                    return round(obj.amount_czk / obj.amount_units, 2)
+                    return _format_kc(obj.amount_czk / obj.amount_units, decimals=4)
                 except (ZeroDivisionError, TypeError):
                     pass
             price = PriceList.get_price_for_period(obj.service_item, obj.period)
             if price is not None:
-                return round(price, 4)
+                return _format_kc(price, decimals=4)
         return "-"
+
+    @admin.display(description="Částka (Kč)", ordering="amount_czk")
+    def amount_czk_display(self, obj):
+        return _format_kc(obj.amount_czk)
 
 
 @admin.register(BillingLine)
 class BillingLineAdmin(ModelAdmin):
-    list_display = ("client_card_display", "service_item", "period", "amount", "share")
+    list_display = ("client_card_display", "service_item", "period", "amount_display", "share")
     list_filter = ("period",)
     readonly_fields = ("client_card_display", "period", "service_item", "amount", "share", "calc_detail")
 
     @admin.display(description="Karta klienta", ordering="client_card")
     def client_card_display(self, obj):
         return obj.client_card.description or f"Karta {obj.client_card.client}"
+
+    @admin.display(description="Částka (Kč)", ordering="amount")
+    def amount_display(self, obj):
+        return _format_kc(obj.amount)
 
     def has_add_permission(self, request):
         return False
