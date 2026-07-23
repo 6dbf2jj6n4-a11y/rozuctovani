@@ -7,3 +7,4 @@ django-unfold==0.40.0
 whitenoise
 openpyxl
 python-docx
+requests
