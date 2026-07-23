@@ -192,14 +192,14 @@ UNFOLD = {
                         "link": reverse_lazy("admin:core_clientcard_changelist"),
                     },
                     {
-                        "title": _("Smlouvy"),
-                        "icon": "description",
-                        "link": reverse_lazy("admin:core_contract_changelist"),
-                    },
-                    {
                         "title": _("Klíče"),
                         "icon": "key",
                         "link": reverse_lazy("admin:core_allocationkey_changelist"),
+                    },
+                    {
+                        "title": _("Smlouvy"),
+                        "icon": "description",
+                        "link": reverse_lazy("admin:core_contract_changelist"),
                     },
                 ],
             },
