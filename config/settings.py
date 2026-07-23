@@ -154,6 +154,11 @@ UNFOLD = {
                         "icon": "speed",
                         "link": reverse_lazy("admin:core_meterreading_changelist"),
                     },
+                    {
+                        "title": _("Míry inflace"),
+                        "icon": "trending_up",
+                        "link": reverse_lazy("admin:core_inflationrate_changelist"),
+                    },
                 ],
             },
             {

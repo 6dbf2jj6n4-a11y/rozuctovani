@@ -1,3 +1,5 @@
+from decimal import Decimal
+
 from django.contrib import admin, messages
 from django.contrib.auth.models import Group
 
@@ -13,7 +15,7 @@ from unfold.admin import ModelAdmin, TabularInline
 
 from .models import (
     Client, ClientCard, Contract, Site, Unit, CardUnit,
-    Meter, MeterReading, Period,
+    Meter, MeterReading, Period, InflationRate,
     ServicePoolItem, AllocationKey, PriceList, CostEntry, BillingLine, UnitService
 )
 
@@ -424,7 +426,73 @@ class ContractAdmin(ModelAdmin):
     list_filter = ("deposit_paid", "has_inflation_clause")
     search_fields = ("number", "client__name", "client__ico")
     autocomplete_fields = ("client", "site")
-    actions = ["generate_document"]
+    actions = ["generate_document", "generovat_karty_inflace"]
+
+    @admin.action(description="Vygenerovat nové karty s inflací")
+    def generovat_karty_inflace(self, request, queryset):
+        from datetime import datetime, timedelta
+        from django.shortcuts import render
+
+        if "apply" in request.POST:
+            valid_from_str = request.POST.get("valid_from")
+            rate = InflationRate.objects.filter(pk=request.POST.get("inflation_rate")).first()
+            try:
+                new_valid_from = datetime.strptime(valid_from_str, "%Y-%m-%d").date()
+            except (TypeError, ValueError):
+                self.message_user(request, "Zadej platné datum platnosti nové karty.", level=messages.ERROR)
+                return None
+            if not rate:
+                self.message_user(request, "Vyber míru inflace.", level=messages.ERROR)
+                return None
+
+            factor = Decimal("1") + rate.percent / Decimal("100")
+            created = 0
+            skipped = []
+            for contract in queryset:
+                if not contract.has_inflation_clause:
+                    skipped.append(f"{contract} (#{contract.pk}): nemá inflační doložku")
+                    continue
+                if not contract.site_id:
+                    skipped.append(f"{contract} (#{contract.pk}): chybí Areál na smlouvě")
+                    continue
+                candidates = [
+                    c for c in ClientCard.objects.filter(client=contract.client, is_active=True)
+                    if contract.site in c.sites()
+                ]
+                if len(candidates) != 1:
+                    skipped.append(
+                        f"{contract} (#{contract.pk}): nalezeno {len(candidates)} aktivních karet "
+                        f"klienta v areálu {contract.site} (očekávána 1) - přeskočeno"
+                    )
+                    continue
+                old_card = candidates[0]
+                new_card = old_card.create_exact_copy(valid_from=new_valid_from, is_active=True)
+                for cu in new_card.card_units.all():
+                    if cu.rate_per_m2 is not None:
+                        cu.rate_per_m2 = (cu.rate_per_m2 * factor).quantize(Decimal("0.01"))
+                        cu.save(update_fields=["rate_per_m2"])
+                old_card.valid_to = new_valid_from - timedelta(days=1)
+                old_card.is_active = False
+                old_card.save(update_fields=["valid_to", "is_active"])
+                created += 1
+
+            text = f"Vytvořeno {created} nových karet s navýšením nájemného o {rate.percent} %."
+            if skipped:
+                text += " Přeskočeno: " + " | ".join(skipped)
+                self.message_user(request, text, level=messages.WARNING)
+            else:
+                self.message_user(request, text, level=messages.SUCCESS)
+            return None
+
+        context = {
+            **self.admin_site.each_context(request),
+            "title": "Vygenerovat nové karty s inflací",
+            "contracts": queryset,
+            "rates": InflationRate.objects.all(),
+            "action_checkbox_name": "_selected_action",
+            "opts": self.model._meta,
+        }
+        return render(request, "admin/core/contract/generovat_karty_inflace.html", context)
 
     @admin.action(description="Vygenerovat dokument smlouvy (.docx)")
     def generate_document(self, request, queryset):
@@ -563,54 +631,10 @@ class ClientCardAdmin(ModelAdmin):
     ]
     actions = ["kopie_karty"]
 
-    def _copy_card_exact(self, original, client=None):
-        """Vytvori presnou kopii karty (plochy i klice 1:1 z originalu).
-        Zamerne NEPOUZIVA CardUnit.save()/create_default_keys() (ktere by
-        klice odvozovaly znovu z vychozich sluzeb plochy - UnitService) -
-        misto toho se kazdy AllocationKey originalu zkopiruje presne tak,
-        jak je (vc. pripadnych rucnich uprav hodnoty/mericí)."""
-        units = list(original.card_units.all())
-        keys = list(original.allocation_keys.all())
-
-        new_card = ClientCard(
-            client=client or original.client,
-            unit=original.unit,
-            valid_from=original.valid_from,
-            valid_to=original.valid_to,
-            note=original.note,
-            description=f"{original.description} (kopie)",
-            external_id=None,
-            is_active=False,
-        )
-        new_card.save()
-
-        CardUnit.objects.bulk_create([
-            CardUnit(
-                card=new_card, unit=cu.unit,
-                rate_per_m2=cu.rate_per_m2, area_m2_override=cu.area_m2_override,
-            )
-            for cu in units
-        ])
-        AllocationKey.objects.bulk_create([
-            AllocationKey(
-                client_card=new_card,
-                service_item=key.service_item,
-                allocation_type=key.allocation_type,
-                value=key.value,
-                meter=key.meter,
-                unit=key.unit,
-                deduct_from_pool=key.deduct_from_pool,
-                valid_from=key.valid_from,
-                valid_to=key.valid_to,
-            )
-            for key in keys
-        ])
-        return new_card
-
     @admin.action(description="Vytvořit kopii vybraných karet")
     def kopie_karty(self, request, queryset):
         for card in queryset:
-            self._copy_card_exact(card)
+            card.create_exact_copy()
         self.message_user(request, f"Vytvořeno {queryset.count()} kopií karet.")
 
     def get_urls(self):
@@ -629,7 +653,7 @@ class ClientCardAdmin(ModelAdmin):
         """Obycejna kopie - stejny klient, okamzite, bez potvrzeni."""
         from django.shortcuts import redirect
         original = ClientCard.objects.get(pk=card_id)
-        new_card = self._copy_card_exact(original)
+        new_card = original.create_exact_copy()
         self.message_user(request, "Kopie karty byla vytvořena.")
         return redirect(f"/admin/core/clientcard/{new_card.pk}/change/")
 
@@ -643,7 +667,7 @@ class ClientCardAdmin(ModelAdmin):
             if not new_client:
                 self.message_user(request, "Musíš vybrat klienta, na kterého se má karta zkopírovat.", level=messages.ERROR)
                 return redirect(request.path)
-            new_card = self._copy_card_exact(original, client=new_client)
+            new_card = original.create_exact_copy(client=new_client)
             self.message_user(request, f"Kopie karty byla vytvořena pro klienta {new_client}.")
             return redirect(f"/admin/core/clientcard/{new_card.pk}/change/")
 
@@ -779,6 +803,12 @@ class PeriodAdmin(ModelAdmin):
                 self.message_user(request, text, level=messages.WARNING)
             else:
                 self.message_user(request, text, level=messages.SUCCESS)
+
+
+@admin.register(InflationRate)
+class InflationRateAdmin(ModelAdmin):
+    list_display = ("year", "percent")
+    ordering = ("-year",)
 
 
 @admin.register(MeterReading)

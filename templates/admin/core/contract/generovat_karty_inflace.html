@@ -1,0 +1,52 @@
+{% extends "admin/base_site.html" %}
+
+{% block content %}
+<div style="max-width: 640px;">
+    <p>
+        Pro vybrané smlouvy (jen s aktivní inflační doložkou) se vytvoří nová
+        Karta klienta - kopie aktuální aktivní karty se zvýšeným nájemným
+        (Kč/m²/rok u ploch). Stará karta se automaticky uzavře (Platnost do)
+        den před platností nové karty.
+    </p>
+    <ul>
+        {% for contract in contracts %}
+            <li>
+                {{ contract }} - {{ contract.client }}
+                {% if not contract.has_inflation_clause %}<strong style="color:#b91c1c;"> (bez inflační doložky - přeskočí se)</strong>{% endif %}
+            </li>
+        {% endfor %}
+    </ul>
+    <form method="post">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="generovat_karty_inflace">
+        {% for contract in contracts %}
+            <input type="hidden" name="{{ action_checkbox_name }}" value="{{ contract.pk }}">
+        {% endfor %}
+
+        <div style="margin: 16px 0;">
+            <label for="id_valid_from" style="display: block; font-weight: 600; margin-bottom: 6px;">
+                Platnost nové karty od
+            </label>
+            <input type="date" name="valid_from" id="id_valid_from" required style="padding: 8px;">
+        </div>
+
+        <div style="margin: 16px 0;">
+            <label for="id_inflation_rate" style="display: block; font-weight: 600; margin-bottom: 6px;">
+                Míra inflace
+            </label>
+            <select name="inflation_rate" id="id_inflation_rate" required style="padding: 8px; min-width: 200px;">
+                <option value="">-- vyber míru inflace --</option>
+                {% for rate in rates %}
+                    <option value="{{ rate.pk }}">{{ rate }}</option>
+                {% endfor %}
+            </select>
+            {% if not rates %}
+                <p style="color:#b91c1c;">Nejdřív zadej míru inflace pro daný rok (sekce Období → Míry inflace).</p>
+            {% endif %}
+        </div>
+
+        <input type="submit" name="apply" value="Vygenerovat karty" class="button default" style="background-color: #2563eb; color: white; font-weight: 600; padding: 8px 16px; border-radius: 6px; border: none; cursor: pointer;">
+        <a href="{% url 'admin:core_contract_changelist' %}" class="button" style="margin-left: 8px;">Zrušit</a>
+    </form>
+</div>
+{% endblock %}

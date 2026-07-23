@@ -233,6 +233,50 @@ class ClientCard(models.Model):
             return 0
         return (end - start).days + 1
 
+    def create_exact_copy(self, client=None, valid_from=None, is_active=False):
+        """Vytvori presnou kopii teto karty (plochy i klice 1:1 z originalu).
+        Zamerne NEPOUZIVA CardUnit.save()/create_default_keys() (ktere by
+        klice odvozovaly znovu z vychozich sluzeb plochy - UnitService) -
+        misto toho se kazdy AllocationKey originalu zkopiruje presne tak,
+        jak je (vc. pripadnych rucnich uprav hodnoty/mericí)."""
+        units = list(self.card_units.all())
+        keys = list(self.allocation_keys.all())
+
+        new_card = ClientCard(
+            client=client or self.client,
+            unit=self.unit,
+            valid_from=valid_from or self.valid_from,
+            valid_to=self.valid_to,
+            note=self.note,
+            description=f"{self.description} (kopie)",
+            external_id=None,
+            is_active=is_active,
+        )
+        new_card.save()
+
+        CardUnit.objects.bulk_create([
+            CardUnit(
+                card=new_card, unit=cu.unit,
+                rate_per_m2=cu.rate_per_m2, area_m2_override=cu.area_m2_override,
+            )
+            for cu in units
+        ])
+        AllocationKey.objects.bulk_create([
+            AllocationKey(
+                client_card=new_card,
+                service_item=key.service_item,
+                allocation_type=key.allocation_type,
+                value=key.value,
+                meter=key.meter,
+                unit=key.unit,
+                deduct_from_pool=key.deduct_from_pool,
+                valid_from=key.valid_from,
+                valid_to=key.valid_to,
+            )
+            for key in keys
+        ])
+        return new_card
+
 
 class Period(models.Model):
     class Status(models.TextChoices):
@@ -269,6 +313,23 @@ class Period(models.Model):
         else:
             prev_year, prev_month = self.year, self.month - 1
         return Period.objects.filter(year=prev_year, month=prev_month).first()
+
+
+class InflationRate(models.Model):
+    """Mira inflace pro dany rok - pouziva se pri hromadnem generovani
+    novych Karet klientu se smlouvou s inflacni dolozkou (viz
+    ContractAdmin.generovat_karty_inflace)."""
+
+    year = models.PositiveIntegerField("Rok", unique=True)
+    percent = models.DecimalField("Míra inflace (%)", max_digits=5, decimal_places=2)
+
+    class Meta:
+        verbose_name = "Míra inflace"
+        verbose_name_plural = "Míry inflace"
+        ordering = ["-year"]
+
+    def __str__(self):
+        return f"{self.year}: {self.percent} %"
 
 
 class Meter(models.Model):
