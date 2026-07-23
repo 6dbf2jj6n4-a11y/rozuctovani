@@ -6,14 +6,9 @@ Ukazuje, jak se doslo k celkove fakturaci za jednotlive tridy zasobniku
 zasobniku uvnitr kazde tridy, sectene napric vsemi kartami klienta pro
 dane obdobi (BillingLine).
 
-Font: pouziva se DejaVu Sans, bundlovany v billing/fonts/ (volne siritelny,
-stejna licence jako Bitstream Vera). Reportlab sice ma vlastni vestaveny
-font Vera, ten ale ma vadny/chybejici glyf pro "ě"/"Ě" (U+011B/U+011A) -
-v cestine caste znaky, ktere by se jinak v generovanych PDF tise vykreslily
-jako prazdny ctverecek. Overeno primym testem (canvas.drawString), DejaVu
-Sans tento problem nema.
+Font: viz core/pdf_fonts.py (DejaVu Sans - reportlab vestaveny font Vera
+ma vadny glyf pro "ě"/"Ě").
 """
-import os
 from decimal import Decimal
 from xml.sax.saxutils import escape
 
@@ -21,23 +16,18 @@ from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import ParagraphStyle
 from reportlab.lib.units import mm
-from reportlab.pdfbase import pdfmetrics
-from reportlab.pdfbase.ttfonts import TTFont
 from reportlab.platypus import Paragraph, SimpleDocTemplate, Table, TableStyle
 
 from core.models import BillingLine, ServicePoolItem
-
-_FONT_DIR = os.path.join(os.path.dirname(__file__), "fonts")
-pdfmetrics.registerFont(TTFont("DejaVu", os.path.join(_FONT_DIR, "DejaVuSans.ttf")))
-pdfmetrics.registerFont(TTFont("DejaVu-Bold", os.path.join(_FONT_DIR, "DejaVuSans-Bold.ttf")))
+from core.pdf_fonts import FONT_BOLD, FONT_REGULAR
 
 _CLASS_ORDER = [code for code, _ in ServicePoolItem.InvoiceClass.choices]
 
-_STYLE_TITLE = ParagraphStyle("StatementTitle", fontName="DejaVu-Bold", fontSize=16, spaceAfter=4 * mm)
-_STYLE_SUB = ParagraphStyle("StatementSub", fontName="DejaVu", fontSize=11, spaceAfter=6 * mm, leading=15)
-_STYLE_H2 = ParagraphStyle("StatementH2", fontName="DejaVu-Bold", fontSize=13, spaceBefore=6 * mm, spaceAfter=2 * mm)
-_STYLE_TOTAL = ParagraphStyle("StatementTotal", fontName="DejaVu-Bold", fontSize=13, spaceBefore=8 * mm)
-_STYLE_EMPTY = ParagraphStyle("StatementEmpty", fontName="DejaVu", fontSize=10, spaceBefore=4 * mm)
+_STYLE_TITLE = ParagraphStyle("StatementTitle", fontName=FONT_BOLD, fontSize=16, spaceAfter=4 * mm)
+_STYLE_SUB = ParagraphStyle("StatementSub", fontName=FONT_REGULAR, fontSize=11, spaceAfter=6 * mm, leading=15)
+_STYLE_H2 = ParagraphStyle("StatementH2", fontName=FONT_BOLD, fontSize=13, spaceBefore=6 * mm, spaceAfter=2 * mm)
+_STYLE_TOTAL = ParagraphStyle("StatementTotal", fontName=FONT_BOLD, fontSize=13, spaceBefore=8 * mm)
+_STYLE_EMPTY = ParagraphStyle("StatementEmpty", fontName=FONT_REGULAR, fontSize=10, spaceBefore=4 * mm)
 
 
 def _card_label(card):
@@ -114,9 +104,9 @@ def generate_client_statement_pdf(client, period, output_path):
 
         table = Table(rows, repeatRows=1)
         table.setStyle(TableStyle([
-            ("FONTNAME", (0, 0), (-1, -1), "DejaVu"),
-            ("FONTNAME", (0, 0), (-1, 0), "DejaVu-Bold"),
-            ("FONTNAME", (0, -1), (-1, -1), "DejaVu-Bold"),
+            ("FONTNAME", (0, 0), (-1, -1), FONT_REGULAR),
+            ("FONTNAME", (0, 0), (-1, 0), FONT_BOLD),
+            ("FONTNAME", (0, -1), (-1, -1), FONT_BOLD),
             ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#e5e7eb")),
             ("BACKGROUND", (0, -1), (-1, -1), colors.HexColor("#f3f4f6")),
             ("ALIGN", (-1, 0), (-1, -1), "RIGHT"),

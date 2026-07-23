@@ -667,13 +667,10 @@ class ClientCardAdmin(ModelAdmin):
         card = get_object_or_404(ClientCard, pk=card_id)
         buf = BytesIO()
         generate_client_card_document(card, buf)
-        filename = f"karta_najemce_{card.client.code or card.client.pk}_{card.pk}.docx"
+        filename = f"karta_najemce_{card.client.code or card.client.pk}_{card.pk}.pdf"
         card.document.save(filename, ContentFile(buf.getvalue()), save=True)
 
-        response = HttpResponse(
-            buf.getvalue(),
-            content_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-        )
+        response = HttpResponse(buf.getvalue(), content_type="application/pdf")
         response["Content-Disposition"] = f'attachment; filename="{filename}"'
         return response
 
@@ -687,7 +684,7 @@ class ClientCardAdmin(ModelAdmin):
             '<a href="{}" '
             'style="padding:6px 16px; border-radius:6px; background:#2563eb; '
             'color:white; font-weight:600; text-decoration:none; display:inline-block;">'
-            'Generovat Kartu nájemce (.docx)</a>',
+            'Generovat Kartu nájemce (.pdf)</a>',
             url,
         )
     generate_card_button.short_description = ""

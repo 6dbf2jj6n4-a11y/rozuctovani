@@ -1,72 +1,97 @@
 """
-Generovani dokumentu Karty najemce (.docx) - Priloha c. 1 ke Smlouve.
+Generovani dokumentu Karty najemce (PDF) - Priloha c. 1 ke Smlouve.
 
-Na rozdil od Smlouvy (viz core/contract_generator.py) se dokument sklada
-od nuly pomoci python-docx, nevyplnuje se existujici sablona - Karta
-nema pevny puvodni vzor, jde o tabulkovy vypis dat Karty klienta
-(plochy, klice rozuctovani sluzeb) plus podpisove pole.
+Cernobile, bezpatkove (DejaVu Sans - viz core/pdf_fonts.py), maly font
+(~10pt), kompaktni tabulky bez mezer mezi radky - vzhled odpovida
+poznamkovemu prehledu k podpisu, ne reprezentativnimu dokumentu.
 """
-from decimal import Decimal
+import math
+from decimal import ROUND_CEILING, Decimal
 
-import docx
-from docx.enum.text import WD_ALIGN_PARAGRAPH
+from reportlab.lib import colors
+from reportlab.lib.pagesizes import A4
+from reportlab.lib.styles import ParagraphStyle
+from reportlab.lib.units import mm
+from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
 from core.contract_generator import LANDLORD_REPRESENTATIVE, format_date_cz
 from core.models import AllocationKey, ServicePoolItem
+from core.pdf_fonts import FONT_BOLD, FONT_REGULAR
 
 _CLASS_ORDER = [code for code, _ in ServicePoolItem.InvoiceClass.choices]
+_FONT_SIZE = 10
+
+_STYLE_HEADER = ParagraphStyle("CardHeader", fontName=FONT_BOLD, fontSize=_FONT_SIZE, alignment=2)  # 2 = right
+_STYLE_INFO = ParagraphStyle("CardInfo", fontName=FONT_REGULAR, fontSize=_FONT_SIZE, leading=13)
+_STYLE_H2 = ParagraphStyle("CardH2", fontName=FONT_BOLD, fontSize=_FONT_SIZE + 1, spaceBefore=4 * mm, spaceAfter=1 * mm)
+_STYLE_SIG = ParagraphStyle("CardSig", fontName=FONT_REGULAR, fontSize=_FONT_SIZE)
+
+_TABLE_BASE_STYLE = [
+    ("FONTNAME", (0, 0), (-1, -1), FONT_REGULAR),
+    ("FONTSIZE", (0, 0), (-1, -1), _FONT_SIZE),
+    ("GRID", (0, 0), (-1, -1), 0.5, colors.black),
+    ("TOPPADDING", (0, 0), (-1, -1), 1),
+    ("BOTTOMPADDING", (0, 0), (-1, -1), 1),
+    ("LEFTPADDING", (0, 0), (-1, -1), 4),
+    ("RIGHTPADDING", (0, 0), (-1, -1), 4),
+]
 
 
-def _set_cell_text(cell, text, bold=False):
-    cell.text = ""
-    run = cell.paragraphs[0].add_run(text)
-    run.bold = bold
-
-
-def _add_table(doc, headers):
-    table = doc.add_table(rows=1, cols=len(headers))
-    table.style = "Table Grid"
-    for cell, header in zip(table.rows[0].cells, headers):
-        _set_cell_text(cell, header, bold=True)
-    return table
-
-
-def _fmt_num(value, decimals=2):
+def _fmt_m2(value):
     if value is None:
         return "—"
-    return f"{value:.{decimals}f}"
+    return f"{value:.2f} m²"
+
+
+def _fmt_kc(value, whole=False):
+    if value is None:
+        return "—"
+    if whole:
+        value = value.to_integral_value(rounding=ROUND_CEILING)
+        return f"{int(value):,} Kč".replace(",", " ")
+    return f"{value:,.2f} Kč".replace(",", " ")
+
+
+def _fmt_key_value(key):
+    """Hodnota klíče formátovaná podle typu výpočtu - měna jen tam, kam patří."""
+    if key.value is None:
+        return "—"
+    t = AllocationKey.AllocationType
+    value = key.value.normalize()
+    if key.allocation_type == t.PERCENT:
+        return f"{value} %"
+    if key.allocation_type == t.PERSON_COUNT:
+        return f"{value} osob"
+    if key.allocation_type in (t.AREA_RATIO, t.AREA_PRICE):
+        return f"{value} m²"
+    if key.allocation_type == t.FIXED_AMOUNT:
+        return _fmt_kc(key.value)
+    if key.allocation_type in (t.EQUAL_SPLIT, t.SUBMETER):
+        return "—"
+    return f"{value}"
 
 
 def generate_client_card_document(card, output_path):
-    """Vygeneruje Kartu nájemce (Příloha č. 1) pro danou ClientCard a uloží
-    do output_path (cesta nebo zapisovatelný stream, např. BytesIO)."""
-    doc = docx.Document()
+    """Vygeneruje Kartu nájemce (Příloha č. 1) pro danou ClientCard jako PDF
+    a uloží do output_path (cesta nebo zapisovatelný stream, např. BytesIO)."""
+    doc = SimpleDocTemplate(
+        output_path, pagesize=A4,
+        topMargin=18 * mm, bottomMargin=18 * mm, leftMargin=18 * mm, rightMargin=18 * mm,
+    )
+    elements = [Paragraph("Příloha č. 1", _STYLE_HEADER), Spacer(1, 4 * mm)]
 
-    header = doc.add_paragraph("Příloha č. 1")
-    header.alignment = WD_ALIGN_PARAGRAPH.RIGHT
-    header.runs[0].bold = True
-
-    doc.add_heading("KARTA NÁJEMCE", level=1)
-
-    info = doc.add_paragraph()
-    info.add_run("Klient: ").bold = True
-    info.add_run(str(card.client))
-    info.add_run("\n")
-    info.add_run("Karta: ").bold = True
-    info.add_run(card.description or f"Karta {card.client}")
-    info.add_run("\n")
-    info.add_run("Platnost od: ").bold = True
-    info.add_run(format_date_cz(card.valid_from))
+    info_lines = [
+        f"<b>Klient:</b> {card.client}",
+        f"<b>Karta:</b> {card.description or f'Karta {card.client}'}",
+        f"<b>Platnost od:</b> {format_date_cz(card.valid_from)}",
+    ]
     if card.valid_to:
-        info.add_run("\n")
-        info.add_run("Platnost do: ").bold = True
-        info.add_run(format_date_cz(card.valid_to))
+        info_lines.append(f"<b>Platnost do:</b> {format_date_cz(card.valid_to)}")
+    elements.append(Paragraph("<br/>".join(info_lines), _STYLE_INFO))
 
     # --- Plochy ---
-    doc.add_heading("Pronajaté plochy", level=2)
-    units_table = _add_table(
-        doc, ["Plocha", "Výměra (m²)", "Cena (Kč/m²/rok)", "Nájemné/rok (Kč)", "Nájemné/měsíc (Kč)"]
-    )
+    elements.append(Paragraph("Pronajaté plochy", _STYLE_H2))
+    rows = [["Plocha", "Výměra", "Cena (Kč/m²/rok)", "Nájemné/rok", "Nájemné/měsíc"]]
 
     total_area = Decimal("0")
     total_year = Decimal("0")
@@ -74,53 +99,84 @@ def generate_client_card_document(card, output_path):
     for cu in card.card_units.select_related("unit__site"):
         area = cu.area_m2
         year_rent = (area * cu.rate_per_m2) if (area and cu.rate_per_m2) else None
-        month_rent = cu.monthly_rent
+        month_rent = (year_rent / 12) if year_rent is not None else None
 
-        row = units_table.add_row().cells
-        _set_cell_text(row[0], str(cu.unit) if cu.unit else "—")
-        _set_cell_text(row[1], _fmt_num(area))
-        _set_cell_text(row[2], _fmt_num(cu.rate_per_m2))
-        _set_cell_text(row[3], _fmt_num(year_rent))
-        _set_cell_text(row[4], _fmt_num(month_rent))
+        rows.append([
+            str(cu.unit) if cu.unit else "—",
+            _fmt_m2(area),
+            _fmt_kc(cu.rate_per_m2),
+            _fmt_kc(year_rent, whole=True),
+            _fmt_kc(month_rent, whole=True),
+        ])
 
         total_area += area or Decimal("0")
         total_year += year_rent or Decimal("0")
         total_month += month_rent or Decimal("0")
 
-    total_row = units_table.add_row().cells
-    _set_cell_text(total_row[0], "Celkem", bold=True)
-    _set_cell_text(total_row[1], _fmt_num(total_area), bold=True)
-    _set_cell_text(total_row[2], "", bold=True)
-    _set_cell_text(total_row[3], _fmt_num(total_year), bold=True)
-    _set_cell_text(total_row[4], _fmt_num(total_month), bold=True)
+    rows.append([
+        "Celkem", _fmt_m2(total_area), "",
+        _fmt_kc(total_year, whole=True), _fmt_kc(total_month, whole=True),
+    ])
 
-    # --- Klíče, po sekcích dle třídy ---
-    doc.add_heading("Klíče rozúčtování služeb", level=2)
+    units_table = Table(rows, repeatRows=1)
+    units_table.setStyle(TableStyle([
+        *_TABLE_BASE_STYLE,
+        ("FONTNAME", (0, 0), (-1, 0), FONT_BOLD),
+        ("FONTNAME", (0, -1), (-1, -1), FONT_BOLD),
+        ("ALIGN", (1, 0), (-1, -1), "RIGHT"),
+    ]))
+    elements.append(units_table)
+
+    # --- Klíče - jedna souvislá tabulka, třídy oddělené silnější linkou ---
+    elements.append(Paragraph("Klíče rozúčtování služeb", _STYLE_H2))
     keys = list(
         card.allocation_keys
         .select_related("service_item", "meter")
         .order_by("service_item__invoice_class", "service_item__name")
     )
     class_labels = dict(ServicePoolItem.InvoiceClass.choices)
+
+    key_rows = [["Položka", "Měřidlo", "Typ výpočtu", "Hodnota"]]
     type_labels = dict(AllocationKey.AllocationType.choices)
+    class_header_rows = []  # indexy radku s nazvem tridy - pro silnejsi linku/tucne pismo
 
     for class_code in _CLASS_ORDER:
         class_keys = [k for k in keys if k.service_item.invoice_class == class_code]
         if not class_keys:
             continue
-        doc.add_heading(class_labels[class_code], level=3)
-        keys_table = _add_table(doc, ["Položka", "Typ výpočtu", "Hodnota", "Měřidlo"])
+        class_header_rows.append(len(key_rows))
+        key_rows.append([class_labels[class_code], "", "", ""])
         for key in class_keys:
-            row = keys_table.add_row().cells
-            _set_cell_text(row[0], key.service_item.name)
-            _set_cell_text(row[1], type_labels.get(key.allocation_type, key.allocation_type))
-            _set_cell_text(row[2], _fmt_num(key.value, decimals=4) if key.value is not None else "—")
-            _set_cell_text(row[3], str(key.meter) if key.meter else "—")
+            key_rows.append([
+                key.service_item.name,
+                str(key.meter) if key.meter else "—",
+                type_labels.get(key.allocation_type, key.allocation_type),
+                _fmt_key_value(key),
+            ])
+
+    keys_style = [
+        *_TABLE_BASE_STYLE,
+        ("FONTNAME", (0, 0), (-1, 0), FONT_BOLD),
+        ("ALIGN", (-1, 0), (-1, -1), "RIGHT"),
+    ]
+    for row_idx in class_header_rows:
+        keys_style.append(("SPAN", (0, row_idx), (-1, row_idx)))
+        keys_style.append(("FONTNAME", (0, row_idx), (-1, row_idx), FONT_BOLD))
+        keys_style.append(("LINEABOVE", (0, row_idx), (-1, row_idx), 1.2, colors.black))
+
+    if len(key_rows) > 1:
+        keys_table = Table(key_rows, repeatRows=1)
+        keys_table.setStyle(TableStyle(keys_style))
+        elements.append(keys_table)
 
     # --- Podpisy ---
-    doc.add_paragraph()
-    doc.add_paragraph("_" * 30 + "\t\t\t" + "_" * 30)
-    doc.add_paragraph(f"za Pronajímatele: {LANDLORD_REPRESENTATIVE}\t\tza Nájemce: {card.client}")
+    elements.append(Spacer(1, 10 * mm))
+    elements.append(Paragraph("_" * 30 + "&nbsp;" * 15 + "_" * 30, _STYLE_SIG))
+    elements.append(Paragraph(
+        f"za Pronajímatele: {LANDLORD_REPRESENTATIVE}"
+        + "&nbsp;" * 15 + f"za Nájemce: {card.client}",
+        _STYLE_SIG,
+    ))
 
-    doc.save(output_path if hasattr(output_path, "write") else str(output_path))
+    doc.build(elements)
     return output_path
