@@ -591,24 +591,39 @@ class ClientCardAdmin(ModelAdmin):
         return custom + urls
 
     def kopie_view(self, request, card_id):
-        from django.shortcuts import redirect
+        from django.shortcuts import redirect, render
         original = ClientCard.objects.get(pk=card_id)
-        units = list(original.card_units.all())
-        new_card = ClientCard(
-            client=original.client,
-            unit=original.unit,
-            valid_from=original.valid_from,
-            valid_to=original.valid_to,
-            note=original.note,
-            description=f"{original.description} (kopie)",
-            external_id=None,
-            is_active=False,
-        )
-        new_card.save()
-        for cu in units:
-            CardUnit.objects.create(card=new_card, unit=cu.unit)
-        self.message_user(request, "Kopie karty byla vytvořena.")
-        return redirect(f"/admin/core/clientcard/{new_card.pk}/change/")
+
+        if request.method == "POST":
+            new_client = Client.objects.filter(pk=request.POST.get("new_client")).first()
+            if not new_client:
+                self.message_user(request, "Musíš vybrat klienta, na kterého se má karta zkopírovat.", level=messages.ERROR)
+                return redirect(request.path)
+            units = list(original.card_units.all())
+            new_card = ClientCard(
+                client=new_client,
+                unit=original.unit,
+                valid_from=original.valid_from,
+                valid_to=original.valid_to,
+                note=original.note,
+                description=f"{original.description} (kopie)",
+                external_id=None,
+                is_active=False,
+            )
+            new_card.save()
+            for cu in units:
+                CardUnit.objects.create(card=new_card, unit=cu.unit)
+            self.message_user(request, f"Kopie karty byla vytvořena pro klienta {new_client}.")
+            return redirect(f"/admin/core/clientcard/{new_card.pk}/change/")
+
+        context = {
+            **self.admin_site.each_context(request),
+            "title": "Kopírovat kartu na nového klienta",
+            "original": original,
+            "clients": Client.objects.filter(is_active=True).order_by("name"),
+            "opts": self.model._meta,
+        }
+        return render(request, "admin/core/clientcard/kopie_form.html", context)
 
     def change_view(self, request, object_id, form_url="", extra_context=None):
         extra_context = extra_context or {}
