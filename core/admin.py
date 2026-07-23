@@ -563,23 +563,54 @@ class ClientCardAdmin(ModelAdmin):
     ]
     actions = ["kopie_karty"]
 
+    def _copy_card_exact(self, original, client=None):
+        """Vytvori presnou kopii karty (plochy i klice 1:1 z originalu).
+        Zamerne NEPOUZIVA CardUnit.save()/create_default_keys() (ktere by
+        klice odvozovaly znovu z vychozich sluzeb plochy - UnitService) -
+        misto toho se kazdy AllocationKey originalu zkopiruje presne tak,
+        jak je (vc. pripadnych rucnich uprav hodnoty/mericí)."""
+        units = list(original.card_units.all())
+        keys = list(original.allocation_keys.all())
+
+        new_card = ClientCard(
+            client=client or original.client,
+            unit=original.unit,
+            valid_from=original.valid_from,
+            valid_to=original.valid_to,
+            note=original.note,
+            description=f"{original.description} (kopie)",
+            external_id=None,
+            is_active=False,
+        )
+        new_card.save()
+
+        CardUnit.objects.bulk_create([
+            CardUnit(
+                card=new_card, unit=cu.unit,
+                rate_per_m2=cu.rate_per_m2, area_m2_override=cu.area_m2_override,
+            )
+            for cu in units
+        ])
+        AllocationKey.objects.bulk_create([
+            AllocationKey(
+                client_card=new_card,
+                service_item=key.service_item,
+                allocation_type=key.allocation_type,
+                value=key.value,
+                meter=key.meter,
+                unit=key.unit,
+                deduct_from_pool=key.deduct_from_pool,
+                valid_from=key.valid_from,
+                valid_to=key.valid_to,
+            )
+            for key in keys
+        ])
+        return new_card
+
     @admin.action(description="Vytvořit kopii vybraných karet")
     def kopie_karty(self, request, queryset):
         for card in queryset:
-            units = list(card.card_units.all())
-            new_card = ClientCard(
-                client=card.client,
-                unit=card.unit,
-                valid_from=card.valid_from,
-                valid_to=card.valid_to,
-                note=card.note,
-                description=f"{card.description} (kopie)",
-                external_id=None,
-                is_active=False,
-            )
-            new_card.save()
-            for cu in units:
-                CardUnit.objects.create(card=new_card, unit=cu.unit)
+            self._copy_card_exact(card)
         self.message_user(request, f"Vytvořeno {queryset.count()} kopií karet.")
 
     def get_urls(self):
@@ -599,20 +630,7 @@ class ClientCardAdmin(ModelAdmin):
             if not new_client:
                 self.message_user(request, "Musíš vybrat klienta, na kterého se má karta zkopírovat.", level=messages.ERROR)
                 return redirect(request.path)
-            units = list(original.card_units.all())
-            new_card = ClientCard(
-                client=new_client,
-                unit=original.unit,
-                valid_from=original.valid_from,
-                valid_to=original.valid_to,
-                note=original.note,
-                description=f"{original.description} (kopie)",
-                external_id=None,
-                is_active=False,
-            )
-            new_card.save()
-            for cu in units:
-                CardUnit.objects.create(card=new_card, unit=cu.unit)
+            new_card = self._copy_card_exact(original, client=new_client)
             self.message_user(request, f"Kopie karty byla vytvořena pro klienta {new_client}.")
             return redirect(f"/admin/core/clientcard/{new_card.pk}/change/")
 
