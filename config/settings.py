@@ -4,6 +4,9 @@ Konfigurace Django projektu "rozuctovani".
 import os
 from pathlib import Path
 
+from django.urls import reverse_lazy
+from django.utils.translation import gettext_lazy as _
+
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 SECRET_KEY = os.environ.get("DJANGO_SECRET_KEY", "dev-secret-key-zmen-v-produkci")
@@ -128,6 +131,112 @@ CSRF_TRUSTED_ORIGINS = [
 UNFOLD = {
     "SITE_TITLE": "RENTE)(",
     "SITE_HEADER": "RENTEX_2026",
+    "SIDEBAR": {
+        "show_search": True,
+        "show_all_applications": False,
+        "navigation": [
+            {
+                "title": _("Období"),
+                "separator": True,
+                "items": [
+                    {
+                        "title": _("Období"),
+                        "icon": "calendar_month",
+                        "link": reverse_lazy("admin:core_period_changelist"),
+                    },
+                    {
+                        "title": _("Náklady za období"),
+                        "icon": "payments",
+                        "link": reverse_lazy("admin:core_costentry_changelist"),
+                    },
+                    {
+                        "title": _("Odečty měřidel"),
+                        "icon": "speed",
+                        "link": reverse_lazy("admin:core_meterreading_changelist"),
+                    },
+                ],
+            },
+            {
+                "title": _("Areály/Objekty"),
+                "separator": True,
+                "items": [
+                    {
+                        "title": _("Areály/Objekty"),
+                        "icon": "domain",
+                        "link": reverse_lazy("admin:core_site_changelist"),
+                    },
+                    {
+                        "title": _("Pronajímané prostory"),
+                        "icon": "meeting_room",
+                        "link": reverse_lazy("admin:core_unit_changelist"),
+                    },
+                    {
+                        "title": _("Měřidla"),
+                        "icon": "speed",
+                        "link": reverse_lazy("admin:core_meter_changelist"),
+                    },
+                ],
+            },
+            {
+                "title": _("Klienti"),
+                "separator": True,
+                "items": [
+                    {
+                        "title": _("Klienti"),
+                        "icon": "groups",
+                        "link": reverse_lazy("admin:core_client_changelist"),
+                    },
+                    {
+                        "title": _("Karty klientů"),
+                        "icon": "badge",
+                        "link": reverse_lazy("admin:core_clientcard_changelist"),
+                    },
+                    {
+                        "title": _("Smlouvy"),
+                        "icon": "description",
+                        "link": reverse_lazy("admin:core_contract_changelist"),
+                    },
+                    {
+                        "title": _("Klíče"),
+                        "icon": "key",
+                        "link": reverse_lazy("admin:core_allocationkey_changelist"),
+                    },
+                ],
+            },
+            {
+                "title": _("Vyúčtování"),
+                "separator": True,
+                "items": [
+                    {
+                        "title": _("Ceníky"),
+                        "icon": "sell",
+                        "link": reverse_lazy("admin:core_pricelist_changelist"),
+                    },
+                    {
+                        "title": _("Položky"),
+                        "icon": "receipt_long",
+                        "link": reverse_lazy("admin:core_billingline_changelist"),
+                    },
+                    {
+                        "title": _("Zásobník"),
+                        "icon": "inventory_2",
+                        "link": reverse_lazy("admin:core_servicepoolitem_changelist"),
+                    },
+                ],
+            },
+            {
+                "title": _("Správa uživatelů"),
+                "separator": True,
+                "items": [
+                    {
+                        "title": _("Uživatelé"),
+                        "icon": "manage_accounts",
+                        "link": reverse_lazy("admin:accounts_user_changelist"),
+                    },
+                ],
+            },
+        ],
+    },
 }
 LOGGING = {
     "version": 1,
