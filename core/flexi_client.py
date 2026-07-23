@@ -48,6 +48,15 @@ class FlexiClient:
     def _evidence_url(self, evidence, suffix=""):
         return f"{self.url}/c/{self.company}/{evidence}{suffix}.json"
 
+    def _filtered_evidence_url(self, evidence, filter_expr):
+        # Filtr jako query parametr (?filter=) nemusí projít přes reverzní proxy
+        # některých instancí (např. Varnish) - filtr proto posíláme v cestě URL,
+        # což ABRA Flexi REST API podporuje vždy.
+        import urllib.parse
+
+        encoded = urllib.parse.quote(filter_expr, safe="")
+        return f"{self.url}/c/{self.company}/{evidence}/({encoded}).json"
+
     def _request(self, method, url, **kwargs):
         response = self.session.request(method, url, timeout=30, **kwargs)
         if response.status_code >= 400:
@@ -62,12 +71,14 @@ class FlexiClient:
 
     def list_records(self, evidence, filter_expr=None, extra_params=None):
         """Vrátí seznam záznamů dané evidence. filter_expr je Flexi filtrovací výraz,
-        např. "stavUhrK != 'stavUhr.uhrazeno'"."""
+        např. "zbyvaUhradit > 0"."""
         params = dict(extra_params or {})
         if filter_expr:
-            params["filter"] = filter_expr
+            url = self._filtered_evidence_url(evidence, filter_expr)
+        else:
+            url = self._evidence_url(evidence)
 
-        data = self._request("GET", self._evidence_url(evidence), params=params)
+        data = self._request("GET", url, params=params)
         return (data or {}).get("winstrom", {}).get(evidence, [])
 
     def get_record(self, evidence, record_id):
@@ -110,8 +121,12 @@ class FlexiClient:
     # ------------------------------------------------------------------
 
     def get_unpaid_other_liabilities(self):
-        """Neuhrazené ostatní závazky (evidence 'zavazek')."""
+        """Neuhrazené ostatní závazky (evidence 'zavazek').
+
+        Filtruje podle zbyvaUhradit > 0 (částka k doplacení), ne podle stavUhrK -
+        to by minulo závazky uhrazené ručně (stav stavUhr.uhrazenoRucne)."""
         return self.list_records(
             EVIDENCE_LIABILITIES,
-            filter_expr="stavUhrK != 'stavUhr.uhrazeno'",
+            filter_expr="zbyvaUhradit > 0",
+            extra_params={"limit": 0},
         )
