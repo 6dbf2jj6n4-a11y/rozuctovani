@@ -1019,7 +1019,9 @@ class CostEntryAdmin(ModelAdmin):
 class BillingLineAdmin(ModelAdmin):
     list_display = ("client_card_display", "service_item", "period", "amount_display", "share")
     list_filter = ("period",)
+    search_fields = ("client_card__client__name",)
     readonly_fields = ("client_card_display", "period", "service_item", "amount", "share", "calc_detail")
+    actions = ["generovat_vyuctovani_pdf"]
 
     @admin.display(description="Karta klienta", ordering="client_card")
     def client_card_display(self, obj):
@@ -1031,3 +1033,30 @@ class BillingLineAdmin(ModelAdmin):
 
     def has_add_permission(self, request):
         return False
+
+    @admin.action(description="Vygenerovat vyúčtování klienta (PDF)")
+    def generovat_vyuctovani_pdf(self, request, queryset):
+        from io import BytesIO
+        from django.http import HttpResponse
+        from billing.statement_generator import generate_client_statement_pdf
+
+        client_ids = set(queryset.values_list("client_card__client_id", flat=True))
+        period_ids = set(queryset.values_list("period_id", flat=True))
+        if len(client_ids) != 1 or len(period_ids) != 1:
+            self.message_user(
+                request,
+                "Vyber řádky jen jednoho klienta a jednoho období (nejdřív filtruj podle "
+                "Období a vyhledej klienta, pak označ jeho řádky).",
+                level=messages.ERROR,
+            )
+            return None
+
+        client = Client.objects.get(pk=client_ids.pop())
+        period = Period.objects.get(pk=period_ids.pop())
+
+        buf = BytesIO()
+        generate_client_statement_pdf(client, period, buf)
+        filename = f"vyuctovani_{client.code or client.pk}_{period.year}_{period.month:02d}.pdf"
+        response = HttpResponse(buf.getvalue(), content_type="application/pdf")
+        response["Content-Disposition"] = f'attachment; filename="{filename}"'
+        return response

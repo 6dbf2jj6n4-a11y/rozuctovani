@@ -8,3 +8,4 @@ whitenoise
 openpyxl
 python-docx
 requests
+reportlab
