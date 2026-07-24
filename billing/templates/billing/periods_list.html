@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Moje vyúčtování</title>
+    <style>
+        body {
+            font-family: -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+            background: #f3f4f6;
+            margin: 0;
+            color: #111827;
+        }
+        .wrap { max-width: 640px; margin: 0 auto; padding: 32px 20px; }
+        .topbar { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 20px; }
+        h1 { font-size: 20px; margin: 0; }
+        .logout { font-size: 13px; color: #6b7280; text-decoration: none; }
+        .logout:hover { text-decoration: underline; }
+        .card { background: #fff; border-radius: 10px; box-shadow: 0 1px 4px rgba(0,0,0,0.08); overflow: hidden; }
+        .period-row {
+            display: block;
+            padding: 14px 18px;
+            text-decoration: none;
+            color: #111827;
+            border-bottom: 1px solid #f3f4f6;
+            font-size: 15px;
+        }
+        .period-row:last-child { border-bottom: none; }
+        .period-row:hover { background: #f9fafb; }
+        .empty { padding: 24px 18px; color: #6b7280; font-size: 14px; }
+        select, button {
+            font-size: 14px;
+            padding: 6px 10px;
+            border-radius: 6px;
+            border: 1px solid #d1d5db;
+        }
+    </style>
+</head>
+<body>
+<div class="wrap">
+    <div class="topbar">
+        <h1>Moje vyúčtování</h1>
+        <a class="logout" href="{% url 'logout' %}">Odhlásit se</a>
+    </div>
+
+    {% if all_clients is not None %}
+        <form method="get" style="margin-bottom: 16px;">
+            <select name="client" onchange="this.form.submit()">
+                <option value="">— vyber klienta —</option>
+                {% for c in all_clients %}
+                    <option value="{{ c.pk }}" {% if client and client.pk == c.pk %}selected{% endif %}>{{ c.name }}</option>
+                {% endfor %}
+            </select>
+        </form>
+    {% endif %}
+
+    {% if client %}
+        <p style="color:#6b7280; font-size:14px;">Klient: <strong>{{ client.name }}</strong></p>
+        <div class="card">
+            {% for period in periods %}
+                <a class="period-row" href="{% url 'moje-vyuctovani-detail' period.pk %}{% if request.GET.client %}?client={{ request.GET.client }}{% endif %}">{{ period }}</a>
+            {% empty %}
+                <div class="empty">Pro tohoto klienta zatím nejsou k dispozici žádná vyúčtovaná období.</div>
+            {% endfor %}
+        </div>
+    {% else %}
+        <div class="card"><div class="empty">Nejprve vyber klienta.</div></div>
+    {% endif %}
+</div>
+</body>
+</html>

@@ -15,5 +15,7 @@ def protected_media(request, path):
 urlpatterns = [
     path("admin/", admin.site.urls),
     path("api/", include("billing.api_urls")),
+    path("accounts/", include("django.contrib.auth.urls")),
+    path("vyuctovani/", include("billing.urls")),
     path("media/<path:path>", protected_media, name="protected_media"),
 ]

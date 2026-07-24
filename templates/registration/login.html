@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Přihlášení — Vyúčtování</title>
+    <style>
+        body {
+            font-family: -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+            background: #f3f4f6;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            margin: 0;
+        }
+        .box {
+            background: #fff;
+            padding: 32px;
+            border-radius: 10px;
+            box-shadow: 0 1px 4px rgba(0,0,0,0.1);
+            width: 100%;
+            max-width: 340px;
+        }
+        h1 { font-size: 18px; margin: 0 0 20px; color: #111827; }
+        label { display: block; font-size: 13px; color: #374151; margin-bottom: 4px; }
+        input {
+            width: 100%;
+            padding: 8px 10px;
+            margin-bottom: 14px;
+            border: 1px solid #d1d5db;
+            border-radius: 6px;
+            box-sizing: border-box;
+            font-size: 14px;
+        }
+        button {
+            width: 100%;
+            padding: 10px;
+            background: #2563eb;
+            color: #fff;
+            border: none;
+            border-radius: 6px;
+            font-weight: 600;
+            cursor: pointer;
+        }
+        .errorlist { color: #b91c1c; font-size: 13px; margin: 0 0 12px; padding: 0; list-style: none; }
+    </style>
+</head>
+<body>
+    <div class="box">
+        <h1>Přihlášení k vyúčtování</h1>
+        <form method="post">
+            {% csrf_token %}
+            {% if form.errors %}
+                <ul class="errorlist">
+                    <li>Nesprávné přihlašovací jméno nebo heslo.</li>
+                </ul>
+            {% endif %}
+            <label for="id_username">Uživatelské jméno</label>
+            <input type="text" name="username" id="id_username" autofocus required>
+            <label for="id_password">Heslo</label>
+            <input type="password" name="password" id="id_password" required>
+            <input type="hidden" name="next" value="{{ next }}">
+            <button type="submit">Přihlásit se</button>
+        </form>
+    </div>
+</body>
+</html>
