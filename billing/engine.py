@@ -126,10 +126,14 @@ def _consumption_shares(service_item, period, warnings):
     """
     Spocita podily pro merenou polozku (service_item.meter neni None).
 
-    Vraci dict {client_card_id: Decimal podil}, soucet ~= 1, pokud
-    se podarilo dohledat vsechny potrebne odecty. Pri chybejicich
-    odectech pripoji varovani a vrati prazdny dict (polozka se
-    pro toto obdobi vynecha).
+    Vraci dvojici (shares, total_consumption):
+      - shares: dict {client_card_id: Decimal podil}, soucet ~= 1, pokud
+        se podarilo dohledat vsechny potrebne odecty. Pri chybejicich
+        odectech pripoji varovani a vrati prazdny dict (polozka se
+        pro toto obdobi vynecha).
+      - total_consumption: celkova namerena spotreba hlavniho meridla
+        (pro dopocet spotreby/ceny za jednotku jednotlivych karet), nebo
+        None, pokud se nepodarilo dohledat.
     """
     meter = service_item.meter
     total_consumption = meter.consumption_for(period)
@@ -138,10 +142,10 @@ def _consumption_shares(service_item, period, warnings):
             f"{service_item}: chybí odečet měřidla {meter} pro období {period} "
             f"nebo předchozí období - položka vynechána."
         )
-        return {}
+        return {}, None
     if total_consumption == 0:
         warnings.append(f"{service_item}: nulová spotřeba měřidla {meter} - položka vynechána.")
-        return {}
+        return {}, None
 
     keys = [
         k for k in service_item.allocation_keys.select_related("client_card", "client_card__unit", "meter")
@@ -186,7 +190,7 @@ def _consumption_shares(service_item, period, warnings):
             f"ale žádná karta nemá klíč pro její rozpočítání."
         )
 
-    return shares
+    return shares, total_consumption
 
 
 def calculate_period(period, site=None):
@@ -256,6 +260,11 @@ def calculate_period(period, site=None):
             # pausal neplati - stejna podminka jako u vazenych podilu (_weighted_shares).
             remaining_cost = total_cost
             fixed_amounts = {}
+            # Spotreba/cena za jednotku pro klice typu 'Plocha x cena/m2' (vymera
+            # a cena z Ceniku) - u ostatnich absolutnich typu (Pevna castka) zadna
+            # fyzikalni jednotka nedava smysl, tam units/price_per_unit zustanou prazdne.
+            fixed_units = {}
+            fixed_price_per_unit = {}
             for key in fixed_keys:
                 if key.client_card.active_days_in_period(period_start, period_end) <= 0:
                     continue
@@ -263,6 +272,13 @@ def calculate_period(period, site=None):
                 if amount is None:
                     continue
                 fixed_amounts[key.client_card_id] = fixed_amounts.get(key.client_card_id, Decimal("0")) + amount
+                if key.allocation_type == AllocationKey.AllocationType.AREA_PRICE:
+                    price = PriceList.get_price_for_period(service_item, period)
+                    if price is not None:
+                        fixed_units[key.client_card_id] = (
+                            fixed_units.get(key.client_card_id, Decimal("0")) + (key.value or Decimal("0"))
+                        )
+                        fixed_price_per_unit[key.client_card_id] = price
                 if key.deduct_from_pool:
                     remaining_cost -= amount
 
@@ -277,8 +293,9 @@ def calculate_period(period, site=None):
                 remaining_cost = Decimal("0")
 
             # 2) podily na zbytku castky
+            total_consumption = None
             if service_item.meter:
-                shares = _consumption_shares(service_item, period, warnings)
+                shares, total_consumption = _consumption_shares(service_item, period, warnings)
             else:
                 weight_keys = [
                     k for k in valid_keys if k.allocation_type not in ABSOLUTE_AMOUNT_TYPES
@@ -287,6 +304,14 @@ def calculate_period(period, site=None):
                 if not shares and remaining_cost != 0:
                     warnings.append(f"{service_item} / {period}: žádné klíče pro rozpočítání zbylé částky.")
 
+            # Prumerna cena za jednotku namerene spotreby (celkovy naklad polozky /
+            # celkova namerena spotreba) - ulozi se u kazde karty s podilem na
+            # spotrebe, aby bylo v klientskem vyuctovani videt, jak se k castce
+            # doslo (jednotky x cena/jednotku), i kdyz se obdobi pozdeji uzavre.
+            share_price_per_unit = None
+            if total_consumption:
+                share_price_per_unit = (total_cost / total_consumption).quantize(Decimal("0.0001"))
+
             # 3) sestaveni vysledku
             results = dict(fixed_amounts)
             for card_id, share in shares.items():
@@ -294,11 +319,25 @@ def calculate_period(period, site=None):
 
             for card_id, amount in results.items():
                 share = shares.get(card_id)
+
+                units = None
+                price_per_unit = None
+                unit_of_measure = None
+                if card_id in fixed_units:
+                    units = fixed_units[card_id]
+                    price_per_unit = fixed_price_per_unit.get(card_id)
+                    unit_of_measure = "m²"
+                elif share is not None and total_consumption:
+                    units = (share * total_consumption).quantize(Decimal("0.001"))
+                    price_per_unit = share_price_per_unit
+                    unit_of_measure = service_item.meter.unit_of_measure
+
                 BillingLine.objects.create(
                     client_card_id=card_id,
                     period=period,
                     service_item=service_item,
                     amount=amount.quantize(Decimal("0.01")),
+                    units=units,
                     share=share,
                     calc_detail={
                         "total_cost": str(total_cost),
@@ -306,6 +345,8 @@ def calculate_period(period, site=None):
                         "fixed_amount": str(fixed_amounts.get(card_id, Decimal("0"))),
                         "remaining_cost": str(remaining_cost),
                         "share": str(share) if share is not None else None,
+                        "price_per_unit": str(price_per_unit) if price_per_unit is not None else None,
+                        "unit_of_measure": unit_of_measure,
                     },
                 )
                 created += 1

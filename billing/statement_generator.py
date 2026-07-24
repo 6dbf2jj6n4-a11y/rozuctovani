@@ -40,9 +40,31 @@ def _fmt_czk(amount):
     return f"{amount:,.2f} Kč".replace(",", " ")
 
 
+def format_units(units, unit_of_measure):
+    """Spotřeba/výměra u položky, např. '500.00 kWh' - '—' pokud položka
+    žádnou fyzikální jednotku nemá (paušál, procentní klíč apod.)."""
+    if units is None:
+        return "—"
+    label = unit_of_measure or ""
+    return f"{units:,.2f} {label}".replace(",", " ").strip()
+
+
+def format_price_per_unit(price, unit_of_measure):
+    """Cena za jednotku, např. '10.00 Kč/kWh'. U m² jde vždy o roční sazbu
+    (Kč/m²/rok) - stejná konvence jako v core/client_card_generator.py."""
+    if price is None:
+        return "—"
+    label = "m²/rok" if unit_of_measure == "m²" else (unit_of_measure or "j.")
+    return f"{price:,.2f} Kč/{label}".replace(",", " ")
+
+
 def build_statement_data(client, period):
     """Sestaví data vyúčtování klienta za období napříč všemi jeho kartami.
-    Vrací dict: {"classes": [{"label", "lines": [...], "subtotal"}], "grand_total"}."""
+    Vrací dict: {"classes": [{"label", "lines": [...], "subtotal"}], "grand_total"}.
+    Každý řádek obsahuje i units/unit_of_measure/price_per_unit (může být None
+    u položek bez fyzikální jednotky, např. paušál nebo procentní klíč) -
+    hodnoty se čtou z BillingLine.units a calc_detail uložených při výpočtu
+    (billing/engine.py), nikdy se nedopočítávají znovu."""
     lines = (
         BillingLine.objects
         .filter(period=period, client_card__client=client)
@@ -61,7 +83,17 @@ def build_statement_data(client, period):
         classes.append({
             "label": class_labels[class_code],
             "lines": [
-                {"item": line.service_item.name, "card": _card_label(line.client_card), "amount": line.amount}
+                {
+                    "item": line.service_item.name,
+                    "card": _card_label(line.client_card),
+                    "amount": line.amount,
+                    "units": line.units,
+                    "unit_of_measure": line.calc_detail.get("unit_of_measure"),
+                    "price_per_unit": (
+                        Decimal(line.calc_detail["price_per_unit"])
+                        if line.calc_detail.get("price_per_unit") else None
+                    ),
+                }
                 for line in class_lines
             ],
             "subtotal": subtotal,
@@ -92,15 +124,21 @@ def generate_client_statement_pdf(client, period, output_path):
     for cls in data["classes"]:
         elements.append(Paragraph(escape(cls["label"]), _STYLE_H2))
 
-        headers = ["Položka"] + (["Karta"] if show_card_column else []) + ["Částka (Kč)"]
+        headers = (
+            ["Položka"] + (["Karta"] if show_card_column else [])
+            + ["Spotřeba", "Cena/jednotku", "Částka (Kč)"]
+        )
         rows = [headers]
         for line in cls["lines"]:
             row = [line["item"]]
             if show_card_column:
                 row.append(line["card"])
+            row.append(format_units(line["units"], line["unit_of_measure"]))
+            row.append(format_price_per_unit(line["price_per_unit"], line["unit_of_measure"]))
             row.append(_fmt_czk(line["amount"]))
             rows.append(row)
-        rows.append(["Mezisoučet"] + ([""] if show_card_column else []) + [_fmt_czk(cls["subtotal"])])
+        filler = [""] * (2 + (1 if show_card_column else 0))
+        rows.append(["Mezisoučet"] + filler + [_fmt_czk(cls["subtotal"])])
 
         table = Table(rows, repeatRows=1)
         table.setStyle(TableStyle([

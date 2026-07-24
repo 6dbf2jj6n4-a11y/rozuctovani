@@ -21,8 +21,9 @@
         .card { background: #fff; border-radius: 10px; box-shadow: 0 1px 4px rgba(0,0,0,0.08); padding: 4px 18px 18px; margin-bottom: 16px; }
         .card h2 { font-size: 15px; margin: 16px 0 8px; color: #111827; }
         table { width: 100%; border-collapse: collapse; font-size: 14px; }
-        td { padding: 6px 0; border-bottom: 1px solid #f3f4f6; }
+        td { padding: 6px 0; border-bottom: 1px solid #f3f4f6; vertical-align: top; }
         td.amount { text-align: right; white-space: nowrap; }
+        .meta { display: block; color: #9ca3af; font-size: 12px; margin-top: 2px; }
         tr.subtotal td { font-weight: 600; border-bottom: none; padding-top: 8px; }
         .grand-total {
             background: #111827;
@@ -51,7 +52,12 @@
             <table>
                 {% for line in cls.lines %}
                     <tr>
-                        <td>{{ line.item }}{% if show_card_column %} <span style="color:#9ca3af;">({{ line.card }})</span>{% endif %}</td>
+                        <td>
+                            {{ line.item }}{% if show_card_column %} <span style="color:#9ca3af;">({{ line.card }})</span>{% endif %}
+                            {% if line.units is not None %}
+                                <span class="meta">{{ line|units_display }} × {{ line|price_per_unit_display }}</span>
+                            {% endif %}
+                        </td>
                         <td class="amount">{{ line.amount|kc }}</td>
                     </tr>
                 {% endfor %}
