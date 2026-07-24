@@ -326,10 +326,7 @@ class ActiveClientFilter(admin.SimpleListFilter):
 
 @admin.register(Client)
 class ClientAdmin(ModelAdmin):
-    list_display = (
-        "name_display", "code", "ico", "insolvency_display",
-        "contact_email", "contact_phone", "is_active", "is_landlord",
-    )
+    list_display = ("name_display", "code", "ico", "contact_email", "contact_phone", "is_active", "is_landlord")
     search_fields = ("name", "ico", "code")
     list_filter = (ActiveClientFilter, "is_landlord", SiteFilter, "insolvency_status")
     fieldsets = (
@@ -360,21 +357,19 @@ class ClientAdmin(ModelAdmin):
     inlines = [ClientCardInline, ContractInline]
     actions = ["export_emaily"]
 
+    def _is_risky(self, obj):
+        """Klient v likvidaci nebo se zaznamem (aktivnim ci drivejsim)
+        v insolvencnim rejstriku - viz core/management/commands/zkontrolovat_rizika.py."""
+        return "v likvidaci" in obj.name.lower() or obj.insolvency_status in (
+            Client.InsolvencyStatus.ACTIVE, Client.InsolvencyStatus.HISTORICAL,
+        )
+
     @admin.display(description="Název", ordering="name")
     def name_display(self, obj):
         from django.utils.html import format_html
-        if "v likvidaci" in obj.name.lower():
+        if self._is_risky(obj):
             return format_html('<span style="color:#dc2626; font-weight:600;">{}</span>', obj.name)
         return obj.name
-
-    @admin.display(description="Insolvence", ordering="insolvency_status")
-    def insolvency_display(self, obj):
-        from django.utils.html import format_html
-        if obj.insolvency_status == Client.InsolvencyStatus.ACTIVE:
-            return format_html('<span style="color:#dc2626; font-weight:600;">⚠ Aktivní</span>')
-        if obj.insolvency_status == Client.InsolvencyStatus.HISTORICAL:
-            return format_html('<span style="color:#b45309;">Dříve</span>')
-        return "—"
 
     class Media:
         js = ("core/js/ares_lookup.js",)
