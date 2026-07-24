@@ -326,7 +326,7 @@ class ActiveClientFilter(admin.SimpleListFilter):
 
 @admin.register(Client)
 class ClientAdmin(ModelAdmin):
-    list_display = ("name", "code", "ico", "contact_email", "contact_phone", "is_active", "is_landlord")
+    list_display = ("name_display", "code", "ico", "contact_email", "contact_phone", "is_active", "is_landlord")
     search_fields = ("name", "ico", "code")
     list_filter = (ActiveClientFilter, "is_landlord", SiteFilter)
     fieldsets = (
@@ -352,6 +352,13 @@ class ClientAdmin(ModelAdmin):
     readonly_fields = ("ares_button",)
     inlines = [ClientCardInline, ContractInline]
     actions = ["export_emaily"]
+
+    @admin.display(description="Název", ordering="name")
+    def name_display(self, obj):
+        from django.utils.html import format_html
+        if "v likvidaci" in obj.name.lower():
+            return format_html('<span style="color:#dc2626; font-weight:600;">{}</span>', obj.name)
+        return obj.name
 
     class Media:
         js = ("core/js/ares_lookup.js",)
