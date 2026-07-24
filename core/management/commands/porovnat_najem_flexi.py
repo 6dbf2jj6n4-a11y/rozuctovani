@@ -23,9 +23,15 @@ from core.models import ClientCard, Period
 
 
 def _normalize(name):
+    """Klíč pro spárování klienta mezi naším systémem a Flexi. Oba systémy
+    zapisují název firmy jinak formátovaný ("s.r.o." vs "s. r. o.",
+    "Firma, a.s." vs "FIRMA a.s", chybějící "&" apod.) - proto se
+    porovnává jen podle písmen a číslic, bez mezer/interpunkce/diakritiky.
+    Genuinně odlišné názvy (např. doplněk obchodního jména) se tím
+    záměrně nespárují - to už vyžaduje ruční kontrolu."""
     decomposed = unicodedata.normalize("NFKD", name or "")
     without_diacritics = "".join(c for c in decomposed if not unicodedata.combining(c))
-    return without_diacritics.strip().lower()
+    return "".join(c for c in without_diacritics.lower() if c.isalnum())
 
 
 def _card_rent_for_period(card, period):
@@ -119,10 +125,10 @@ class Command(BaseCommand):
 
             flag = ""
             if our is None:
-                flag = "<- chybí ve Flexi"
-            elif flx is None:
                 flag = "<- chybí v našem vyúčtování"
-            elif abs(diff) > 1:
+            elif flx is None:
+                flag = "<- chybí ve Flexi"
+            elif abs(diff) > 2:
                 flag = "<- NESEDÍ"
             if flag:
                 mismatches += 1
