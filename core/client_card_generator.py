@@ -121,11 +121,12 @@ def generate_client_card_document(card, output_path):
         _fmt_kc(total_year, whole=True), _fmt_kc(total_month, whole=True),
     ])
 
-    units_table = Table(rows, repeatRows=1)
+    units_table = Table(rows, repeatRows=1, hAlign="LEFT")
     units_table.setStyle(TableStyle([
         *_TABLE_BASE_STYLE,
         ("FONTNAME", (0, 0), (-1, 0), FONT_BOLD),
         ("FONTNAME", (0, -1), (-1, -1), FONT_BOLD),
+        ("ALIGN", (1, 0), (-1, -1), "RIGHT"),
     ]))
     elements.append(units_table)
 
@@ -159,6 +160,7 @@ def generate_client_card_document(card, output_path):
     keys_style = [
         *_TABLE_BASE_STYLE,
         ("FONTNAME", (0, 0), (-1, 0), FONT_BOLD),
+        ("ALIGN", (-1, 0), (-1, -1), "RIGHT"),
     ]
     for row_idx in class_header_rows:
         keys_style.append(("SPAN", (0, row_idx), (-1, row_idx)))
@@ -166,7 +168,7 @@ def generate_client_card_document(card, output_path):
         keys_style.append(("LINEABOVE", (0, row_idx), (-1, row_idx), 1.2, colors.black))
 
     if len(key_rows) > 1:
-        keys_table = Table(key_rows, repeatRows=1)
+        keys_table = Table(key_rows, repeatRows=1, hAlign="LEFT")
         keys_table.setStyle(TableStyle(keys_style))
         elements.append(keys_table)
 
@@ -177,7 +179,7 @@ def generate_client_card_document(card, output_path):
         [Paragraph("_" * 35, _STYLE_SIG_LINE), Paragraph("_" * 35, _STYLE_SIG_LINE)],
         [Paragraph(LANDLORD_REPRESENTATIVE, _STYLE_SIG_NAME), Paragraph(str(card.client), _STYLE_SIG_NAME)],
     ]
-    sig_table = Table(sig_rows, colWidths=[85 * mm, 85 * mm])
+    sig_table = Table(sig_rows, colWidths=[85 * mm, 85 * mm], hAlign="LEFT")
     sig_table.setStyle(TableStyle([
         ("TOPPADDING", (0, 0), (-1, -1), 1),
         ("BOTTOMPADDING", (0, 0), (-1, -1), 1),
