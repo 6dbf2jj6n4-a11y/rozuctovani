@@ -83,6 +83,20 @@ class Client(models.Model):
     dic = models.CharField("DIČ", max_length=20, blank=True)
     vat_payer = models.BooleanField("Plátce DPH", default=False)
 
+    class InsolvencyStatus(models.TextChoices):
+        NONE = "", "—"
+        ACTIVE = "aktivni", "Aktivní insolvenční řízení"
+        HISTORICAL = "historicky", "Dřívější insolvenční řízení (uzavřeno)"
+
+    insolvency_status = models.CharField(
+        "Insolvenční rejstřík", max_length=20, blank=True,
+        choices=InsolvencyStatus.choices,
+        help_text=(
+            "Vyplňuje se automaticky měsíční kontrolou proti ARES "
+            "(core/management/commands/zkontrolovat_rizika.py) - neupravuj ručně."
+        ),
+    )
+
     registry_court = models.CharField(
         "Rejstříkový soud", max_length=100, blank=True,
         help_text="Napr. 'Krajský soud v Ostravě' - lze dohledat/overit pres ARES podle IČO.",

@@ -36,13 +36,26 @@ def _get_json(url, timeout=15):
 
 
 def lookup_company(ico):
-    """Vrati dict {name, dic, street, street_number, zip_code, city} nebo None."""
+    """Vrati dict {name, dic, street, street_number, zip_code, city,
+    insolvence_stav} nebo None.
+
+    insolvence_stav je primo prevzaty priznak z ARES
+    (seznamRegistraci.stavZdrojeIr - "Ir" = Insolvencni rejstrik):
+    "AKTIVNI" (aktivni insolvencni rizeni), "HISTORICKY" (drive melo,
+    uz uzavreno), "NEEXISTUJICI" (nikdy) nebo None (nezname). Oficialni
+    verejna webova sluzba insolvencniho rejstriku (isir.justice.cz) je
+    jen log/replikacni mechanismus (cely historicky zurnal udalosti k
+    prehrani), ne jednoduchy dotaz podle ICO - tohle pole v ARES je
+    nejjednodussi spolehlivy zdroj stejne informace, overeno na realnem
+    pripadu (OKD, a.s., ICO 26863154 -> "AKTIVNI").
+    """
     data = _get_json(BASIC_URL.format(ico=ico))
     if not data:
         return None
     result = {
         "name": data.get("obchodniJmeno") or "",
         "dic": data.get("dic") or "",
+        "insolvence_stav": (data.get("seznamRegistraci") or {}).get("stavZdrojeIr"),
     }
     sidlo = data.get("sidlo") or {}
     result["street"] = sidlo.get("nazevUlice") or sidlo.get("nazevObce") or ""

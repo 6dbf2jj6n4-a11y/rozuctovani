@@ -326,9 +326,12 @@ class ActiveClientFilter(admin.SimpleListFilter):
 
 @admin.register(Client)
 class ClientAdmin(ModelAdmin):
-    list_display = ("name_display", "code", "ico", "contact_email", "contact_phone", "is_active", "is_landlord")
+    list_display = (
+        "name_display", "code", "ico", "insolvency_display",
+        "contact_email", "contact_phone", "is_active", "is_landlord",
+    )
     search_fields = ("name", "ico", "code")
-    list_filter = (ActiveClientFilter, "is_landlord", SiteFilter)
+    list_filter = (ActiveClientFilter, "is_landlord", SiteFilter, "insolvency_status")
     fieldsets = (
         ("Základní údaje", {
             "fields": (("name", "code"), ("is_active", "is_landlord"))
@@ -337,7 +340,11 @@ class ClientAdmin(ModelAdmin):
             "fields": (("street", "street_number"), ("zip_code", "city"))
         }),
         ("Identifikace", {
-            "fields": (("ico", "dic", "ares_button"), "vat_payer", ("registry_court", "registry_section", "registry_insert"))
+            "fields": (
+                ("ico", "dic", "ares_button"), "vat_payer",
+                ("registry_court", "registry_section", "registry_insert"),
+                "insolvency_status",
+            )
         }),
         ("Bankovní spojení", {
             "fields": (("bank_name", "bank_account", "bank_code"),)
@@ -349,7 +356,7 @@ class ClientAdmin(ModelAdmin):
             "fields": ("note",)
         }),
     )
-    readonly_fields = ("ares_button",)
+    readonly_fields = ("ares_button", "insolvency_status")
     inlines = [ClientCardInline, ContractInline]
     actions = ["export_emaily"]
 
@@ -359,6 +366,15 @@ class ClientAdmin(ModelAdmin):
         if "v likvidaci" in obj.name.lower():
             return format_html('<span style="color:#dc2626; font-weight:600;">{}</span>', obj.name)
         return obj.name
+
+    @admin.display(description="Insolvence", ordering="insolvency_status")
+    def insolvency_display(self, obj):
+        from django.utils.html import format_html
+        if obj.insolvency_status == Client.InsolvencyStatus.ACTIVE:
+            return format_html('<span style="color:#dc2626; font-weight:600;">⚠ Aktivní</span>')
+        if obj.insolvency_status == Client.InsolvencyStatus.HISTORICAL:
+            return format_html('<span style="color:#b45309;">Dříve</span>')
+        return "—"
 
     class Media:
         js = ("core/js/ares_lookup.js",)
