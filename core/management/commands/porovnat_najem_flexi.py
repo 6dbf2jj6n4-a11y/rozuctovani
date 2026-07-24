@@ -1,24 +1,46 @@
 """
 Porovná vydané faktury z ABRA Flexi (popis 'nájem MM/YYYY') s naším
-vnitřním vyúčtováním nájemného (BillingLine, invoice_class='rent') za
-stejné období. Srovnává se s částkou bez DPH (sumZklCelkem) - naše
-nájemné je bez DPH, ta se podle smlouvy připočítává až na faktuře.
+nájemným za stejné období. Nájemné neprochází přes billing/engine.py
+(BillingLine) - nerozpočítává se mezi klienty, každá karta platí jen
+podle vlastní plochy × sazby (CardUnit) - proto se tady počítá přímo
+z aktivních karet klienta v daném období, s poměrnou částí podle počtu
+aktivních dnů (viz ClientCard.active_days_in_period), stejně jako to
+dělá billing/engine.py u ostatních položek.
+
+Srovnává se s částkou bez DPH (sumZklCelkem) - naše nájemné je bez
+DPH, ta se podle smlouvy připočítává až na faktuře.
 
 Použití:
   python manage.py porovnat_najem_flexi 06/2026
 """
 import unicodedata
+from decimal import Decimal
 
 from django.core.management.base import BaseCommand, CommandError
 
 from core.flexi_client import FlexiAPIError, FlexiClient
-from core.models import BillingLine, Period
+from core.models import ClientCard, Period
 
 
 def _normalize(name):
     decomposed = unicodedata.normalize("NFKD", name or "")
     without_diacritics = "".join(c for c in decomposed if not unicodedata.combining(c))
     return without_diacritics.strip().lower()
+
+
+def _card_rent_for_period(card, period):
+    """Nájemné karty za dané období, poměrné podle počtu aktivních dnů."""
+    period_start, period_end = period.date_range()
+    active_days = card.active_days_in_period(period_start, period_end)
+    if active_days <= 0:
+        return Decimal("0")
+    monthly_total = sum(
+        (cu.monthly_rent or Decimal("0") for cu in card.card_units.all()),
+        Decimal("0"),
+    )
+    if active_days >= period.days_in_period:
+        return monthly_total
+    return monthly_total * Decimal(active_days) / Decimal(period.days_in_period)
 
 
 class Command(BaseCommand):
@@ -61,17 +83,15 @@ class Command(BaseCommand):
             entry["vc_dph"] += float(inv.get("sumCelkem") or 0)
             entry["count"] += 1
 
-        lines = (
-            BillingLine.objects
-            .filter(period=period, service_item__invoice_class="rent")
-            .select_related("client_card__client")
-        )
+        cards = ClientCard.objects.select_related("client").prefetch_related("card_units")
         our_by_client = {}
-        for line in lines:
-            c = line.client_card.client
-            key = _normalize(c.name)
-            entry = our_by_client.setdefault(key, {"name": c.name, "amount": 0.0})
-            entry["amount"] += float(line.amount)
+        for card in cards:
+            rent = _card_rent_for_period(card, period)
+            if rent == 0:
+                continue
+            key = _normalize(card.client.name)
+            entry = our_by_client.setdefault(key, {"name": card.client.name, "amount": 0.0})
+            entry["amount"] += float(rent)
 
         all_keys = sorted(
             set(flexi_by_client) | set(our_by_client),
