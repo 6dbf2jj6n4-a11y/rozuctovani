@@ -809,7 +809,7 @@ class PeriodAdmin(ModelAdmin):
     list_display = ("__str__", "status", "days_in_period")
     list_filter = ("status",)
     ordering = ("-year", "-month")
-    actions = ["spocitat_rozuctovani"]
+    actions = ["spocitat_rozuctovani", "uzavrit_obdobi", "znovu_otevrit_obdobi"]
 
     def get_actions(self, request):
         actions = super().get_actions(request)
@@ -832,17 +832,35 @@ class PeriodAdmin(ModelAdmin):
         self._spocitat_rozuctovani(request, queryset, site=None)
 
     def _spocitat_rozuctovani(self, request, queryset, site=None):
-        from billing.engine import calculate_period
+        from billing.engine import BillingPeriodClosedError, calculate_period
 
         for period in queryset:
-            result = calculate_period(period, site=site)
             label = f"{period} / {site}" if site else str(period)
+            try:
+                result = calculate_period(period, site=site)
+            except BillingPeriodClosedError as e:
+                self.message_user(request, str(e), level=messages.ERROR)
+                continue
             text = f"{label}: vytvořeno {result['created']} vyúčtovaných položek."
             if result["warnings"]:
                 text += " Varování: " + " | ".join(result["warnings"])
                 self.message_user(request, text, level=messages.WARNING)
             else:
                 self.message_user(request, text, level=messages.SUCCESS)
+
+    @admin.action(description="Uzavřít vybraná období (zamkne proti přepočtu)")
+    def uzavrit_obdobi(self, request, queryset):
+        updated = queryset.update(status=Period.Status.CLOSED)
+        self.message_user(
+            request, f"Uzavřeno {updated} období - rozúčtování už nepůjde přepočítat.", level=messages.SUCCESS
+        )
+
+    @admin.action(description="Znovu otevřít vybraná období")
+    def znovu_otevrit_obdobi(self, request, queryset):
+        updated = queryset.update(status=Period.Status.OPEN)
+        self.message_user(
+            request, f"Znovu otevřeno {updated} období - rozúčtování teď jde přepočítat.", level=messages.WARNING
+        )
 
 
 @admin.register(InflationRate)

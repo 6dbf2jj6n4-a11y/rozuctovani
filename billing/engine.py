@@ -42,12 +42,23 @@ Pozn.: jde o prvni funkcni verzi - chybejici odecty, nulove
 celkove vahy apod. jsou osetreny tak, ze se polozka/karta
 vynecha a duvod se zaznamena do `warnings` ve vraceném souhrnu.
 Doporucuji pred ostrym pouzitim projit a doplnit dle realnych dat.
+
+Reprodukovatelnost v case: jakmile je Obdobi uzavrene (Period.status
+== CLOSED), tato funkce odmita prepocet (viz BillingPeriodClosedError).
+BillingLine radky uzavreneho obdobi tak zustavaji navzdy tim, co bylo
+skutecne vyuctovano - i kdyz se pozdeji zmeni karty klientu, klice
+nebo ceny, ktere do vypoctu vstupovaly. Pro opravu je potreba obdobi
+vedome znovu otevrit (admin akce u Obdobi).
 """
 from decimal import Decimal
 
 from django.db import transaction
 
-from core.models import AllocationKey, BillingLine, CostEntry, PriceList, ServicePoolItem
+from core.models import AllocationKey, BillingLine, CostEntry, Period, PriceList, ServicePoolItem
+
+
+class BillingPeriodClosedError(Exception):
+    """Obdobi je uzavrene (Period.status == CLOSED) - prepocet neni povolen."""
 
 # Typy klicu, ktere prispivaji absolutni Kc castkou primo (mimo vazene podily) -
 # 'Pevna castka' ma castku ulozenou primo, 'Plocha x cena/m2' se dopocitava
@@ -190,7 +201,16 @@ def calculate_period(period, site=None):
     Bez `site` se pocita (a maze/prepisuje) za vsechny arealy najednou.
 
     Vraci dict se souhrnem: {"created": int, "warnings": [str, ...]}.
+
+    Vyhodi BillingPeriodClosedError, pokud je `period` uzavrene - viz
+    modulovy docstring ("Reprodukovatelnost v case").
     """
+    if period.status == Period.Status.CLOSED:
+        raise BillingPeriodClosedError(
+            f"Období {period} je uzavřené - přepočet není povolen. "
+            f"Nejprve ho v adminu znovu otevři (akce u Období)."
+        )
+
     warnings = []
     created = 0
 
