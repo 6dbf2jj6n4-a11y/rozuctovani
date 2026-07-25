@@ -257,6 +257,8 @@ class ClientCardInline(TabularInline):
     def description_link(self, obj):
         from django.urls import reverse
         from django.utils.html import format_html
+        if not obj.pk:
+            return "(uložte klienta, pak půjde otevřít)"
         url = reverse("admin:core_clientcard_change", args=[obj.pk])
         return format_html('<a href="{}">{}</a>', url, obj.description or "—")
     description_link.short_description = "Popis karty"
