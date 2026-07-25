@@ -27,11 +27,6 @@ from docx.text.paragraph import Paragraph
 
 TEMPLATE_PATH = Path(__file__).resolve().parent / "contract_templates" / "smlouva_fm_template.docx"
 
-# Pronajimatel (CALAMARI SE) je v teto sablone vzdy stejny - zastupuje ho Ing. Daniel David,
-# jak uz je uvedeno v pevne casti zahlavi smlouvy (odstavec 13).
-LANDLORD_NAME = "CALAMARI SE"
-LANDLORD_REPRESENTATIVE = "Ing. Daniel DAVID"
-
 # Bezna velikost textu ve Smlouve (viz napr. clanek 1) - u noveho runu vytvoreneho
 # pres paragraph.add_run() se NEDEDI formatovani od sousednich runu ani od pPr
 # odstavce, jinak spadne na vychozi styl dokumentu (11pt) - proto se vynucuje
@@ -81,20 +76,54 @@ def format_czk(amount):
     return f"{amount:,}".replace(",", " ") + " Kč"
 
 
+def get_landlord():
+    """Vrati Klienta oznaceneho jako Pronajimatel (Client.is_landlord=True).
+
+    Aplikace pocita s tim, ze takovy Klient je v databazi prave jeden -
+    vynucuje se to na urovni admin formulare (Client.clean(), viz core/models.py),
+    ne na urovni databaze, takze tato funkce prípadnou duplicitu neresí a
+    jednoduse vezme prvniho nalezeneho."""
+    from core.models import Client
+    landlord = Client.objects.filter(is_landlord=True).first()
+    if landlord is None:
+        raise ValueError(
+            "V databazi neni zadny Klient oznaceny jako Pronajimatel - "
+            "oznac prislusneho Klienta prepinacem 'Pronajímatel' v adminu."
+        )
+    return landlord
+
+
+def _format_address(obj):
+    address = " ".join(p for p in (obj.street, obj.street_number) if p)
+    if obj.zip_code or obj.city:
+        address = f"{address}, {obj.zip_code} {obj.city}".strip(", ")
+    return address
+
+
 def contract_to_template_data(contract):
     """Sestavi `data` dict pro fill_contract_template() z instance Contract
     (a jejiho navazaneho Client) - sdileno mezi hromadnou akci v seznamu
     Smluv a tlacitkem generovani na detailu jedne Smlouvy."""
     client = contract.client
-    address = " ".join(p for p in (client.street, client.street_number) if p)
-    if client.zip_code or client.city:
-        address = f"{address}, {client.zip_code} {client.city}".strip(", ")
+    landlord = get_landlord()
 
     return {
         "site_name": str(contract.site) if contract.site else "",
         "lease_subject_text": (contract.site.lease_subject_text if contract.site else "") or "",
+        "landlord_name": landlord.name,
+        "landlord_address": _format_address(landlord),
+        "landlord_ico": landlord.ico,
+        "landlord_dic": landlord.dic,
+        "landlord_bank_name": landlord.bank_name,
+        "landlord_bank_account": landlord.bank_account,
+        "landlord_bank_code": landlord.bank_code,
+        "landlord_registry_court": landlord.registry_court,
+        "landlord_registry_section": landlord.registry_section,
+        "landlord_registry_insert": landlord.registry_insert,
+        "landlord_representative_name": landlord.representative_name,
+        "landlord_representative_role": landlord.representative_role,
         "client_name": client.name,
-        "client_address": address,
+        "client_address": _format_address(client),
         "client_ico": client.ico,
         "client_dic": client.dic,
         "registry_court": client.registry_court,
@@ -317,11 +346,42 @@ def fill_contract_template(data, output_path, template_path=TEMPLATE_PATH):
     p = doc.paragraphs
 
     client_name = data.get("client_name") or ""
+    landlord_name = data.get("landlord_name") or ""
 
     # Zahlavi dokumentu (nahoře na kazde strance) se NEZVYRAZNUJE - jen
     # identifikuje areal/smluvni strany, neni to "doplneny udaj" smlouvy.
     header_para = doc.sections[0].header.paragraphs[0]
-    _set_paragraph_text(header_para, f"{data.get('site_name') or ''}\t\t{LANDLORD_NAME} / {client_name}")
+    _set_paragraph_text(header_para, f"{data.get('site_name') or ''}\t\t{landlord_name} / {client_name}")
+
+    # --- blok Pronajimatele v zahlavi (odstavce 6-13) - bere se z Klienta
+    # oznaceneho Client.is_landlord=True (viz get_landlord()), NE ze
+    # sablony - aplikace tak neni navazana na jednu konkretni firmu.
+    # Neni to "doplneny udaj" teto konkretni Smlouvy (je stejny pro vsechny
+    # Smlouvy), proto se stejne jako zahlavi NEZVYRAZNUJE. ---
+    _set_paragraph_runs(p[6], [(landlord_name, False)])
+    _set_paragraph_runs(p[7], [("se sídlem na adrese ", False), (data.get("landlord_address") or "", False)])
+    _set_paragraph_runs(p[8], [("IČ: ", False), (data.get("landlord_ico") or "", False)])
+
+    landlord_dic = (data.get("landlord_dic") or "").strip()
+    landlord_dic_digits = landlord_dic[2:] if landlord_dic.upper().startswith("CZ") else landlord_dic
+    _set_paragraph_runs(p[9], [("DIČ: CZ", False), (landlord_dic_digits, False)])
+
+    _set_paragraph_runs(p[10], [("Bankovní spojení: ", False), (data.get("landlord_bank_name") or "", False)])
+    bank_account = data.get("landlord_bank_account") or ""
+    bank_code = data.get("landlord_bank_code") or ""
+    account_display = f"{bank_account}/{bank_code}" if bank_code else bank_account
+    _set_paragraph_runs(p[11], [("číslo účtu: ", False), (account_display, False)])
+
+    landlord_court = _court_instrumental(data.get("landlord_registry_court"))
+    _set_paragraph_runs(p[12], [
+        ("Společnost zapsána v obchodním rejstříku vedeném ", False), (landlord_court, False),
+        (", oddíl ", False), (data.get("landlord_registry_section") or "", False),
+        (", vložka ", False), (data.get("landlord_registry_insert") or "", False),
+    ])
+    _set_paragraph_runs(p[13], [
+        ("Společnost zastupuje: ", False), (data.get("landlord_representative_name") or "", False),
+        (", ", False), (data.get("landlord_representative_role") or "", False),
+    ])
 
     # --- blok Najemce v zahlavi (odstavce 19-25) - PRED clankem 1, indexy
     # tedy zustavaji stabilni bez ohledu na delku vyctu nemovitosti. ---
@@ -402,6 +462,7 @@ def fill_contract_template(data, output_path, template_path=TEMPLATE_PATH):
     # nadpis/cara/jmena. ---
     paragraphs = doc.paragraphs
     line_idx = _find_paragraph_index(paragraphs, "CEA SSF") - 1
+    landlord_rep = data.get("landlord_representative_name") or ""
     tenant_rep = data.get("representative_name") or ""
 
     _set_paragraph_runs(paragraphs[line_idx], [("Pronajímatel\tNájemce", False)])
@@ -409,7 +470,7 @@ def fill_contract_template(data, output_path, template_path=TEMPLATE_PATH):
         ("_" * 30 + "\t" + "_" * 30, False),
     ])
     _set_paragraph_runs(paragraphs[line_idx + 2], [
-        (LANDLORD_REPRESENTATIVE, False), ("\t", False), (tenant_rep, True),
+        (landlord_rep, False), ("\t", False), (tenant_rep, True),
     ])
 
     # python-docx prijima jak cestu (str/Path), tak zapisovatelny stream (napr. BytesIO)

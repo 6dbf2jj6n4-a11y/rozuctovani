@@ -112,6 +112,15 @@ class Client(models.Model):
     registry_section = models.CharField("Oddíl", max_length=20, blank=True)
     registry_insert = models.CharField("Vložka", max_length=20, blank=True)
 
+    representative_name = models.CharField(
+        "Zástupce (jméno)", max_length=200, blank=True,
+        help_text="Napr. 'Ing. Daniel DAVID' - u Pronajímatele se použije jako podpis ve Smlouvě.",
+    )
+    representative_role = models.CharField(
+        "Zástupce (funkce)", max_length=200, blank=True,
+        help_text="Napr. 'jediný člen představenstva' nebo 'jednatel'.",
+    )
+
     bank_name = models.CharField("Banka", max_length=50, blank=True)
     bank_account = models.CharField("Číslo účtu", max_length=50, blank=True)
     bank_code = models.CharField("Kód banky", max_length=10, blank=True)
@@ -127,6 +136,14 @@ class Client(models.Model):
 
     def __str__(self):
         return self.name
+
+    def clean(self):
+        super().clean()
+        if self.is_landlord and Client.objects.filter(is_landlord=True).exclude(pk=self.pk).exists():
+            raise ValidationError(
+                "Pronajímatel může být v aplikaci nastaven jen jeden - odškrtni "
+                "tento příznak u druhého klienta, který ho má aktuálně nastavený."
+            )
 
 
 class Contract(models.Model):

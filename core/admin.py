@@ -362,6 +362,7 @@ class ClientAdmin(ModelAdmin):
             "fields": (
                 ("ico", "dic", "ares_button"), "vat_payer",
                 ("registry_court", "registry_section", "registry_insert"),
+                ("representative_name", "representative_role"),
                 "insolvency_status",
             )
         }),
@@ -642,7 +643,11 @@ class ContractAdmin(ModelAdmin):
             )
             return redirect("admin:core_contract_change", contract.pk)
         buf = BytesIO()
-        fill_contract_template(contract_to_template_data(contract), buf)
+        try:
+            fill_contract_template(contract_to_template_data(contract), buf)
+        except ValueError as exc:
+            self.message_user(request, str(exc), level=messages.ERROR)
+            return redirect("admin:core_contract_change", contract.pk)
         filename = f"smlouva_{contract.client.code or contract.client.pk}_{contract.pk}.docx"
         contract.document.save(filename, ContentFile(buf.getvalue()), save=True)
 
