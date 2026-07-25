@@ -29,6 +29,14 @@ class Site(models.Model):
 
     name = models.CharField("Nazev", max_length=200)
     address = models.CharField("Adresa", max_length=300, blank=True)
+    lease_subject_text = models.TextField(
+        "Vymezení předmětu nájmu (text čl. 1 Smlouvy)", blank=True,
+        help_text=(
+            "Používá se při generování Smlouvy (core/contract_generator.py). "
+            "První řádek je úvodní věta (katastrální úřad, LV, obec, k.ú.), "
+            "každý další řádek je jeden pozemek/budova z výčtu."
+        ),
+    )
 
     class Meta:
         verbose_name = "Areál / objekt"
