@@ -12,6 +12,12 @@ v ARES dve veci, ktere signalizuji riziko dalsi spoluprace:
    do Client.insolvency_status ("aktivni"/"historicky"/prazdne), coz se
    v adminu take barevne zvyrazni.
 
+U klientu - fyzickych osob (OSVC, pravniForma "101") navic jen
+informativne (nic se neuklada, neni to risk flag) vypise pocet
+aktivnich provozoven ze zivnostenskeho rejstriku (RZP) - 0 aktivnich
+muze byt uzitecny kontext k insolvenci/likvidaci, ale samo o sobe nic
+neznamena (spousta OSVC podnika bez registrovane provozovny).
+
 Pouziti:
   python manage.py zkontrolovat_rizika
   python manage.py zkontrolovat_rizika --dry-run
@@ -20,7 +26,7 @@ import time
 
 from django.core.management.base import BaseCommand
 
-from core.ares_client import lookup_company
+from core.ares_client import PRAVNI_FORMA_OSVC, lookup_company, lookup_trade_register
 from core.models import Client
 
 
@@ -38,6 +44,7 @@ class Command(BaseCommand):
         already_liquidation = []
         newly_insolvent = []
         resolved_insolvent = []
+        no_active_provozovna = []
         not_found = 0
 
         for client in clients:
@@ -70,6 +77,13 @@ class Command(BaseCommand):
                     client.insolvency_status = new_status
                     client.save(update_fields=["insolvency_status"])
 
+            # 3) OSVC - informativni pohled do zivnostenskeho rejstriku
+            if company.get("pravni_forma") == PRAVNI_FORMA_OSVC:
+                trade = lookup_trade_register(client.ico)
+                if trade and trade.get("provozovny_aktivni") == 0:
+                    no_active_provozovna.append((client.name, trade["provozovny_zanikle"]))
+                time.sleep(0.2)
+
             time.sleep(0.2)  # slusne tempo dotazu na verejne ARES API
 
         if newly_liquidation:
@@ -85,6 +99,11 @@ class Command(BaseCommand):
                 self.stdout.write(f"  {name}")
         if resolved_insolvent:
             self.stdout.write(self.style.WARNING("\nInsolvenční řízení už není aktivní (bylo) u: " + ", ".join(resolved_insolvent)))
+
+        if no_active_provozovna:
+            self.stdout.write(f"\nInformativně - OSVČ bez aktivní provozovny (RŽP, {len(no_active_provozovna)}):")
+            for name, zanikle in no_active_provozovna:
+                self.stdout.write(f"  {name} (0 aktivních, {zanikle} zaniklých)")
 
         self.stdout.write(self.style.SUCCESS(
             f"\nHotovo{' (dry-run, nic se neulozilo)' if dry_run else ''}: zkontrolováno {clients.count()} "

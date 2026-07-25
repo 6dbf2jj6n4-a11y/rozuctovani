@@ -11,6 +11,11 @@ import urllib.request
 
 BASIC_URL = "https://ares.gov.cz/ekonomicke-subjekty-v-be/rest/ekonomicke-subjekty/{ico}"
 VR_URL = "https://ares.gov.cz/ekonomicke-subjekty-v-be/rest/ekonomicke-subjekty-vr/{ico}"
+RZP_URL = "https://ares.gov.cz/ekonomicke-subjekty-v-be/rest/ekonomicke-subjekty-rzp/{ico}"
+
+# pravniForma "101" = fyzicka osoba podnikajici dle zivnostenskeho zakona
+# (OSVC) - ta neni v obchodnim rejstriku (VR), ale v zivnostenskem (RZP).
+PRAVNI_FORMA_OSVC = "101"
 
 # ARES vraci soud jen jako zkratku (napr. "KSOS") - obchodni rejstrik v CR
 # vede jen techto 8 soudu, mapa je tedy uzavrena a stabilni.
@@ -56,6 +61,7 @@ def lookup_company(ico):
         "name": data.get("obchodniJmeno") or "",
         "dic": data.get("dic") or "",
         "insolvence_stav": (data.get("seznamRegistraci") or {}).get("stavZdrojeIr"),
+        "pravni_forma": data.get("pravniForma") or "",
     }
     sidlo = data.get("sidlo") or {}
     result["street"] = sidlo.get("nazevUlice") or sidlo.get("nazevObce") or ""
@@ -89,4 +95,37 @@ def lookup_registry(ico):
         "court": COURT_NAMES.get(soud_code, soud_code or ""),
         "section": sz.get("oddil") or "",
         "insert": str(vlozka) if vlozka else "",
+    }
+
+
+def lookup_trade_register(ico):
+    """Vrati dict {zivnosti_aktivni, zivnosti_zanikle, provozovny_aktivni,
+    provozovny_zanikle, obory} nebo None - protejsek k lookup_registry(),
+    ale pro zivnostensky rejstrik (RZP), kde jsou fyzicke osoby (OSVC),
+    ktere v obchodnim rejstriku (VR) vubec nejsou.
+
+    Cistě informativni signal (napr. 0 aktivnich provozoven) - NENI to
+    samo o sobe rizikovy priznak jako "v likvidaci"/insolvence, spousta
+    OSVC legitimne podnika bez registrovane provozovny.
+    """
+    data = _get_json(RZP_URL.format(ico=ico))
+    if not data:
+        return None
+    zaznamy = data.get("zaznamy") or []
+    if not zaznamy:
+        return None
+    z = zaznamy[0]
+    zivnosti_stav = z.get("zivnostiStav") or {}
+    provozovny_stav = z.get("provozovnyStav") or {}
+    aktivni_obory = [
+        zivnost.get("predmetPodnikani")
+        for zivnost in (z.get("zivnosti") or [])
+        if not zivnost.get("datumZaniku") and zivnost.get("predmetPodnikani")
+    ]
+    return {
+        "zivnosti_aktivni": zivnosti_stav.get("pocetAktivnich"),
+        "zivnosti_zanikle": zivnosti_stav.get("pocetZaniklych"),
+        "provozovny_aktivni": provozovny_stav.get("pocetAktivnich"),
+        "provozovny_zanikle": provozovny_stav.get("pocetZaniklych"),
+        "obory": aktivni_obory,
     }
