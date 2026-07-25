@@ -6,6 +6,7 @@ aplikaci."""
 
 
 def site_subheader(request):
-    from core.models import Client
-    landlord = Client.objects.filter(is_landlord=True).first()
-    return landlord.name if landlord else None
+    # DOCASNY DIAGNOSTICKY MARKER - viz konverzace, az potvrdime ze
+    # SITE_SUBHEADER mechanismus na produkci vubec funguje, vratime
+    # zpet na puvodni dynamicke dohledani Client.is_landlord.
+    return "DIAG_MARKER_funguje"
