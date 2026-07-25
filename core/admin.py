@@ -348,7 +348,7 @@ class ActiveClientFilter(admin.SimpleListFilter):
 
 @admin.register(Client)
 class ClientAdmin(ModelAdmin):
-    list_display = ("name_display", "code", "ico", "contact_email", "contact_phone", "is_active", "is_landlord")
+    list_display = ("name_display", "code", "ico", "contact_email", "contact_phone", "is_active")
     search_fields = ("name", "ico", "code")
     list_filter = (ActiveClientFilter, "is_landlord", SiteFilter, "insolvency_status")
     fieldsets = (
@@ -392,6 +392,8 @@ class ClientAdmin(ModelAdmin):
         from django.utils.html import format_html
         if self._is_risky(obj):
             return format_html('<span style="color:#dc2626; font-weight:600;">{}</span>', obj.name)
+        if obj.is_landlord:
+            return format_html('<span style="color:#ca8a04; font-weight:600;">{}</span>', obj.name)
         return obj.name
 
     class Media:
