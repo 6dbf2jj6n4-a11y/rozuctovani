@@ -135,6 +135,7 @@ CSRF_TRUSTED_ORIGINS = [
 UNFOLD = {
     "SITE_TITLE": "RENTE)(",
     "SITE_HEADER": "RENTEX_2026",
+    "SITE_SUBHEADER": "core.admin_branding.site_subheader",
     "SIDEBAR": {
         "show_search": True,
         "show_all_applications": False,
