@@ -245,6 +245,13 @@ class ClientCardInlineForm(forms.ModelForm):
 
 
 class ClientCardInline(TabularInline):
+    """Jen zobrazeni/editace existujicich Karet - pridavani nove Karty jde
+    pres tlacitko "+ Přidat kartu" na strance klienta (viz
+    ClientAdmin.add_card_button), ktere vede na standardni pridavaci
+    stranku Karty s klientem uz predvyplnenym. Inline pridavani je
+    zamerne vypnute (has_add_permission=False) - prazdny radek pridany
+    primo tady nema zadnou validaci povinnych udaju a driv na nej ani
+    nesel kliknout (viz git historie - "Karta klienta s klíčem None")."""
     model = ClientCard
     form = ClientCardInlineForm
     extra = 0
@@ -253,6 +260,9 @@ class ClientCardInline(TabularInline):
     can_delete = True
     verbose_name = "Karta"
     verbose_name_plural = "Karty klientů"
+
+    def has_add_permission(self, request, obj=None):
+        return False
 
     def description_link(self, obj):
         from django.urls import reverse
@@ -265,15 +275,20 @@ class ClientCardInline(TabularInline):
 
 
 class ContractInline(TabularInline):
-    """Jedna inline sekce pro pridavani i editaci Smluv klienta primo zde.
-    Cislo smlouvy je bezne editovatelne pole (zadava se hned pri pridani).
-    Pokrocila pole (generovani dokumentu, poznamka) jsou jen na vlastni
-    strance Smlouvy - tam vede odkaz "Zmenit" (show_change_link)."""
+    """Jen zobrazeni/editace existujicich Smluv - pridavani nove Smlouvy
+    jde pres tlacitko "+ Přidat smlouvu" na strance klienta (viz
+    ClientAdmin.add_contract_button), ktere vede na standardni pridavaci
+    stranku Smlouvy s klientem uz predvyplnenym a vynucenymi povinnymi
+    udaji (cislo, platnost od, vypovedni lhuta - viz ContractAdminForm).
+    Inline pridavani je zamerne vypnute (has_add_permission=False)."""
     model = Contract
     extra = 0
     fields = ("number", "site", "valid_from", "signed_on", "deposit_czk", "deposit_paid", "has_inflation_clause")
     autocomplete_fields = ("site",)
     show_change_link = True
+
+    def has_add_permission(self, request, obj=None):
+        return False
     verbose_name = "Smlouva"
     verbose_name_plural = "Smlouvy"
 
@@ -351,13 +366,42 @@ class ClientAdmin(ModelAdmin):
         ("Kontakt", {
             "fields": (("contact_email", "contact_phone"),)
         }),
+        ("Karty a smlouvy", {
+            "fields": (("add_card_button", "add_contract_button"),)
+        }),
         ("Poznámka", {
             "fields": ("note",)
         }),
     )
-    readonly_fields = ("ares_button", "insolvency_status")
+    readonly_fields = ("ares_button", "insolvency_status", "add_card_button", "add_contract_button")
     inlines = [ClientCardInline, ContractInline]
     actions = ["export_emaily"]
+
+    def add_card_button(self, obj):
+        from django.urls import reverse
+        from django.utils.html import format_html
+        if not obj.pk:
+            return "Nejprve klienta uložte."
+        url = reverse("admin:core_clientcard_add") + f"?client={obj.pk}"
+        return format_html(
+            '<a href="{}" style="padding:6px 16px; border-radius:6px; background:#2563eb; '
+            'color:white; font-weight:600; text-decoration:none; display:inline-block;">'
+            '+ Přidat kartu</a>', url,
+        )
+    add_card_button.short_description = ""
+
+    def add_contract_button(self, obj):
+        from django.urls import reverse
+        from django.utils.html import format_html
+        if not obj.pk:
+            return "Nejprve klienta uložte."
+        url = reverse("admin:core_contract_add") + f"?client={obj.pk}"
+        return format_html(
+            '<a href="{}" style="padding:6px 16px; border-radius:6px; background:#2563eb; '
+            'color:white; font-weight:600; text-decoration:none; display:inline-block;">'
+            '+ Přidat smlouvu</a>', url,
+        )
+    add_contract_button.short_description = ""
 
     def _is_risky(self, obj):
         """Klient v likvidaci nebo se zaznamem (aktivnim ci drivejsim)
@@ -440,13 +484,65 @@ class ClientAdmin(ModelAdmin):
         )
 
 
+class ContractAdminForm(forms.ModelForm):
+    na_dobu_neurcitou = forms.BooleanField(
+        label="Na dobu neurčitou", required=False,
+        help_text="Zaškrtnuto (výchozí) = pole 'Platnost do' se nepoužije a zůstane prázdné.",
+    )
+
+    class Meta:
+        model = Contract
+        fields = "__all__"
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["number"].required = True
+        self.fields["valid_from"].required = True
+        self.fields["notice_period_months"].required = True
+        if not self.instance.pk or not self.instance.valid_to:
+            self.fields["na_dobu_neurcitou"].initial = True
+
+    def clean(self):
+        cleaned_data = super().clean()
+        if cleaned_data.get("na_dobu_neurcitou"):
+            cleaned_data["valid_to"] = None
+        return cleaned_data
+
+
 @admin.register(Contract)
 class ContractAdmin(ModelAdmin):
+    form = ContractAdminForm
     list_display = ("client", "number", "valid_from", "valid_to", "deposit_paid", "has_inflation_clause")
     list_filter = ("deposit_paid", "has_inflation_clause")
     search_fields = ("number", "client__name", "client__ico")
     autocomplete_fields = ("client", "site")
     actions = ["generate_document", "generovat_karty_inflace"]
+    fieldsets = (
+        ("Základní údaje", {
+            "fields": (("client", "site"), ("number", "signed_on"))
+        }),
+        ("Trvání a výpověď", {
+            "fields": ("valid_from", "na_dobu_neurcitou", "valid_to", "notice_period_months")
+        }),
+        ("Kauce a pojištění", {
+            "fields": (("deposit_czk", "deposit_paid"), "insurance_amount_czk")
+        }),
+        ("Inflační doložka", {
+            "fields": ("has_inflation_clause", "inflation_increase_from")
+        }),
+        ("Fakturace a zástupce", {
+            "fields": ("invoicing_email", ("representative_name", "representative_role"))
+        }),
+        ("Dokument", {
+            "fields": ("generate_button", "document")
+        }),
+        ("Poznámka", {
+            "fields": ("note",)
+        }),
+    )
+    conditional_fields = {
+        "valid_to": "na_dobu_neurcitou == false",
+    }
 
     @admin.action(description="Vygenerovat nové karty s inflací")
     def generovat_karty_inflace(self, request, queryset):
