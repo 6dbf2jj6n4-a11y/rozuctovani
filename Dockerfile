@@ -10,6 +10,10 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
 # build 2
+# cache-bust 2026-07-25b - Railway opakovane znovupouzival stary cache image
+# i pres nove commity (SITE_SUBHEADER se nikdy nenasadilo) - tenhle radek
+# vynuti skutecny rebuild od tohoto bodu dal.
+RUN echo "cachebust-2026-07-25b"
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
