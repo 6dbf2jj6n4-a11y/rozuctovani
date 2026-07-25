@@ -246,12 +246,13 @@ class ClientCardInlineForm(forms.ModelForm):
 
 class ClientCardInline(TabularInline):
     """Jen zobrazeni/editace existujicich Karet - pridavani nove Karty jde
-    pres tlacitko "+ Přidat kartu" na strance klienta (viz
-    ClientAdmin.add_card_button), ktere vede na standardni pridavaci
-    stranku Karty s klientem uz predvyplnenym. Inline pridavani je
-    zamerne vypnute (has_add_permission=False) - prazdny radek pridany
-    primo tady nema zadnou validaci povinnych udaju a driv na nej ani
-    nesel kliknout (viz git historie - "Karta klienta s klíčem None")."""
+    pres tlacitko "+ Přidat kartu" pod touto sekci (viz
+    templates/admin/core/client/clientcard_inline_tabular.html), ktere
+    vede na standardni pridavaci stranku Karty s klientem uz
+    predvyplnenym. Inline pridavani je zamerne vypnute
+    (has_add_permission=False) - prazdny radek pridany primo tady nema
+    zadnou validaci povinnych udaju a driv na nej ani nesel kliknout
+    (viz git historie - "Karta klienta s klíčem None")."""
     model = ClientCard
     form = ClientCardInlineForm
     extra = 0
@@ -260,6 +261,7 @@ class ClientCardInline(TabularInline):
     can_delete = True
     verbose_name = "Karta"
     verbose_name_plural = "Karty klientů"
+    template = "admin/core/client/clientcard_inline_tabular.html"
 
     def has_add_permission(self, request, obj=None):
         return False
@@ -276,21 +278,24 @@ class ClientCardInline(TabularInline):
 
 class ContractInline(TabularInline):
     """Jen zobrazeni/editace existujicich Smluv - pridavani nove Smlouvy
-    jde pres tlacitko "+ Přidat smlouvu" na strance klienta (viz
-    ClientAdmin.add_contract_button), ktere vede na standardni pridavaci
-    stranku Smlouvy s klientem uz predvyplnenym a vynucenymi povinnymi
-    udaji (cislo, platnost od, vypovedni lhuta - viz ContractAdminForm).
-    Inline pridavani je zamerne vypnute (has_add_permission=False)."""
+    jde pres tlacitko "+ Přidat smlouvu" pod touto sekci (viz
+    templates/admin/core/client/contract_inline_tabular.html), ktere
+    vede na standardni pridavaci stranku Smlouvy s klientem uz
+    predvyplnenym a vynucenymi povinnymi udaji (cislo, platnost od,
+    vypovedni lhuta - viz ContractAdminForm). Inline pridavani je
+    zamerne vypnute (has_add_permission=False)."""
     model = Contract
     extra = 0
     fields = ("number", "site", "valid_from", "signed_on", "deposit_czk", "deposit_paid", "has_inflation_clause")
     autocomplete_fields = ("site",)
     show_change_link = True
+    template = "admin/core/client/contract_inline_tabular.html"
+
+    verbose_name = "Smlouva"
+    verbose_name_plural = "Smlouvy"
 
     def has_add_permission(self, request, obj=None):
         return False
-    verbose_name = "Smlouva"
-    verbose_name_plural = "Smlouvy"
 
 
 class SiteFilter(admin.SimpleListFilter):
@@ -366,42 +371,13 @@ class ClientAdmin(ModelAdmin):
         ("Kontakt", {
             "fields": (("contact_email", "contact_phone"),)
         }),
-        ("Karty a smlouvy", {
-            "fields": (("add_card_button", "add_contract_button"),)
-        }),
         ("Poznámka", {
             "fields": ("note",)
         }),
     )
-    readonly_fields = ("ares_button", "insolvency_status", "add_card_button", "add_contract_button")
+    readonly_fields = ("ares_button", "insolvency_status")
     inlines = [ClientCardInline, ContractInline]
     actions = ["export_emaily"]
-
-    def add_card_button(self, obj):
-        from django.urls import reverse
-        from django.utils.html import format_html
-        if not obj.pk:
-            return "Nejprve klienta uložte."
-        url = reverse("admin:core_clientcard_add") + f"?client={obj.pk}"
-        return format_html(
-            '<a href="{}" style="padding:6px 16px; border-radius:6px; background:#2563eb; '
-            'color:white; font-weight:600; text-decoration:none; display:inline-block;">'
-            '+ Přidat kartu</a>', url,
-        )
-    add_card_button.short_description = ""
-
-    def add_contract_button(self, obj):
-        from django.urls import reverse
-        from django.utils.html import format_html
-        if not obj.pk:
-            return "Nejprve klienta uložte."
-        url = reverse("admin:core_contract_add") + f"?client={obj.pk}"
-        return format_html(
-            '<a href="{}" style="padding:6px 16px; border-radius:6px; background:#2563eb; '
-            'color:white; font-weight:600; text-decoration:none; display:inline-block;">'
-            '+ Přidat smlouvu</a>', url,
-        )
-    add_contract_button.short_description = ""
 
     def _is_risky(self, obj):
         """Klient v likvidaci nebo se zaznamem (aktivnim ci drivejsim)

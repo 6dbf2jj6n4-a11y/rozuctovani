@@ -1,0 +1,13 @@
+{% include "admin/edit_inline/tabular.html" %}
+<div style="margin: -12px 0 24px 0;">
+    {% with client_id=inline_admin_formset.formset.instance.pk %}
+        {% if client_id %}
+            <a href="{% url 'admin:core_clientcard_add' %}?client={{ client_id }}"
+               style="padding:6px 16px; border-radius:6px; background:#2563eb; color:white; font-weight:600; text-decoration:none; display:inline-block;">
+                + Přidat kartu
+            </a>
+        {% else %}
+            <span style="color:#6b7280; font-size:13px;">Nejprve klienta uložte, pak půjde přidat kartu.</span>
+        {% endif %}
+    {% endwith %}
+</div>
