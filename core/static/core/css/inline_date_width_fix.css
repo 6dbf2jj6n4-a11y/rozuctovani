@@ -1,0 +1,9 @@
+/*
+Datova pole (Platnost od/do apod.) v inline tabulkach (Karty klientu,
+Smlouvy, Plochy karty...) se bez omezeni sirky natahuji pres celou
+(sirokou) bunku tabulky - Unfold 0.67 uz na tyto vstupy nedava zadny
+vychozi max-width, na rozdil od pripadu mimo tabulky.
+*/
+.tabular-table input[type="date"] {
+    max-width: 160px !important;
+}

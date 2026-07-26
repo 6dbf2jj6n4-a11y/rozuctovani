@@ -136,6 +136,7 @@ UNFOLD = {
     "SITE_TITLE": "RENTE)(",
     "SITE_HEADER": "RENTEX_2026",
     "SITE_SUBHEADER": "core.admin_branding.site_subheader",
+    "STYLES": ["core.admin_branding.inline_date_width_fix_css"],
     "SIDEBAR": {
         "show_search": True,
         "show_all_applications": False,

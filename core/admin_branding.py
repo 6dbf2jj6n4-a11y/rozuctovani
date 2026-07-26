@@ -9,3 +9,8 @@ def site_subheader(request):
     from core.models import Client
     landlord = Client.objects.filter(is_landlord=True).first()
     return landlord.name if landlord else None
+
+
+def inline_date_width_fix_css(request):
+    from django.templatetags.static import static
+    return static("core/css/inline_date_width_fix.css")
