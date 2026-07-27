@@ -1,9 +1,12 @@
 /*
 Datova pole (Platnost od/do apod.) v inline tabulkach (Karty klientu,
 Smlouvy, Plochy karty...) se bez omezeni sirky natahuji pres celou
-(sirokou) bunku tabulky - Unfold 0.67 uz na tyto vstupy nedava zadny
-vychozi max-width, na rozdil od pripadu mimo tabulky.
+(sirokou) bunku tabulky. Unfold 0.67 renderuje datumovy widget jako
+<input type="text"> (vlastni JS date picker, ne nativni type="date")
+obaleny v <div class="... min-w-56 max-w-2xl w-full">
+(core/unfold/templates/unfold/widgets/date.html) - omezeni cili na
+tento obal, ne na typ vstupu.
 */
-.tabular-table input[type="date"] {
+.tabular-table .min-w-56.max-w-2xl {
     max-width: 160px !important;
 }
