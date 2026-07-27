@@ -1,0 +1,82 @@
+{% extends "admin/base_site.html" %}
+
+{% block content %}
+<div>
+    <form method="get" style="display:flex; gap:16px; align-items:flex-end; margin-bottom:20px; flex-wrap:wrap;">
+        <div>
+            <label for="id_period" style="display:block; font-weight:600; margin-bottom:6px;">Období</label>
+            <select name="period" id="id_period" onchange="this.form.submit()" style="padding:8px; min-width:160px;">
+                {% for p in periods %}
+                    <option value="{{ p.pk }}" {% if selected_period and p.pk == selected_period.pk %}selected{% endif %}>{{ p }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div>
+            <label for="id_site" style="display:block; font-weight:600; margin-bottom:6px;">Areál</label>
+            <select name="site" id="id_site" onchange="this.form.submit()" style="padding:8px; min-width:160px;">
+                <option value="">-- všechny --</option>
+                {% for s in sites %}
+                    <option value="{{ s.pk }}" {% if selected_site_id == s.pk %}selected{% endif %}>{{ s.name }}</option>
+                {% endfor %}
+            </select>
+        </div>
+    </form>
+
+    {% if not selected_period %}
+        <p>Nejdřív je potřeba mít založené alespoň jedno Období.</p>
+    {% elif not groups %}
+        <p>Pro toto období (a filtr areálu) zatím žádné vyúčtované položky nejsou - nejdřív spusť výpočet (akce u Období).</p>
+    {% endif %}
+
+    {% for group in groups %}
+        <h2 style="margin-top:28px;">{{ group.label }}</h2>
+        <div style="overflow-x:auto;">
+        <table style="width:100%; border-collapse:collapse; font-size:13px;">
+            <thead>
+                <tr style="border-bottom:2px solid #666; text-align:left;">
+                    <th style="padding:6px 8px;">Klient</th>
+                    <th style="padding:6px 8px;">Karta</th>
+                    <th style="padding:6px 8px;">Areál</th>
+                    <th style="padding:6px 8px;">Položka</th>
+                    <th style="padding:6px 8px; text-align:right;">Předchozí stav</th>
+                    <th style="padding:6px 8px; text-align:right;">Aktuální stav</th>
+                    <th style="padding:6px 8px; text-align:right;">Celková spotřeba</th>
+                    <th style="padding:6px 8px; text-align:right;">Podíl</th>
+                    <th style="padding:6px 8px; text-align:right;">Jednotky</th>
+                    <th style="padding:6px 8px; text-align:right;">Cena/jednotka</th>
+                    <th style="padding:6px 8px; text-align:right;">Celková cena</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in group.rows %}
+                    <tr style="border-bottom:1px solid #333;">
+                        <td style="padding:6px 8px;">{{ row.client }}</td>
+                        <td style="padding:6px 8px;">{{ row.card }}</td>
+                        <td style="padding:6px 8px;">{{ row.site }}</td>
+                        <td style="padding:6px 8px;">{{ row.service_item }}</td>
+                        <td style="padding:6px 8px; text-align:right;">{% if row.previous_state != None %}{{ row.previous_state|floatformat:3 }}{% else %}—{% endif %}</td>
+                        <td style="padding:6px 8px; text-align:right;">{% if row.current_state != None %}{{ row.current_state|floatformat:3 }}{% else %}—{% endif %}</td>
+                        <td style="padding:6px 8px; text-align:right;">{% if row.total_consumption != None %}{{ row.total_consumption|floatformat:3 }} {{ row.unit_of_measure }}{% else %}—{% endif %}</td>
+                        <td style="padding:6px 8px; text-align:right;">{% if row.share != None %}{{ row.share|floatformat:4 }}{% else %}—{% endif %}</td>
+                        <td style="padding:6px 8px; text-align:right;">{% if row.units != None %}{{ row.units|floatformat:3 }} {{ row.unit_of_measure }}{% else %}—{% endif %}</td>
+                        <td style="padding:6px 8px; text-align:right;">{% if row.price_per_unit %}{{ row.price_per_unit|floatformat:4 }} Kč{% else %}—{% endif %}</td>
+                        <td style="padding:6px 8px; text-align:right; font-weight:600;">{{ row.amount|floatformat:2 }} Kč</td>
+                    </tr>
+                {% endfor %}
+                <tr style="border-top:2px solid #666; font-weight:700;">
+                    <td colspan="10" style="padding:8px; text-align:right;">Mezisoučet {{ group.label }}</td>
+                    <td style="padding:8px; text-align:right;">{{ group.subtotal|floatformat:2 }} Kč</td>
+                </tr>
+            </tbody>
+        </table>
+        </div>
+    {% endfor %}
+
+    {% if groups %}
+        <h2 style="margin-top:28px; display:flex; justify-content:space-between;">
+            <span>Celkem</span>
+            <span>{{ grand_total|floatformat:2 }} Kč</span>
+        </h2>
+    {% endif %}
+</div>
+{% endblock %}

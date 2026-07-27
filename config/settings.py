@@ -233,6 +233,11 @@ UNFOLD = {
                         "icon": "inventory_2",
                         "link": reverse_lazy("admin:core_servicepoolitem_changelist"),
                     },
+                    {
+                        "title": _("Detail"),
+                        "icon": "query_stats",
+                        "link": reverse_lazy("admin:core_billingline_detail"),
+                    },
                 ],
             },
             {

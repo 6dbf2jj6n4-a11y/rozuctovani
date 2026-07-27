@@ -1137,6 +1137,114 @@ class BillingLineAdmin(ModelAdmin):
     readonly_fields = ("client_card_display", "period", "service_item", "amount", "share", "calc_detail")
     actions = ["generovat_vyuctovani_pdf"]
 
+    def get_urls(self):
+        from django.urls import path
+        urls = super().get_urls()
+        custom = [
+            path(
+                "detail/",
+                self.admin_site.admin_view(self.detail_view),
+                name="core_billingline_detail",
+            ),
+        ]
+        return custom + urls
+
+    def detail_view(self, request):
+        """Interni audit tabulka pro kontrolu vypoctu (ne pro klienty) - jeden
+        radek za kazdy BillingLine (= karta klienta x polozka zasobniku v danem
+        obdobi), s odectenymi stavy mericí, spotrebou, podilem, jednotkami,
+        cenou za jednotku a celkovou castkou. Secteno po tridach a celkem."""
+        period_id = request.GET.get("period")
+        site_id = request.GET.get("site")
+
+        periods = Period.objects.all()
+        period = periods.filter(pk=period_id).first() if period_id else None
+        if period is None:
+            period = periods.first()
+
+        sites = Site.objects.order_by("name")
+
+        groups_by_class = {key: [] for key, _ in ServicePoolItem.InvoiceClass.choices}
+        grand_total = Decimal("0")
+
+        if period is not None:
+            qs = (
+                BillingLine.objects.filter(period=period)
+                .select_related(
+                    "client_card__client", "client_card__unit",
+                    "service_item", "service_item__meter", "service_item__site",
+                )
+                .order_by("service_item__name", "client_card__client__name")
+            )
+            if site_id:
+                qs = qs.filter(service_item__site_id=site_id)
+
+            meter_cache = {}
+            prev_period = period.previous_period()
+
+            for line in qs:
+                si = line.service_item
+                meter = si.meter
+                previous_state = current_state = total_consumption = None
+                if meter is not None:
+                    if meter.id not in meter_cache:
+                        current_reading = meter.readings.filter(period=period).first()
+                        previous_reading = (
+                            meter.readings.filter(period=prev_period).first() if prev_period else None
+                        )
+                        meter_cache[meter.id] = {
+                            "previous": previous_reading.value if previous_reading else None,
+                            "current": current_reading.value if current_reading else None,
+                            "total_consumption": meter.consumption_for(period),
+                        }
+                    cached = meter_cache[meter.id]
+                    previous_state = cached["previous"]
+                    current_state = cached["current"]
+                    total_consumption = cached["total_consumption"]
+
+                calc = line.calc_detail or {}
+
+                row = {
+                    "client": line.client_card.client.name,
+                    "card": line.client_card.description or f"Karta {line.client_card.client}",
+                    "site": si.site.name,
+                    "service_item": si.name,
+                    "previous_state": previous_state,
+                    "current_state": current_state,
+                    "total_consumption": total_consumption,
+                    "share": line.share,
+                    "units": line.units,
+                    "unit_of_measure": calc.get("unit_of_measure") or "",
+                    "price_per_unit": calc.get("price_per_unit"),
+                    "amount": line.amount,
+                }
+                groups_by_class.setdefault(si.invoice_class, []).append(row)
+                grand_total += line.amount
+
+        class_labels = dict(ServicePoolItem.InvoiceClass.choices)
+        groups = [
+            {
+                "label": class_labels[key],
+                "rows": rows,
+                "subtotal": sum((r["amount"] for r in rows), Decimal("0")),
+            }
+            for key, rows in groups_by_class.items() if rows
+        ]
+
+        context = {
+            **self.admin_site.each_context(request),
+            "title": "Detail výpočtu vyúčtování",
+            "periods": periods,
+            "sites": sites,
+            "selected_period": period,
+            "selected_site_id": int(site_id) if site_id else None,
+            "groups": groups,
+            "grand_total": grand_total,
+            "opts": self.model._meta,
+        }
+        from django.shortcuts import render
+        return render(request, "admin/core/billingline/detail.html", context)
+
     @admin.display(description="Karta klienta", ordering="client_card")
     def client_card_display(self, obj):
         return obj.client_card.description or f"Karta {obj.client_card.client}"
