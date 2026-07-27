@@ -18,8 +18,11 @@ class CustomUserAdmin(ModelAdmin, UserAdmin):
             "fields": ("username", "password1", "password2", "role", "sites", "client"),
         }),
     )
-    fieldsets = UserAdmin.fieldsets + (
+    fieldsets = (
+        UserAdmin.fieldsets[0],
+        UserAdmin.fieldsets[1],
         ("Role a přístup", {"fields": ("role", "client", "sites")}),
+        *UserAdmin.fieldsets[2:],
     )
     list_display = ("username", "email", "role", "client", "is_active")
     list_filter = ("role", "is_active")
