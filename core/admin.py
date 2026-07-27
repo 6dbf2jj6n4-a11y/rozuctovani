@@ -1146,8 +1146,51 @@ class BillingLineAdmin(ModelAdmin):
                 self.admin_site.admin_view(self.detail_view),
                 name="core_billingline_detail",
             ),
+            path(
+                "detail/klient/<int:client_id>/",
+                self.admin_site.admin_view(self.detail_client_view),
+                name="core_billingline_detail_client",
+            ),
         ]
         return custom + urls
+
+    def detail_client_view(self, request, client_id):
+        """Podrobny detail po jednotlivych Klicich pro jednoho klienta (viz
+        billing/key_detail.py) - otevira se kliknutim na klienta v detail_view."""
+        from django.shortcuts import get_object_or_404, render
+        from billing.key_detail import get_key_rows_for_client
+
+        client = get_object_or_404(Client, pk=client_id)
+        period_id = request.GET.get("period")
+        period = Period.objects.filter(pk=period_id).first() if period_id else Period.objects.first()
+
+        groups = []
+        warnings = []
+        grand_total = Decimal("0")
+        if period is not None:
+            rows, warnings = get_key_rows_for_client(client, period)
+            class_labels = dict(ServicePoolItem.InvoiceClass.choices)
+            groups_by_class = {key: [] for key, _ in ServicePoolItem.InvoiceClass.choices}
+            for row in rows:
+                groups_by_class.setdefault(row["invoice_class_key"], []).append(row)
+                grand_total += row["amount"]
+            groups = [
+                {"label": class_labels[key], "rows": rs, "subtotal": sum((r["amount"] for r in rs), Decimal("0"))}
+                for key, rs in groups_by_class.items() if rs
+            ]
+
+        context = {
+            **self.admin_site.each_context(request),
+            "title": f"Detail podle klíčů - {client.name}",
+            "client": client,
+            "periods": Period.objects.all(),
+            "selected_period": period,
+            "groups": groups,
+            "grand_total": grand_total,
+            "warnings": warnings,
+            "opts": self.model._meta,
+        }
+        return render(request, "admin/core/billingline/detail_client.html", context)
 
     def detail_view(self, request):
         """Interni audit tabulka pro kontrolu vypoctu (ne pro klienty) - jeden
@@ -1206,6 +1249,7 @@ class BillingLineAdmin(ModelAdmin):
 
                 row = {
                     "client": line.client_card.client.name,
+                    "client_id": line.client_card.client_id,
                     "card": line.client_card.description or f"Karta {line.client_card.client}",
                     "site": si.site.name,
                     "service_item": si.name,

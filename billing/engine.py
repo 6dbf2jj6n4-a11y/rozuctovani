@@ -83,18 +83,26 @@ def _fixed_amount_for(key, service_item, period, warnings):
     return key.value or Decimal("0")
 
 
-def _weighted_shares(keys, period):
+def _weighted_shares(keys, period, by_key_out=None):
     """
     Spocita normalizovane podily (soucet = 1) pro seznam klicu
     typu percent / area_ratio / person_count / equal_split,
     s prihlednutim k aktivnim dnum karty v obdobi.
 
     Vraci dict {client_card_id: Decimal podil}.
+
+    `by_key_out`: volitelny dict, do ktereho se navic (pro auditovaci
+    detail po klicich - viz billing/key_detail.py) zapise podil PO
+    JEDNOTLIVYCH klicich {allocation_key_id: Decimal podil}, normalizovany
+    stejne jako vysledek po kartach. Nema zadny vliv na navratovou hodnotu
+    ani na vypocet - pokud zustane None (vychozi, pouziva `calculate_period`),
+    chovani funkce je zcela beze zmeny.
     """
     period_start, period_end = period.date_range()
     days_in_period = Decimal(period.days_in_period)
 
     raw_weights = {}
+    raw_weights_by_key = {}
     for key in keys:
         card = key.client_card
         active_days = card.active_days_in_period(period_start, period_end)
@@ -115,14 +123,19 @@ def _weighted_shares(keys, period):
 
         effective_weight = base * (Decimal(active_days) / days_in_period)
         raw_weights[card.id] = raw_weights.get(card.id, Decimal("0")) + effective_weight
+        if by_key_out is not None:
+            raw_weights_by_key[key.id] = effective_weight
 
     total = sum(raw_weights.values())
     if total == 0:
         return {}
+    if by_key_out is not None:
+        for key_id, weight in raw_weights_by_key.items():
+            by_key_out[key_id] = weight / total
     return {card_id: weight / total for card_id, weight in raw_weights.items()}
 
 
-def _consumption_shares(service_item, period, warnings):
+def _consumption_shares(service_item, period, warnings, by_key_out=None):
     """
     Spocita podily pro merenou polozku (service_item.meter neni None).
 
@@ -134,6 +147,10 @@ def _consumption_shares(service_item, period, warnings):
       - total_consumption: celkova namerena spotreba hlavniho meridla
         (pro dopocet spotreby/ceny za jednotku jednotlivych karet), nebo
         None, pokud se nepodarilo dohledat.
+
+    `by_key_out`: viz _weighted_shares - volitelny dict {allocation_key_id:
+    Decimal podil}, jen pro auditovaci detail po klicich. Bez vlivu na
+    vysledek ani chovani, pokud zustane None.
     """
     meter = service_item.meter
     total_consumption = meter.consumption_for(period)
@@ -172,18 +189,23 @@ def _consumption_shares(service_item, period, warnings):
                 f"pro kartu {key.client_card} - tato karta vynechána."
             )
             continue
-        shares[key.client_card_id] = shares.get(key.client_card_id, Decimal("0")) + (
-            sub_consumption / total_consumption
-        )
+        contribution = sub_consumption / total_consumption
+        shares[key.client_card_id] = shares.get(key.client_card_id, Decimal("0")) + contribution
+        if by_key_out is not None:
+            by_key_out[key.id] = contribution
         sum_submeters += sub_consumption
 
     residual = total_consumption - sum_submeters
     residual_fraction = residual / total_consumption
 
     if weight_keys and residual_fraction > 0:
-        weight_shares = _weighted_shares(weight_keys, period)
+        weight_by_key = {} if by_key_out is not None else None
+        weight_shares = _weighted_shares(weight_keys, period, by_key_out=weight_by_key)
         for card_id, weight in weight_shares.items():
             shares[card_id] = shares.get(card_id, Decimal("0")) + weight * residual_fraction
+        if by_key_out is not None:
+            for key_id, weight in weight_by_key.items():
+                by_key_out[key_id] = weight * residual_fraction
     elif residual_fraction != 0 and not weight_keys:
         warnings.append(
             f"{service_item}: zbývá {residual_fraction:.2%} spotřeby (společná část), "
