@@ -76,6 +76,7 @@ def get_key_rows_for_client(client, period):
                 "unit_of_measure": None,
                 "price_per_unit": None,
                 "amount": Decimal("0"),
+                "sub_meters": [],
             }
 
             if key.allocation_type in ABSOLUTE_AMOUNT_TYPES:
@@ -105,6 +106,21 @@ def get_key_rows_for_client(client, period):
                     row["previous_state"] = previous_reading.value if previous_reading else None
                     row["current_state"] = current_reading.value if current_reading else None
                     row["consumption"] = meter_for_state.consumption_for(period)
+
+                    if meter_for_state.is_virtual:
+                        for leaf, leaf_sign in meter_for_state.consumption_leaves():
+                            leaf_current = leaf.readings.filter(period=period).first()
+                            leaf_previous = (
+                                leaf.readings.filter(period=prev_period).first() if prev_period else None
+                            )
+                            row["sub_meters"].append({
+                                "meter_code": leaf.code or leaf.name,
+                                "sign": leaf_sign,
+                                "previous_state": leaf_previous.value if leaf_previous else None,
+                                "current_state": leaf_current.value if leaf_current else None,
+                                "consumption": leaf.consumption_for(period),
+                                "unit_of_measure": leaf.unit_of_measure,
+                            })
 
                 if share is not None and total_consumption:
                     row["units"] = (share * total_consumption).quantize(Decimal("0.001"))

@@ -63,6 +63,19 @@
                         <td style="padding:6px 8px; text-align:right;">{% if row.price_per_unit %}{{ row.price_per_unit|floatformat:4 }} Kč{% else %}—{% endif %}</td>
                         <td style="padding:6px 8px; text-align:right; font-weight:600;">{{ row.amount|floatformat:2 }} Kč</td>
                     </tr>
+                    {% for sub in row.sub_meters %}
+                        <tr style="border-bottom:1px solid #333; color:#999;">
+                            <td style="padding:2px 8px;"></td>
+                            <td style="padding:2px 8px;"></td>
+                            <td style="padding:2px 8px 2px 24px;" colspan="2">
+                                {% if sub.sign < 0 %}−{% else %}+{% endif %} {{ sub.meter_code }}
+                            </td>
+                            <td style="padding:2px 8px; text-align:right;">{% if sub.previous_state != None %}{{ sub.previous_state|floatformat:3 }}{% else %}—{% endif %}</td>
+                            <td style="padding:2px 8px; text-align:right;">{% if sub.current_state != None %}{{ sub.current_state|floatformat:3 }}{% else %}—{% endif %}</td>
+                            <td style="padding:2px 8px; text-align:right;">{% if sub.consumption != None %}{{ sub.consumption|floatformat:3 }} {{ sub.unit_of_measure }}{% else %}—{% endif %}</td>
+                            <td style="padding:2px 8px;" colspan="4"></td>
+                        </tr>
+                    {% endfor %}
                 {% endfor %}
                 <tr style="border-top:2px solid #666; font-weight:700;">
                     <td colspan="10" style="padding:8px; text-align:right;">Mezisoučet {{ group.label }}</td>

@@ -446,13 +446,15 @@ class Meter(models.Model):
             return None
         return current.value - previous.value
 
-    def _formula_consumption_for(self, period):
-        """Vyhodnoti pole Vzorec, napr. '668NT+668VT' - secte/odecte
-        spotrebu jinych mericí stejneho arealu podle jejich kodu."""
+    def _formula_tokens(self):
+        """Rozparsuje pole Vzorec na seznam (meridlo, znamenko) dvojic -
+        sdileno mezi _formula_consumption_for (vypocet) a consumption_leaves
+        (zobrazeni rozpadu na jednotliva realna meridla v auditovaci
+        tabulce, viz billing/key_detail.py)."""
         if not self.formula:
-            return None
+            return []
         tokens = re.findall(r"[+-]?[^+-]+", self.formula)
-        total = None
+        result = []
         for raw_token in tokens:
             token = raw_token.strip()
             sign = 1
@@ -466,12 +468,33 @@ class Meter(models.Model):
             meter = Meter.objects.filter(site=self.site, code=token).first()
             if meter is None:
                 continue
+            result.append((meter, sign))
+        return result
+
+    def _formula_consumption_for(self, period):
+        """Vyhodnoti pole Vzorec, napr. '668NT+668VT' - secte/odecte
+        spotrebu jinych mericí stejneho arealu podle jejich kodu."""
+        total = None
+        for meter, sign in self._formula_tokens():
             value = meter.consumption_for(period)
             if value is None:
                 continue
             signed_value = sign * value
             total = signed_value if total is None else total + signed_value
         return total
+
+    def consumption_leaves(self, sign=1):
+        """Rekurzivne rozbali virtualni meridlo (vcetne vnorenych vzorcu) az
+        na (realne_meridlo, znamenko) dvojice - realne meridlo vrati samo
+        sebe. Pouziva se jen pro zobrazeni rozpadu spotreby na jednotliva
+        fyzicka meridla v auditovaci tabulce (billing/key_detail.py), na
+        skutecny vypocet (consumption_for) nema vliv."""
+        if not self.is_virtual:
+            return [(self, sign)]
+        leaves = []
+        for sub_meter, sub_sign in self._formula_tokens():
+            leaves.extend(sub_meter.consumption_leaves(sign=sign * sub_sign))
+        return leaves
 
 
 class MeterReading(models.Model):
