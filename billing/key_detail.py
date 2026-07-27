@@ -94,11 +94,11 @@ def get_key_rows_for_client(client, period):
                 meter_for_state = None
                 if key.allocation_type == AllocationKey.AllocationType.SUBMETER and key.meter:
                     meter_for_state = key.meter
-                    row["meter_code"] = key.meter.code or key.meter.name
                 elif si.meter:
                     meter_for_state = si.meter
 
                 if meter_for_state is not None:
+                    row["meter_code"] = meter_for_state.code or meter_for_state.name
                     current_reading = meter_for_state.readings.filter(period=period).first()
                     previous_reading = (
                         meter_for_state.readings.filter(period=prev_period).first() if prev_period else None
