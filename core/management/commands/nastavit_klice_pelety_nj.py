@@ -25,7 +25,7 @@ from core.models import AllocationKey, ClientCard, ServicePoolItem
 # (PopisKarty, T_CELKEM Jednotek, T_CELKEM FinTok, T_SPOLECNA Jednotek, T_SPOLECNA FinTok)
 # Zdroj: /Users/daniel/Desktop/RenteX/Klíče_teplo_NJ.xlsx (sloupce Jednotek + FinTok)
 DATA = [
-    ("Karta CSE 2024 - 1", 1, True, 1, True),
+    ("Karta CSE 1 NJ", 1, True, 1, True),
     ("Karta FSLCZ 2026 - 1", 0, True, 1, True),
     ("Karta MAKER 2025 - 1", 2, False, 1, False),
     ("Karta MVACTIVE 2025 - 1", 4, True, 2, True),
