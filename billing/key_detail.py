@@ -91,11 +91,14 @@ def get_key_rows_for_client(client, period):
                 share = by_key_share.get(key.id)
                 row["share"] = share
 
-                meter_for_state = None
-                if key.allocation_type == AllocationKey.AllocationType.SUBMETER and key.meter:
-                    meter_for_state = key.meter
-                elif si.meter:
-                    meter_for_state = si.meter
+                # Prioritne meridlo primo u klice (i kdyz jeho typ neni
+                # "Podruzne meridlo" - napr. "Podle vahy" s rucne zadanou
+                # vahou muze mit meridlo dopojene jen informativne, pro
+                # kontrolu, ze zadana vaha zhruba odpovida skutecne
+                # spotrebe - viz konverzace o klici E_N2). Na samotny
+                # vypocet (ktery cte jen key.meter u typu SUBMETER) to
+                # nema vliv, jde jen o zobrazeni.
+                meter_for_state = key.meter or si.meter
 
                 if meter_for_state is not None:
                     row["meter_code"] = meter_for_state.code or meter_for_state.name
