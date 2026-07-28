@@ -31,7 +31,10 @@ class Command(BaseCommand):
             flexi_client = FlexiClient()
             invoices = flexi_client.list_records(
                 "faktura-vydana",
-                filter_expr=f"popis like '%{popis}%'",
+                # Presna shoda (ne "like") - Flexi filtr "like" v tomto
+                # prostredi z nejasneho duvodu nevracel zadne vysledky, i
+                # kdyz popis textove presne sedel (viz konverzace).
+                filter_expr=f"popis = '{popis}'",
                 extra_params={"limit": 0, "detail": "full"},
             )
         except KeyError as e:
