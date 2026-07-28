@@ -1064,9 +1064,10 @@ class ServicePoolItemAdmin(ModelAdmin):
 class AllocationKeyAdmin(ModelAdmin):
     list_display = (
         "client_card_display", "service_item", "allocation_type", "value_display",
-        "unit", "deduct_from_pool", "valid_from", "valid_to",
+        "meter", "unit", "deduct_from_pool", "valid_from", "valid_to",
     )
     list_filter = ("allocation_type", "deduct_from_pool")
+    search_fields = ("meter__code", "meter__name", "client_card__client__name", "service_item__name")
     autocomplete_fields = ("client_card", "service_item", "meter", "unit")
 
     @admin.display(description="Karta klienta", ordering="client_card")
