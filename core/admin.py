@@ -144,7 +144,7 @@ class AllocationKeyInlineBase(TabularInline):
     model = AllocationKey
     extra = 0
     collapsible = True
-    fields = ("service_item", "allocation_type", "value", "meter", "unit", "deduct_from_pool")
+    fields = ("service_item", "allocation_type", "value", "meter", "unit", "deduct_from_pool", "is_billed")
     autocomplete_fields = ("service_item", "meter", "unit")
 
     class Media:
