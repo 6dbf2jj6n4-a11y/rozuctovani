@@ -75,12 +75,18 @@ class Command(BaseCommand):
         self.stdout.write(
             f"{'Klient':<32}{'Faktura':<12}{'Kód pol.':<12}{'Název položky':<45}{'Množ.':>8}{'Kč bez DPH':>14}{'Kč s DPH':>12}"
         )
+        def _num(value):
+            try:
+                return float(value)
+            except (TypeError, ValueError):
+                return 0.0
+
         self.stdout.write("-" * 135)
         for r in rows:
             self.stdout.write(
                 f"{r['klient'][:30]:<32}{(r['faktura'] or ''):<12}{r['kod_polozky'][:10]:<12}"
-                f"{r['nazev_polozky'][:43]:<45}{(r['mnozstvi'] or 0):>8}"
-                f"{(r['celkem_bez_dph'] or 0):>14,.2f}{(r['celkem_s_dph'] or 0):>12,.2f}"
+                f"{r['nazev_polozky'][:43]:<45}{_num(r['mnozstvi']):>8,.2f}"
+                f"{_num(r['celkem_bez_dph']):>14,.2f}{_num(r['celkem_s_dph']):>12,.2f}"
             )
 
         self.stdout.write("-" * 135)
