@@ -77,6 +77,7 @@ def get_key_rows_for_client(client, period):
                 "price_per_unit": None,
                 "amount": Decimal("0"),
                 "sub_meters": [],
+                "is_billed": key.is_billed,
             }
 
             if key.allocation_type in ABSOLUTE_AMOUNT_TYPES:

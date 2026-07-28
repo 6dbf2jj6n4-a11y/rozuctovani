@@ -58,7 +58,7 @@
                                 <span class="meta">{{ line|units_display }} × {{ line|price_per_unit_display }}</span>
                             {% endif %}
                         </td>
-                        <td class="amount">{{ line.amount|kc }}</td>
+                        <td class="amount">{{ line.amount|kc }}{% if not line.is_billed %} <span class="meta" style="display:inline;">(v paušálu)</span>{% endif %}</td>
                     </tr>
                 {% endfor %}
                 <tr class="subtotal">
@@ -75,6 +75,12 @@
         <span>Celkem k úhradě</span>
         <span>{{ grand_total|kc }}</span>
     </div>
+    {% if any_unbilled %}
+        <p class="empty" style="margin-top:10px;">
+            Položky označené „(v paušálu)“ jsou zde jen pro přehlednost - máte je
+            již zahrnuté v paušální platbě, proto nejsou v částce k úhradě.
+        </p>
+    {% endif %}
 </div>
 </body>
 </html>

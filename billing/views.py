@@ -70,5 +70,6 @@ def period_detail(request, period_id):
         "period": period,
         "classes": data["classes"],
         "grand_total": data["grand_total"],
+        "any_unbilled": data["any_unbilled"],
         "show_card_column": len(all_cards) > 1,
     })

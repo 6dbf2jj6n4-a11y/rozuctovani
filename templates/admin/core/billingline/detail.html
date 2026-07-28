@@ -62,7 +62,10 @@
                         <td style="padding:6px 8px; text-align:right;">{% if row.share != None %}{{ row.share|floatformat:4 }}{% else %}—{% endif %}</td>
                         <td style="padding:6px 8px; text-align:right;">{% if row.units != None %}{{ row.units|floatformat:3 }} {{ row.unit_of_measure }}{% else %}—{% endif %}</td>
                         <td style="padding:6px 8px; text-align:right;">{% if row.price_per_unit %}{{ row.price_per_unit|floatformat:4 }} Kč{% else %}—{% endif %}</td>
-                        <td style="padding:6px 8px; text-align:right; font-weight:600;">{{ row.amount|floatformat:2 }} Kč</td>
+                        <td style="padding:6px 8px; text-align:right; font-weight:600;">
+                            {{ row.amount|floatformat:2 }} Kč
+                            {% if not row.is_billed %}<span style="color:#d97706; font-weight:400;"> (nefakturováno)</span>{% endif %}
+                        </td>
                     </tr>
                 {% endfor %}
                 <tr style="border-top:2px solid #666; font-weight:700;">

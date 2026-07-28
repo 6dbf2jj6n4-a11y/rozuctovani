@@ -619,6 +619,17 @@ class AllocationKey(models.Model):
         help_text="Volitelne - typicky se platnost resi na urovni cele Karty klienta.",
     )
     valid_to = models.DateField("Platnost do", null=True, blank=True)
+    is_billed = models.BooleanField(
+        "Fakturovat", default=True,
+        help_text=(
+            "Odpovida sloupci 'FinTok' v puvodnich Excel tabulkach klicu. Pokud NE: "
+            "castka se i tak zapocita do vypoctu (spravedlive snizuje podil ostatnich "
+            "karet na sdilenem nakladu), ale klientovi se samostatne NEFAKTURUJE - "
+            "typicky proto, ze uz ji ma zahrnutou v pausalni platbe (najem + energie "
+            "dohromady). Promita se do BillingLine.is_billed a do klientskeho PDF "
+            "vyuctovani (billing/statement_generator.py)."
+        ),
+    )
 
     class Meta:
         verbose_name = "Klíč"
@@ -753,6 +764,14 @@ class BillingLine(models.Model):
     )
     share = models.DecimalField("Podíl", max_digits=8, decimal_places=6, null=True, blank=True)
     calc_detail = models.JSONField("Detail výpočtu", default=dict, blank=True)
+    is_billed = models.BooleanField(
+        "Fakturováno klientovi", default=True,
+        help_text=(
+            "Snimek AllocationKey.is_billed v okamziku vypoctu (viz billing/engine.py) - "
+            "castka se pocitala do rozpoctu vzdy, ale pokud NE, klientovi se v PDF "
+            "vyuctovani nepripocita do castky k uhrade (uz ji ma v pausalu)."
+        ),
+    )
 
     class Meta:
         verbose_name = "Vyúčtovaná položka"

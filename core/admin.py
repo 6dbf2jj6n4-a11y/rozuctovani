@@ -1064,9 +1064,9 @@ class ServicePoolItemAdmin(ModelAdmin):
 class AllocationKeyAdmin(ModelAdmin):
     list_display = (
         "client_card_display", "service_item", "allocation_type", "value_display",
-        "meter", "unit", "deduct_from_pool", "valid_from", "valid_to",
+        "meter", "unit", "deduct_from_pool", "is_billed", "valid_from", "valid_to",
     )
-    list_filter = ("allocation_type", "deduct_from_pool")
+    list_filter = ("allocation_type", "deduct_from_pool", "is_billed")
     search_fields = ("meter__code", "meter__name", "client_card__client__name", "service_item__name")
     autocomplete_fields = ("client_card", "service_item", "meter", "unit")
 
@@ -1262,6 +1262,7 @@ class BillingLineAdmin(ModelAdmin):
                     "unit_of_measure": calc.get("unit_of_measure") or "",
                     "price_per_unit": calc.get("price_per_unit"),
                     "amount": line.amount,
+                    "is_billed": line.is_billed,
                 }
                 groups_by_class.setdefault(si.invoice_class, []).append(row)
                 grand_total += line.amount

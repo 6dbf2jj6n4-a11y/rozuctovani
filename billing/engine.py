@@ -273,6 +273,14 @@ def calculate_period(period, site=None):
 
             fixed_keys = [k for k in valid_keys if k.allocation_type in ABSOLUTE_AMOUNT_TYPES]
 
+            # Fakturovat = vsechny platne klice karty pro tuto polozku maji
+            # is_billed=True (typicky je klic jen jeden). Pokud karta nema
+            # zadny platny klic (neocekavane), bezpecny vychozi stav je
+            # fakturovat, ne naopak.
+            billed_by_card = {}
+            for key in valid_keys:
+                billed_by_card[key.client_card_id] = billed_by_card.get(key.client_card_id, True) and key.is_billed
+
             period_start, period_end = period.date_range()
 
             # 1) pevne castky (a plocha x cena/m2) - ty s deduct_from_pool=True se
@@ -361,6 +369,7 @@ def calculate_period(period, site=None):
                     amount=amount.quantize(Decimal("0.01")),
                     units=units,
                     share=share,
+                    is_billed=billed_by_card.get(card_id, True),
                     calc_detail={
                         "total_cost": str(total_cost),
                         "cost_source": cost_source,

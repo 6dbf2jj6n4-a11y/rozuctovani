@@ -75,11 +75,17 @@ def build_statement_data(client, period):
 
     classes = []
     grand_total = Decimal("0")
+    any_unbilled = False
     for class_code in _CLASS_ORDER:
         class_lines = [line for line in lines if line.service_item.invoice_class == class_code]
         if not class_lines:
             continue
-        subtotal = sum((line.amount for line in class_lines), Decimal("0"))
+        # Mezisoucet (a celkova castka k uhrade) zahrnuje jen fakturovane
+        # radky - polozky s is_billed=False se zobrazuji jen informativne
+        # (klient uz je ma zahrnute v pausalu), viz AllocationKey.is_billed.
+        subtotal = sum((line.amount for line in class_lines if line.is_billed), Decimal("0"))
+        if any(not line.is_billed for line in class_lines):
+            any_unbilled = True
         classes.append({
             "label": class_labels[class_code],
             "lines": [
@@ -87,6 +93,7 @@ def build_statement_data(client, period):
                     "item": line.service_item.name,
                     "card": _card_label(line.client_card),
                     "amount": line.amount,
+                    "is_billed": line.is_billed,
                     "units": line.units,
                     "unit_of_measure": line.calc_detail.get("unit_of_measure"),
                     "price_per_unit": (
@@ -100,7 +107,7 @@ def build_statement_data(client, period):
         })
         grand_total += subtotal
 
-    return {"classes": classes, "grand_total": grand_total}
+    return {"classes": classes, "grand_total": grand_total, "any_unbilled": any_unbilled}
 
 
 def generate_client_statement_pdf(client, period, output_path):
@@ -135,7 +142,10 @@ def generate_client_statement_pdf(client, period, output_path):
                 row.append(line["card"])
             row.append(format_units(line["units"], line["unit_of_measure"]))
             row.append(format_price_per_unit(line["price_per_unit"], line["unit_of_measure"]))
-            row.append(_fmt_czk(line["amount"]))
+            amount_text = _fmt_czk(line["amount"])
+            if not line["is_billed"]:
+                amount_text += " (v paušálu)"
+            row.append(amount_text)
             rows.append(row)
         filler = [""] * (2 + (1 if show_card_column else 0))
         rows.append(["Mezisoučet"] + filler + [_fmt_czk(cls["subtotal"])])
@@ -156,6 +166,12 @@ def generate_client_statement_pdf(client, period, output_path):
         elements.append(table)
 
     elements.append(Paragraph(f"Celkem k úhradě: {_fmt_czk(data['grand_total'])}", _STYLE_TOTAL))
+    if data["any_unbilled"]:
+        elements.append(Paragraph(
+            "Položky označené „(v paušálu)“ jsou v tomto výpisu jen pro přehlednost - "
+            "máte je již zahrnuté v paušální platbě, proto nejsou v částce k úhradě.",
+            _STYLE_EMPTY,
+        ))
 
     doc.build(elements)
     return output_path
