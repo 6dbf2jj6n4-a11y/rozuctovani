@@ -67,6 +67,16 @@ def get_key_rows_for_client(client, period):
             weight_keys = [k for k in valid_keys if k.allocation_type not in ABSOLUTE_AMOUNT_TYPES]
             _weighted_shares(weight_keys, period, by_key_out=by_key_share)
 
+        # Meridla, ktera jsou na teto polozce SAMA O SOBE take samostatne
+        # uctovana (maji vlastni klic) - jen tahle se skutecne odecitaji od
+        # sveho nadrazeneho meridla v billing/engine.py _owned_consumption,
+        # takze jen tahle se maji zobrazit jako "odectene deti" pod master
+        # radkem (viz nize).
+        billed_meter_ids = {
+            k.meter_id for k in valid_keys
+            if k.meter_id is not None and k.allocation_type not in ABSOLUTE_AMOUNT_TYPES
+        }
+
         for key in client_keys:
             row = {
                 "site": si.site.name,
@@ -135,6 +145,28 @@ def get_key_rows_for_client(client, period):
                                 "consumption": leaf.consumption_for(period),
                                 "unit_of_measure": leaf.unit_of_measure,
                             })
+
+                    # Realna hierarchie (Meter.parent_meter) - podrizena
+                    # meridla, ktera jsou sama o sobe samostatne uctovana
+                    # (billed_meter_ids), se od surove spotreby tohoto
+                    # meridla odectou (viz billing/engine.py
+                    # _owned_consumption) - zobrazit je pod master radkem
+                    # se znamenkem minus, aby bylo videt, kam se presunuly.
+                    for child in meter_for_state.children.all():
+                        if child.id not in billed_meter_ids:
+                            continue
+                        child_current = child.readings.filter(period=period).first()
+                        child_previous = (
+                            child.readings.filter(period=prev_period).first() if prev_period else None
+                        )
+                        row["sub_meters"].append({
+                            "meter_code": child.code or child.name,
+                            "sign": -1,
+                            "previous_state": child_previous.value if child_previous else None,
+                            "current_state": child_current.value if child_current else None,
+                            "consumption": child.consumption_for(period),
+                            "unit_of_measure": child.unit_of_measure,
+                        })
 
                 if share is not None and remaining_cost is not None:
                     row["amount"] = (remaining_cost * share).quantize(Decimal("0.01"))
