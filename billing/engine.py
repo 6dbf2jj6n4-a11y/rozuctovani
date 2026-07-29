@@ -143,72 +143,105 @@ def _weighted_shares(keys, period, by_key_out=None):
 
 def _consumption_shares(service_item, period, warnings, by_key_out=None):
     """
-    Spocita podily pro merenou polozku (service_item.meter neni None).
+    Spocita podily pro polozku, kde se aspon cast klicu opira o skutecnou
+    namerenou spotrebu meridla - bud primo pres service_item.meter (hlavni
+    meridlo cele polozky), nebo pres jednotliva meridla napojena na
+    konkretni klice (AllocationKey.meter), typicky u typu "Podružné
+    měřidlo" (submeter), ale muze jim byt napojen i klic typu "Podle vahy"
+    (napr. virtualni meridlo se vzorcem jako "spolecna spotreba WC",
+    slozene ze souctu par realnych meridel - viz Meter.is_virtual/formula).
+
+    Dva rezimy podle toho, jestli ma polozka nastavene hlavni meridlo:
+
+    1) service_item.meter je nastaveny: "celek" = jeho namerena spotreba.
+       Klice napojene na SVE VLASTNI meridlo (seskupene podle meridla -
+       vice karet muze sdilet jedno fyzicke meridlo, napr. spolecny
+       elektromer pro dva prostory) dostanou podil = spotreba_meridla /
+       celek, pripadne rozdeleny mezi sdilejici karty podle vahy. Klice
+       BEZ vlastniho meridla dostanou zbytek (co nezachytila zadna
+       pojmenovana meridla) rozpocitany podle vahy.
+
+    2) service_item.meter NENI nastaveny (zadne "hlavni" cislo k dispozici,
+       jen soucet nakladu za obdobi): "celek" se dopocita jako SOUCET
+       spotreby VSECH meridel, na ktera je napojeny nejaky klic polozky
+       (kazde meridlo jen jednou, bez ohledu na pocet klicu/karet na nem) -
+       kazda takova skupina pak dostane podil = jeji spotreba / tento
+       soucet. Klice BEZ zadneho napojeneho meridla v tomto rezimu nemaji
+       fyzikalni zaklad pro urceni podilu - vynechaji se s varovanim.
 
     Vraci dvojici (shares, total_consumption):
       - shares: dict {client_card_id: Decimal podil}, soucet ~= 1, pokud
         se podarilo dohledat vsechny potrebne odecty. Pri chybejicich
-        odectech pripoji varovani a vrati prazdny dict (polozka se
-        pro toto obdobi vynecha).
-      - total_consumption: celkova namerena spotreba hlavniho meridla
-        (pro dopocet spotreby/ceny za jednotku jednotlivych karet), nebo
-        None, pokud se nepodarilo dohledat.
+        odectech pripoji varovani a chybejici karty vynecha.
+      - total_consumption: pouzity "celek" (viz vyse), pro dopocet
+        spotreby/ceny za jednotku jednotlivych karet, nebo None, pokud se
+        nepodarilo dohledat vubec zadnou spotrebu.
 
     `by_key_out`: viz _weighted_shares - volitelny dict {allocation_key_id:
     Decimal podil}, jen pro auditovaci detail po klicich. Bez vlivu na
     vysledek ani chovani, pokud zustane None.
     """
-    meter = service_item.meter
-    total_consumption = meter.consumption_for(period)
-    if total_consumption is None:
-        warnings.append(
-            f"{service_item}: chybí odečet měřidla {meter} pro období {period} "
-            f"nebo předchozí období - položka vynechána."
-        )
-        return {}, None
-    if total_consumption == 0:
-        warnings.append(f"{service_item}: nulová spotřeba měřidla {meter} - položka vynechána.")
-        return {}, None
-
     keys = [
         k for k in service_item.allocation_keys.select_related("client_card", "client_card__unit", "meter")
         if k.is_valid_for_period(period) and k.allocation_type not in ABSOLUTE_AMOUNT_TYPES
     ]
 
-    submeter_keys = [k for k in keys if k.allocation_type == AllocationKey.AllocationType.SUBMETER]
-    weight_keys = [k for k in keys if k.allocation_type != AllocationKey.AllocationType.SUBMETER]
+    # Klice seskupene podle konkretniho meridla - bez ohledu na typ klice
+    # (jak "Podružné měřidlo", tak "Podle váhy" klic muze mit meridlo
+    # napojene - viz docstring vyse). Klice BEZ meridla jdou do weight_keys.
+    keys_by_meter = {}
+    weight_keys = []
+    for key in keys:
+        if key.meter_id is not None:
+            keys_by_meter.setdefault(key.meter_id, []).append(key)
+        else:
+            weight_keys.append(key)
+
+    main_meter = service_item.meter
+    if main_meter is not None:
+        total_consumption = main_meter.consumption_for(period)
+        if total_consumption is None:
+            warnings.append(
+                f"{service_item}: chybí odečet měřidla {main_meter} pro období {period} "
+                f"nebo předchozí období - položka vynechána."
+            )
+            return {}, None
+        if total_consumption == 0:
+            warnings.append(f"{service_item}: nulová spotřeba měřidla {main_meter} - položka vynechána.")
+            return {}, None
+        implicit_total = False
+    else:
+        total_consumption = None  # dopocita se nize jako soucet skupin
+        implicit_total = True
 
     shares = {}
-    sum_submeters = Decimal("0")
+    sum_groups = Decimal("0")
+    resolved_groups = {}  # meter_id -> (Decimal spotreba, [klice])
 
-    # Podruzna meridla seskupena podle konkretniho meridla - vice karet muze
-    # sdilet jedno fyzicke meridlo (napr. spolecny elektromer pro dva
-    # prostory). Spotreba TOHOTO meridla se pak rozdeli mezi karty skupiny
-    # podle vahy (AllocationKey.value), normalizovane jen v ramci teto
-    # skupiny - ne spolecne s jinymi meridly ci vazenymi klici polozky.
-    keys_by_meter = {}
-    for key in submeter_keys:
-        if key.meter_id is None:
-            warnings.append(
-                f"{service_item}: klíč typu 'Podružné měřidlo' pro kartu {key.client_card} "
-                f"(AllocationKey #{key.id}) nemá nastavené měřidlo - tato karta vynechána. "
-                f"Buď doplň měřidlo u klíče, nebo změň typ klíče, pokud nemělo být 'submeter'."
-            )
-            continue
-        keys_by_meter.setdefault(key.meter_id, []).append(key)
-
-    for group_keys in keys_by_meter.values():
-        sub_meter = group_keys[0].meter
-        sub_consumption = sub_meter.consumption_for(period)
-        if sub_consumption is None:
+    for meter_id, group_keys in keys_by_meter.items():
+        group_meter = group_keys[0].meter
+        group_consumption = group_meter.consumption_for(period)
+        if group_consumption is None:
             cards = ", ".join(str(k.client_card) for k in group_keys)
             warnings.append(
-                f"{service_item}: chybí odečet podružného měřidla {sub_meter} "
-                f"pro období {period} - karty ({cards}) vynechány."
+                f"{service_item}: chybí odečet měřidla {group_meter} pro období {period} "
+                f"- karty ({cards}) vynechány."
             )
             continue
-        sum_submeters += sub_consumption
-        contribution = sub_consumption / total_consumption
+        resolved_groups[meter_id] = (group_consumption, group_keys)
+        sum_groups += group_consumption
+
+    if implicit_total:
+        total_consumption = sum_groups
+        if total_consumption == 0:
+            warnings.append(
+                f"{service_item}: nemá hlavní měřidlo a žádné z napojených měřidel nemá "
+                f"naměřenou spotřebu pro toto období - položka vynechána."
+            )
+            return {}, None
+
+    for group_consumption, group_keys in resolved_groups.values():
+        contribution = group_consumption / total_consumption
 
         if len(group_keys) == 1:
             key = group_keys[0]
@@ -221,7 +254,7 @@ def _consumption_shares(service_item, period, warnings, by_key_out=None):
             if not local_shares:
                 cards = ", ".join(str(k.client_card) for k in group_keys)
                 warnings.append(
-                    f"{service_item}: podružné měřidlo {sub_meter} sdílí více karet ({cards}), "
+                    f"{service_item}: měřidlo {group_keys[0].meter} sdílí více karet ({cards}), "
                     f"ale žádná z nich nemá pro toto období platnou váhu - jeho spotřeba se "
                     f"nerozpočítala."
                 )
@@ -232,21 +265,32 @@ def _consumption_shares(service_item, period, warnings, by_key_out=None):
                 for key_id, weight in local_by_key.items():
                     by_key_out[key_id] = weight * contribution
 
-    residual = total_consumption - sum_submeters
-    residual_fraction = residual / total_consumption
-
-    if weight_keys and residual_fraction > 0:
-        weight_by_key = {} if by_key_out is not None else None
-        weight_shares = _weighted_shares(weight_keys, period, by_key_out=weight_by_key)
-        for card_id, weight in weight_shares.items():
-            shares[card_id] = shares.get(card_id, Decimal("0")) + weight * residual_fraction
-        if by_key_out is not None:
-            for key_id, weight in weight_by_key.items():
-                by_key_out[key_id] = weight * residual_fraction
-    elif residual_fraction != 0 and not weight_keys:
+    if not implicit_total:
+        # Rezim s hlavnim meridlem - co nezachytila zadna pojmenovana
+        # skupina (napr. spolecne prostory bez vlastniho meridla) se
+        # rozpocita mezi klice BEZ meridla podle vahy.
+        residual = total_consumption - sum_groups
+        residual_fraction = residual / total_consumption
+        if weight_keys and residual_fraction > 0:
+            weight_by_key = {} if by_key_out is not None else None
+            weight_shares = _weighted_shares(weight_keys, period, by_key_out=weight_by_key)
+            for card_id, weight in weight_shares.items():
+                shares[card_id] = shares.get(card_id, Decimal("0")) + weight * residual_fraction
+            if by_key_out is not None:
+                for key_id, weight in weight_by_key.items():
+                    by_key_out[key_id] = weight * residual_fraction
+        elif residual_fraction != 0 and not weight_keys:
+            warnings.append(
+                f"{service_item}: zbývá {residual_fraction:.2%} spotřeby (společná část), "
+                f"ale žádná karta nemá klíč pro její rozpočítání."
+            )
+    elif weight_keys:
+        # Rezim bez hlavniho meridla - klic bez napojeneho meridla nema
+        # fyzikalni zaklad, ze ktereho by sel podil urcit.
+        cards = ", ".join(str(k.client_card) for k in weight_keys)
         warnings.append(
-            f"{service_item}: zbývá {residual_fraction:.2%} spotřeby (společná část), "
-            f"ale žádná karta nemá klíč pro její rozpočítání."
+            f"{service_item}: karty ({cards}) mají klíč bez napojeného měřidla, ale položka "
+            f"nemá hlavní měřidlo - není vůči čemu určit jejich podíl, vynechány."
         )
 
     return shares, total_consumption
@@ -361,7 +405,15 @@ def calculate_period(period, site=None):
 
             # 2) podily na zbytku castky
             total_consumption = None
-            if service_item.meter:
+            # I bez hlavniho meridla na urovni polozky (service_item.meter)
+            # muze mit nektery klic napojene SVE VLASTNI meridlo (typicky
+            # "Podružné měřidlo", viz _consumption_shares) - v tom pripade
+            # se "celek" dopocita jako soucet spotreby takovych meridel.
+            has_meter_keys = any(
+                k.meter_id is not None
+                for k in valid_keys if k.allocation_type not in ABSOLUTE_AMOUNT_TYPES
+            )
+            if service_item.meter or has_meter_keys:
                 shares, total_consumption = _consumption_shares(service_item, period, warnings)
             else:
                 weight_keys = [

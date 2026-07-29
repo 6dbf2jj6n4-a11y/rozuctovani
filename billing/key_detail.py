@@ -54,7 +54,11 @@ def get_key_rows_for_client(client, period):
         # potrebuje znat vsechny) - stejne funkce jako skutecny vypocet.
         by_key_share = {}
         total_consumption = None
-        if si.meter:
+        has_meter_keys = any(
+            k.meter_id is not None
+            for k in valid_keys if k.allocation_type not in ABSOLUTE_AMOUNT_TYPES
+        )
+        if si.meter or has_meter_keys:
             _, total_consumption = _consumption_shares(si, period, warnings, by_key_out=by_key_share)
         else:
             weight_keys = [k for k in valid_keys if k.allocation_type not in ABSOLUTE_AMOUNT_TYPES]
