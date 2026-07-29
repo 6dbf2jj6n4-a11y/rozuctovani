@@ -110,6 +110,7 @@ def get_key_rows_for_client(client, period):
                     row["previous_state"] = previous_reading.value if previous_reading else None
                     row["current_state"] = current_reading.value if current_reading else None
                     row["consumption"] = meter_for_state.consumption_for(period)
+                    row["unit_of_measure"] = meter_for_state.unit_of_measure
 
                     if meter_for_state.is_virtual:
                         for leaf, leaf_sign in meter_for_state.consumption_leaves():
