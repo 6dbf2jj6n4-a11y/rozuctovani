@@ -141,7 +141,7 @@ def _weighted_shares(keys, period, by_key_out=None):
     return {card_id: weight / total for card_id, weight in raw_weights.items()}
 
 
-def _consumption_shares(service_item, period, warnings, by_key_out=None):
+def _consumption_shares(service_item, period, warnings, by_key_out=None, by_key_local_out=None):
     """
     Spocita podily pro polozku, kde se aspon cast klicu opira o skutecnou
     namerenou spotrebu meridla - bud primo pres service_item.meter (hlavni
@@ -180,6 +180,13 @@ def _consumption_shares(service_item, period, warnings, by_key_out=None):
     `by_key_out`: viz _weighted_shares - volitelny dict {allocation_key_id:
     Decimal podil}, jen pro auditovaci detail po klicich. Bez vlivu na
     vysledek ani chovani, pokud zustane None.
+
+    `by_key_local_out`: volitelny dict {allocation_key_id: Decimal podil},
+    do ktereho se navic zapise LOKALNI podil klice v ramci SVE SKUPINY
+    (stejneho meridla) - u meridla, ktere pouziva jen jedna karta, je to
+    vzdy 1 (100 %); u sdileneho meridla je to jeho vaha normalizovana jen
+    proti ostatnim kartam na TOMTO meridle. Slouzi jen k auditu ("mam
+    spravne rozdelene sdilene meridlo?"), na skutecny vypocet nema vliv.
     """
     keys = [
         k for k in service_item.allocation_keys.select_related("client_card", "client_card__unit", "meter")
@@ -248,8 +255,11 @@ def _consumption_shares(service_item, period, warnings, by_key_out=None):
             shares[key.client_card_id] = shares.get(key.client_card_id, Decimal("0")) + contribution
             if by_key_out is not None:
                 by_key_out[key.id] = contribution
+            if by_key_local_out is not None:
+                by_key_local_out[key.id] = Decimal("1")
         else:
-            local_by_key = {} if by_key_out is not None else None
+            need_local = by_key_out is not None or by_key_local_out is not None
+            local_by_key = {} if need_local else None
             local_shares = _weighted_shares(group_keys, period, by_key_out=local_by_key)
             if not local_shares:
                 cards = ", ".join(str(k.client_card) for k in group_keys)
@@ -264,6 +274,9 @@ def _consumption_shares(service_item, period, warnings, by_key_out=None):
             if by_key_out is not None:
                 for key_id, weight in local_by_key.items():
                     by_key_out[key_id] = weight * contribution
+            if by_key_local_out is not None:
+                for key_id, weight in local_by_key.items():
+                    by_key_local_out[key_id] = weight
 
     if not implicit_total:
         # Rezim s hlavnim meridlem - co nezachytila zadna pojmenovana

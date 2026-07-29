@@ -53,13 +53,16 @@ def get_key_rows_for_client(client, period):
         # Podily po jednotlivych klicich (vsech klientu polozky - normalizace
         # potrebuje znat vsechny) - stejne funkce jako skutecny vypocet.
         by_key_share = {}
+        by_key_local_share = {}
         total_consumption = None
         has_meter_keys = any(
             k.meter_id is not None
             for k in valid_keys if k.allocation_type not in ABSOLUTE_AMOUNT_TYPES
         )
         if si.meter or has_meter_keys:
-            _, total_consumption = _consumption_shares(si, period, warnings, by_key_out=by_key_share)
+            _, total_consumption = _consumption_shares(
+                si, period, warnings, by_key_out=by_key_share, by_key_local_out=by_key_local_share
+            )
         else:
             weight_keys = [k for k in valid_keys if k.allocation_type not in ABSOLUTE_AMOUNT_TYPES]
             _weighted_shares(weight_keys, period, by_key_out=by_key_share)
@@ -76,6 +79,7 @@ def get_key_rows_for_client(client, period):
                 "current_state": None,
                 "consumption": None,
                 "share": None,
+                "local_share": None,
                 "units": None,
                 "unit_of_measure": None,
                 "price_per_unit": None,
@@ -95,6 +99,7 @@ def get_key_rows_for_client(client, period):
             else:
                 share = by_key_share.get(key.id)
                 row["share"] = share
+                row["local_share"] = by_key_local_share.get(key.id)
 
                 # Prioritne meridlo primo u klice (i kdyz jeho typ neni
                 # "Podruzne meridlo" - napr. "Podle vahy" s rucne zadanou
