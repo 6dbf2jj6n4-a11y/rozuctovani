@@ -118,6 +118,12 @@ def _weighted_shares(keys, period, by_key_out=None):
             base = key.value or Decimal("0")
         elif key.allocation_type == AllocationKey.AllocationType.EQUAL_SPLIT:
             base = Decimal("1")
+        elif key.allocation_type == AllocationKey.AllocationType.SUBMETER:
+            # Sem se klice typu SUBMETER dostanou jen pri lokalnim deleni
+            # JEDNOHO konkretniho podruzneho meridla mezi vice karet, ktere
+            # ho sdili (viz _consumption_shares) - value je pak vaha pro
+            # rozdeleni spotreby TOHOTO meridla mezi ne.
+            base = key.value or Decimal("0")
         else:  # PERCENT
             base = key.value or Decimal("0")
 
@@ -174,6 +180,13 @@ def _consumption_shares(service_item, period, warnings, by_key_out=None):
 
     shares = {}
     sum_submeters = Decimal("0")
+
+    # Podruzna meridla seskupena podle konkretniho meridla - vice karet muze
+    # sdilet jedno fyzicke meridlo (napr. spolecny elektromer pro dva
+    # prostory). Spotreba TOHOTO meridla se pak rozdeli mezi karty skupiny
+    # podle vahy (AllocationKey.value), normalizovane jen v ramci teto
+    # skupiny - ne spolecne s jinymi meridly ci vazenymi klici polozky.
+    keys_by_meter = {}
     for key in submeter_keys:
         if key.meter_id is None:
             warnings.append(
@@ -182,18 +195,42 @@ def _consumption_shares(service_item, period, warnings, by_key_out=None):
                 f"Buď doplň měřidlo u klíče, nebo změň typ klíče, pokud nemělo být 'submeter'."
             )
             continue
-        sub_consumption = key.meter.consumption_for(period)
+        keys_by_meter.setdefault(key.meter_id, []).append(key)
+
+    for group_keys in keys_by_meter.values():
+        sub_meter = group_keys[0].meter
+        sub_consumption = sub_meter.consumption_for(period)
         if sub_consumption is None:
+            cards = ", ".join(str(k.client_card) for k in group_keys)
             warnings.append(
-                f"{service_item}: chybí odečet podružného měřidla {key.meter} "
-                f"pro kartu {key.client_card} - tato karta vynechána."
+                f"{service_item}: chybí odečet podružného měřidla {sub_meter} "
+                f"pro období {period} - karty ({cards}) vynechány."
             )
             continue
-        contribution = sub_consumption / total_consumption
-        shares[key.client_card_id] = shares.get(key.client_card_id, Decimal("0")) + contribution
-        if by_key_out is not None:
-            by_key_out[key.id] = contribution
         sum_submeters += sub_consumption
+        contribution = sub_consumption / total_consumption
+
+        if len(group_keys) == 1:
+            key = group_keys[0]
+            shares[key.client_card_id] = shares.get(key.client_card_id, Decimal("0")) + contribution
+            if by_key_out is not None:
+                by_key_out[key.id] = contribution
+        else:
+            local_by_key = {} if by_key_out is not None else None
+            local_shares = _weighted_shares(group_keys, period, by_key_out=local_by_key)
+            if not local_shares:
+                cards = ", ".join(str(k.client_card) for k in group_keys)
+                warnings.append(
+                    f"{service_item}: podružné měřidlo {sub_meter} sdílí více karet ({cards}), "
+                    f"ale žádná z nich nemá pro toto období platnou váhu - jeho spotřeba se "
+                    f"nerozpočítala."
+                )
+                continue
+            for card_id, weight in local_shares.items():
+                shares[card_id] = shares.get(card_id, Decimal("0")) + weight * contribution
+            if by_key_out is not None:
+                for key_id, weight in local_by_key.items():
+                    by_key_out[key_id] = weight * contribution
 
     residual = total_consumption - sum_submeters
     residual_fraction = residual / total_consumption

@@ -7,9 +7,18 @@ Mapovani TYP_Polozky:
               puvodnim Excelu jen dopocitany napovedny udaj = Jednotek /
               soucet Jednotek pres vsechny karty se stejnym VODA_KodOM;
               pouzitim primo Jednotek si system podily dopocitava sam a
-              nezastarava pri zmene poctu najemcu). Typ klice je
-              weighted_count, nebo person_count pokud VODA_KodOM
-              odpovida odberu na TUV (teplá užitková voda, napr. W_TUV).
+              nezastarava pri zmene poctu najemcu). Typ klice:
+                - person_count, pokud VODA_KodOM odpovida odberu na TUV
+                  (teplá užitková voda, napr. W_TUV)
+                - submeter, pokud meridlo ma v systemu realne odecty (podil
+                  se pak pocita ze skutecne spotreby tohoto konkretniho
+                  meridla - viz billing/engine.py _consumption_shares;
+                  Jednotek slouzi jen jako vaha pro rozdeleni MEZI KARTY,
+                  ktere si jedno fyzicke meridlo pripadne sdileji)
+                - weighted_count, pokud meridlo zadne realne odecty nema
+                  (virtualni skupina, napr. spolecna/zbytkova spotreba -
+                  dostane zbytek po odectu vsech submeter-klicu od celkove
+                  spotreby hlavniho meridla)
   K_PLOSE  -> fixed_amount  (hodnota = Mplochy * KCzaM / 12 = mesicni pausal;
               pokud IDPLOCHY oznacuje jednu konkretni mistnost, dohleda se
               i Unit a ulozi se do AllocationKey.unit - jen informativni)
@@ -122,7 +131,19 @@ class Command(BaseCommand):
                     skipped += 1
                     continue
                 value = jednotek_val.quantize(Decimal("0.0001"))
-                allocation_type = "person_count" if "TUV" in meter_code.upper() else "weighted_count"
+                if "TUV" in meter_code.upper():
+                    allocation_type = "person_count"
+                elif meter.readings.exists():
+                    # Meridlo ma realne odecty -> podil se ma pocitat ze
+                    # skutecne spotreby (submeter), value slouzi jen jako
+                    # vaha pro rozdeleni MEZI KARTY, ktere si tohle jedno
+                    # meridlo pripadne sdileji (viz billing/engine.py
+                    # _consumption_shares). Bez realnych odectu (virtualni
+                    # skupina, napr. spolecna/zbytkova spotreba) zustava
+                    # weighted_count jako dosud.
+                    allocation_type = "submeter"
+                else:
+                    allocation_type = "weighted_count"
             elif typ == "K_PLOSE":
                 if mplochy and kczam and float(kczam) > 0:
                     # mesicni pausal = plocha * cena/m2/rok / 12

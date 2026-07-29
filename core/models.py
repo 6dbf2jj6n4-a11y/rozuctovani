@@ -586,7 +586,10 @@ class AllocationKey(models.Model):
         help_text=(
             "Vyznam zavisi na typu: u 'Pevna castka' jde o hotovou Kc castku/mesic, "
             "u 'Plocha x cena/m2' jde o vymeru v m2 (cena/m2/rok se bere z Ceniku "
-            "polozky pro dane obdobi), u ostatnich typu jde o vahu/procento."
+            "polozky pro dane obdobi), u 'Podruzne meridlo' se pouzije jen pokud "
+            "stejne meridlo sdili vice karet - pak jde o vahu pro rozdeleni jeho "
+            "spotreby mezi ne (u jedne karty na meridlo se nepouzije, dostane celou "
+            "spotrebu), u ostatnich typu jde o vahu/procento."
         ),
     )
     meter = models.ForeignKey(

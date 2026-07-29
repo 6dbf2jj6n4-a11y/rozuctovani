@@ -10,9 +10,17 @@ FM-specifickeho prikazu:
 
   ELEKTRO/VODA/TEPLO (merene, meridlo se hleda podle kodu v Meter.code):
     K_CELKU  -> vaha (hodnota = sloupec Jednotek, NE Podil - viz
-                import_klice_teplo.py pro zduvodneni). Typ klice je
-                weighted_count, nebo person_count pokud kod odpovida
-                TUV (teplá užitková voda).
+                import_klice_teplo.py pro zduvodneni). Typ klice:
+                  - person_count, pokud kod odpovida TUV (teplá užitková voda)
+                  - submeter, pokud meridlo ma v systemu realne odecty (podil
+                    se pak pocita ze skutecne spotreby tohoto konkretniho
+                    meridla - viz billing/engine.py _consumption_shares;
+                    Jednotek slouzi jen jako vaha pro rozdeleni MEZI KARTY,
+                    ktere si jedno fyzicke meridlo pripadne sdileji)
+                  - weighted_count, pokud meridlo zadne realne odecty nema
+                    (virtualni skupina, napr. spolecna/zbytkova spotreba
+                    typu "E_SPOL" - dostane zbytek po odectu vsech
+                    submeter-klicu od celkove spotreby hlavniho meridla)
     K_PLOSE  -> fixed_amount (hodnota = Mplochy * KCzaM / 12; pokud IDPLOCHY
                 oznacuje jednu konkretni mistnost, dohleda se i Unit a ulozi
                 se do AllocationKey.unit - jen informativni)
@@ -175,7 +183,19 @@ class Command(BaseCommand):
                     skipped += 1
                     continue
                 value = jednotek_val.quantize(Decimal("0.0001"))
-                allocation_type = "person_count" if "TUV" in om_code.upper() else "weighted_count"
+                if "TUV" in om_code.upper():
+                    allocation_type = "person_count"
+                elif meter.readings.exists():
+                    # Meridlo ma realne odecty -> podil se ma pocitat ze
+                    # skutecne spotreby (submeter), value slouzi jen jako
+                    # vaha pro rozdeleni MEZI KARTY, ktere si tohle jedno
+                    # meridlo pripadne sdileji (viz billing/engine.py
+                    # _consumption_shares). Bez realnych odectu (virtualni
+                    # skupina, napr. spolecna/zbytkova spotreba) zustava
+                    # weighted_count jako dosud.
+                    allocation_type = "submeter"
+                else:
+                    allocation_type = "weighted_count"
             elif typ == "K_PLOSE":
                 allocation_type = "fixed_amount"
                 if mplochy and kczam and float(kczam) > 0:

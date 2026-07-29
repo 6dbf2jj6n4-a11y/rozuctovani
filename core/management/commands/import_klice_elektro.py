@@ -7,9 +7,19 @@ Mapovani TYP_Polozky:
              puvodnim Excelu jen dopocitany napovedny udaj = Jednotek /
              soucet Jednotek pres vsechny karty se stejnym EL_KodOM;
              pouzitim primo Jednotek si system podily dopocitava sam
-             a nezastarava pri zmene poctu najemcu). Typ klice je
-             weighted_count, nebo person_count pokud EL_KodOM
-             odpovida odberu na TUV (teplá užitková voda).
+             a nezastarava pri zmene poctu najemcu). Typ klice:
+               - person_count, pokud EL_KodOM odpovida odberu na TUV
+                 (teplá užitková voda)
+               - submeter, pokud meridlo ma v systemu realne odecty (podil
+                 se pak pocita ze skutecne spotreby tohoto konkretniho
+                 meridla - viz billing/engine.py _consumption_shares;
+                 Jednotek slouzi jen jako vaha pro rozdeleni MEZI KARTY,
+                 ktere si jedno fyzicke meridlo pripadne sdileji, napr.
+                 spolecny elektromer pro dva prostory)
+               - weighted_count, pokud meridlo zadne realne odecty nema
+                 (virtualni skupina, napr. spolecna/zbytkova spotreba typu
+                 "E_SPOL" - dostane zbytek po odectu vsech submeter-klicu
+                 od celkove spotreby hlavniho meridla)
   K_PLOSE -> fixed_amount (hodnota = Mplochy * KCzaM / 12 = mesicni pausal;
              pokud IDPLOCHY oznacuje jednu konkretni mistnost, dohleda se
              i Unit a ulozi se do AllocationKey.unit - jen informativni)
@@ -23,9 +33,9 @@ Mapovani TYP_Polozky:
 
 EL_KodOM je kod meridla - hleda se v Meter.code pro dany areal.
 ServicePoolItem se hleda podle meter. U K_CELKU se meridlo (slave kod,
-napr. E_A1) uklada i do AllocationKey.meter - ne jako "podruzne meridlo"
-ve smyslu vypoctu, ale aby jedna karta mohla mit vice K_CELKU radku
-(ruzne kategorie/mistnosti) pro stejnou polozku Zasobniku soucasne.
+napr. E_A1) uklada vzdy do AllocationKey.meter - jak pro skutecny vypocet
+(typ submeter), tak jen informativne (typ weighted_count, aby jedna karta
+mohla mit vice K_CELKU radku pro stejnou polozku Zasobniku soucasne).
 
 Pouziti:
   python manage.py import_klice_elektro cesta/k/souboru.xlsx --site FM
@@ -123,7 +133,19 @@ class Command(BaseCommand):
                     skipped += 1
                     continue
                 value = jednotek_val.quantize(Decimal("0.0001"))
-                allocation_type = "person_count" if "TUV" in meter_code.upper() else "weighted_count"
+                if "TUV" in meter_code.upper():
+                    allocation_type = "person_count"
+                elif meter.readings.exists():
+                    # Meridlo ma realne odecty -> podil se ma pocitat ze
+                    # skutecne spotreby (submeter), value slouzi jen jako
+                    # vaha pro rozdeleni MEZI KARTY, ktere si tohle jedno
+                    # meridlo pripadne sdileji (viz billing/engine.py
+                    # _consumption_shares). Bez realnych odectu (virtualni
+                    # skupina, napr. spolecna/zbytkova spotreba) zustava
+                    # weighted_count jako dosud.
+                    allocation_type = "submeter"
+                else:
+                    allocation_type = "weighted_count"
             elif typ == "K_PLOSE":
                 if mplochy and kczam and float(kczam) > 0:
                     # mesicni pausal = plocha * cena/m2/rok / 12
