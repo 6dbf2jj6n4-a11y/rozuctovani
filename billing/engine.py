@@ -141,6 +141,33 @@ def _weighted_shares(keys, period, by_key_out=None):
     return {card_id: weight / total for card_id, weight in raw_weights.items()}
 
 
+def _owned_consumption(meter, period, billed_meter_ids, cache):
+    """Vrati "vlastni" spotrebu meridla za obdobi - jeho surovy odecet minus
+    spotreba prime podrizenych meridel (Meter.parent_meter/children), ktera
+    jsou SAMA O SOBE take samostatne uctovana (meter.id je v
+    billed_meter_ids - typicky maji vlastni klic na stejne polozce, napr.
+    E_AB1_10 je master k E_AB1_11/E_AB1_12, kazde s vlastni kartou). Bez
+    tohoto odectu by se spotreba podrizenych meridel zapocitala dvakrat -
+    jednou pod sebou, jednou uz zahrnuta v surovem odectu nadrazeneho
+    meridla. Podrizena meridla BEZ vlastniho klice na teto polozce se
+    neodecitaji - jejich spotreba spravne zustava soucasti nadrazeneho."""
+    if meter.id in cache:
+        return cache[meter.id]
+    raw = meter.consumption_for(period)
+    if raw is None:
+        cache[meter.id] = None
+        return None
+    deduction = Decimal("0")
+    for child in meter.children.all():
+        if child.id in billed_meter_ids:
+            child_consumption = _owned_consumption(child, period, billed_meter_ids, cache)
+            if child_consumption is not None:
+                deduction += child_consumption
+    result = raw - deduction
+    cache[meter.id] = result
+    return result
+
+
 def _consumption_shares(service_item, period, warnings, by_key_out=None, by_key_local_out=None):
     """
     Spocita podily pro polozku, kde se aspon cast klicu opira o skutecnou
@@ -224,10 +251,13 @@ def _consumption_shares(service_item, period, warnings, by_key_out=None, by_key_
     shares = {}
     sum_groups = Decimal("0")
     resolved_groups = {}  # meter_id -> (Decimal spotreba, [klice])
+    owned_consumption_cache = {}
 
     for meter_id, group_keys in keys_by_meter.items():
         group_meter = group_keys[0].meter
-        group_consumption = group_meter.consumption_for(period)
+        group_consumption = _owned_consumption(
+            group_meter, period, keys_by_meter.keys(), owned_consumption_cache
+        )
         if group_consumption is None:
             cards = ", ".join(str(k.client_card) for k in group_keys)
             warnings.append(
