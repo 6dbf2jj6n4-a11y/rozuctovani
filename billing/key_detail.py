@@ -126,13 +126,14 @@ def get_key_rows_for_client(client, period):
                                 "unit_of_measure": leaf.unit_of_measure,
                             })
 
+                if share is not None and remaining_cost is not None:
+                    row["amount"] = (remaining_cost * share).quantize(Decimal("0.01"))
+
                 if share is not None and total_consumption:
                     row["units"] = (share * total_consumption).quantize(Decimal("0.001"))
                     row["unit_of_measure"] = si.meter.unit_of_measure if si.meter else ""
                     if total_cost:
                         row["price_per_unit"] = (total_cost / total_consumption).quantize(Decimal("0.0001"))
-                    if remaining_cost is not None:
-                        row["amount"] = (remaining_cost * share).quantize(Decimal("0.01"))
 
             rows.append(row)
 
