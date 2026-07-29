@@ -449,7 +449,16 @@ def calculate_period(period, site=None):
                 elif share is not None and total_consumption:
                     units = (share * total_consumption).quantize(Decimal("0.001"))
                     price_per_unit = share_price_per_unit
-                    unit_of_measure = service_item.meter.unit_of_measure
+                    # Bez hlavniho meridla na urovni polozky (implicitni
+                    # celek dopocitany z jednotlivych klicovych meridel v
+                    # _consumption_shares) neni jedno spolecne meridlo, ze
+                    # ktereho by sla vzit jednotka - vezme se z prvniho
+                    # klice s napojenym meridlem, jinak zustane prazdna.
+                    if service_item.meter:
+                        unit_of_measure = service_item.meter.unit_of_measure
+                    else:
+                        key_with_meter = next((k for k in valid_keys if k.meter_id), None)
+                        unit_of_measure = key_with_meter.meter.unit_of_measure if key_with_meter else ""
 
                 BillingLine.objects.create(
                     client_card_id=card_id,

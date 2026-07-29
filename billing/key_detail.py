@@ -136,7 +136,10 @@ def get_key_rows_for_client(client, period):
 
                 if share is not None and total_consumption:
                     row["units"] = (share * total_consumption).quantize(Decimal("0.001"))
-                    row["unit_of_measure"] = si.meter.unit_of_measure if si.meter else ""
+                    if meter_for_state is not None:
+                        row["unit_of_measure"] = meter_for_state.unit_of_measure
+                    elif si.meter:
+                        row["unit_of_measure"] = si.meter.unit_of_measure
                     if total_cost:
                         row["price_per_unit"] = (total_cost / total_consumption).quantize(Decimal("0.0001"))
 
