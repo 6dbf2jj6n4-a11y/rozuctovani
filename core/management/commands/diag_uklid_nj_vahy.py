@@ -66,7 +66,7 @@ class Command(BaseCommand):
 
         self.stdout.write(
             f"{'klient':40} {'karta':30} {'typ':28} {'váha':>10} {'akt.dny':>8} "
-            f"{'eff.váha':>12} {'podíl':>10} {'billed':>7} {'valid':>6}"
+            f"{'eff.váha':>12} {'podíl':>10} {'billed':>7} {'valid':>6} {'karta akt.':>10}"
         )
         for card, key, type_label, effective_weight, active_days, valid in rows:
             share = (effective_weight / total) if effective_weight is not None else None
@@ -75,7 +75,7 @@ class Command(BaseCommand):
             self.stdout.write(
                 f"{card.client.name[:40]:40} {str(card)[:30]:30} {type_label[:28]:28} "
                 f"{str(key.value):>10} {active_days:>8} {eff_str:>12} {share_str:>10} "
-                f"{str(key.is_billed):>7} {str(valid):>6}"
+                f"{str(key.is_billed):>7} {str(valid):>6} {str(card.is_active):>10}"
             )
 
         self.stdout.write(f"\nsoučet efektivních vah (jmenovatel normalizace) = {total}")

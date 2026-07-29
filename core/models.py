@@ -640,6 +640,8 @@ class AllocationKey(models.Model):
         return ""
 
     def is_valid_for_period(self, period):
+        if not self.client_card.is_active:
+            return False
         period_start, period_end = period.date_range()
         if self.valid_from and self.valid_from > period_end:
             return False
