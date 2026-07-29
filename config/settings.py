@@ -156,6 +156,11 @@ UNFOLD = {
                         "link": reverse_lazy("admin:core_costentry_changelist"),
                     },
                     {
+                        "title": _("Ceníky"),
+                        "icon": "sell",
+                        "link": reverse_lazy("admin:core_pricelist_changelist"),
+                    },
+                    {
                         "title": _("Odečty měřidel"),
                         "icon": "speed",
                         "link": reverse_lazy("admin:core_meterreading_changelist"),
@@ -218,11 +223,6 @@ UNFOLD = {
                 "title": _("Vyúčtování"),
                 "separator": True,
                 "items": [
-                    {
-                        "title": _("Ceníky"),
-                        "icon": "sell",
-                        "link": reverse_lazy("admin:core_pricelist_changelist"),
-                    },
                     {
                         "title": _("Položky"),
                         "icon": "receipt_long",
