@@ -34,7 +34,11 @@ class Command(BaseCommand):
 
         client = Client.objects.filter(name=options["client"]).first()
         if client is None:
-            raise CommandError(f"Klient {options['client']!r} nenalezen.")
+            candidates = Client.objects.filter(name__icontains="novostav")
+            if not candidates:
+                candidates = Client.objects.filter(name__icontains=options["client"].split()[0])
+            names = ", ".join(f"{c.id}:{c.name!r}" for c in candidates) or "(žádní podobní klienti nenalezeni)"
+            raise CommandError(f"Klient {options['client']!r} nenalezen. Podobní: {names}")
 
         period_start, period_end = period.date_range()
         warnings = []
