@@ -1132,10 +1132,10 @@ class CostEntryAdmin(ModelAdmin):
 
 @admin.register(BillingLine)
 class BillingLineAdmin(ModelAdmin):
-    list_display = ("client_card_display", "service_item", "period", "amount_display", "share")
+    list_display = ("client_card_display", "service_item", "period", "amount_display", "share_display")
     list_filter = ("period",)
     search_fields = ("client_card__client__name",)
-    readonly_fields = ("client_card_display", "period", "service_item", "amount", "share", "calc_detail")
+    readonly_fields = ("client_card_display", "period", "service_item", "amount", "share_display", "calc_detail")
     actions = ["generovat_vyuctovani_pdf"]
 
     def get_urls(self):
@@ -1298,6 +1298,12 @@ class BillingLineAdmin(ModelAdmin):
     @admin.display(description="Částka (Kč)", ordering="amount")
     def amount_display(self, obj):
         return _format_kc(obj.amount)
+
+    @admin.display(description="Podíl", ordering="share")
+    def share_display(self, obj):
+        if obj.share is None:
+            return "—"
+        return f"{obj.share * 100:.3f} %"
 
     def has_add_permission(self, request):
         return False

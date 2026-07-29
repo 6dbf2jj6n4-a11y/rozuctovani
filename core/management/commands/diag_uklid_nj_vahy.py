@@ -70,7 +70,7 @@ class Command(BaseCommand):
         )
         for card, key, type_label, effective_weight, active_days, valid in rows:
             share = (effective_weight / total) if effective_weight is not None else None
-            share_str = f"{share*100:.2f}%" if share is not None else "-"
+            share_str = f"{share*100:.3f}%" if share is not None else "-"
             eff_str = f"{effective_weight:.4f}" if effective_weight is not None else "-"
             self.stdout.write(
                 f"{card.client.name[:40]:40} {str(card)[:30]:30} {type_label[:28]:28} "

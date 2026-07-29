@@ -1,4 +1,5 @@
 {% extends "admin/base_site.html" %}
+{% load billing_extras %}
 
 {% block content %}
 <div>
@@ -58,7 +59,7 @@
                         <td style="padding:6px 8px; text-align:right;">{% if row.previous_state != None %}{{ row.previous_state|floatformat:3 }}{% else %}—{% endif %}</td>
                         <td style="padding:6px 8px; text-align:right;">{% if row.current_state != None %}{{ row.current_state|floatformat:3 }}{% else %}—{% endif %}</td>
                         <td style="padding:6px 8px; text-align:right;">{% if row.consumption != None %}{{ row.consumption|floatformat:3 }} {{ row.unit_of_measure }}{% else %}—{% endif %}</td>
-                        <td style="padding:6px 8px; text-align:right;">{% if row.share != None %}{{ row.share|floatformat:4 }}{% else %}—{% endif %}</td>
+                        <td style="padding:6px 8px; text-align:right;">{{ row.share|percent }}</td>
                         <td style="padding:6px 8px; text-align:right;">{% if row.units != None %}{{ row.units|floatformat:3 }} {{ row.unit_of_measure }}{% else %}—{% endif %}</td>
                         <td style="padding:6px 8px; text-align:right;">{% if row.price_per_unit %}{{ row.price_per_unit|floatformat:4 }} Kč{% else %}—{% endif %}</td>
                         <td style="padding:6px 8px; text-align:right; font-weight:600;">

@@ -15,6 +15,14 @@ def kc(value):
 
 
 @register.filter
+def percent(value, decimals=3):
+    """Formátuje podíl (0-1) jako procenta, např. 0.061317 -> '6.132 %'."""
+    if value is None:
+        return "—"
+    return f"{value * 100:.{decimals}f} %"
+
+
+@register.filter
 def units_display(line):
     return format_units(line["units"], line["unit_of_measure"])
 
