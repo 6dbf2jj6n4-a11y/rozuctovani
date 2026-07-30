@@ -15,7 +15,7 @@ from reportlab.lib.styles import ParagraphStyle
 from reportlab.lib.units import mm
 from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
-from core.contract_generator import LANDLORD_REPRESENTATIVE, format_date_cz
+from core.contract_generator import format_date_cz, get_landlord
 from core.models import AllocationKey, ServicePoolItem
 from core.pdf_fonts import FONT_BOLD, FONT_REGULAR
 
@@ -173,7 +173,7 @@ def generate_client_card_document(card, output_path):
     sig_rows = [
         [Paragraph("Pronajímatel", _STYLE_SIG_LABEL), Paragraph("Nájemce", _STYLE_SIG_LABEL)],
         [Paragraph("_" * 35, _STYLE_SIG_LINE), Paragraph("_" * 35, _STYLE_SIG_LINE)],
-        [Paragraph(LANDLORD_REPRESENTATIVE, _STYLE_SIG_NAME), Paragraph(str(card.client), _STYLE_SIG_NAME)],
+        [Paragraph(get_landlord().representative_name, _STYLE_SIG_NAME), Paragraph(str(card.client), _STYLE_SIG_NAME)],
     ]
     sig_table = Table(sig_rows, colWidths=[85 * mm, 85 * mm], hAlign="LEFT")
     sig_table.setStyle(TableStyle([
