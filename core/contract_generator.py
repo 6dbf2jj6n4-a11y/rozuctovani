@@ -1,38 +1,36 @@
 """
-Generovani dokumentu Smlouvy (.docx) z sablony core/contract_templates/smlouva_fm_template.docx.
+Generovani dokumentu Smlouvy (.docx) z sablony core/contract_templates/smlouva_template.docx.
 
-Sablona NENI cisty formular - je to kopie realne drivejsi smlouvy (CALAMARI SE / CSE),
-u ktere je blok najemce v zahlavi resetovany na placeholdery "[•]" a promenne udaje
-(datumy, castky, vypovedni lhuta) na bracketove/textove placeholdery jako "[datum podpisu]"
-nebo "XXXX Kč" - ty se dohledavaji podle textu (viz _find_paragraph), ne podle indexu, takze
-jsou odolne vuci zmene poctu odstavcu jinde v dokumentu.
+Sablona NENI cisty formular s placeholdery - je to skutecna, rucne doladena
+smlouva (konkretni najemce, konkretni castky, data, jmena). Generovani proto
+funguje tak, ze najde konkretni run(y) obsahujici tyto puvodni hodnoty a
+prepise jen jejich TEXT - format (font, velikost, barva, zvyrazneni...)
+kazdeho runu se nikde nevynucuje ani nemeni, zustava presne takovy, jaky uz
+v sablone je. Kde sablona nema zvyrazneni doplnenych udaju, nema ho ani
+vygenerovany dokument.
 
-Clanek 1 (Vymezeni predmetu a ucelu najmu) je pro kazdy areal jiny (vypis jinych pozemku/budov) -
-jeho text se necte ze sablony, ale z core.models.Site.lease_subject_text (viz _fill_article1).
-Pocet odstavcu vycetu nemovitosti se tak muze mezi generovanimi lisit → cokoli za clankem 1 se
-MUSI dohledavat podle textu, ne podle pevneho indexu (na rozdil od bloku najemce v zahlavi,
-ktery je pred clankem 1 a indexy tam zustavaji stabilni).
+Blok Pronajimatele v zahlavi dokumentu (odstavce 6-13) je zamerne staticky -
+Pronajimatel (CALAMARI SE) je v teto aplikaci jeden jediny a v sablone uz ma
+spravne udaje; dynamicky se doplnuje jen tam, kde je to bezriziko (nazev
+v zahlavi kazde stranky, jmeno zastupce v podpisovem radku - viz nize).
+
+Clanek 1 (Vymezeni predmetu a ucelu najmu) je pro kazdy areal jiny (vypis
+jinych pozemku/budov) - jeho text se necte ze sablony, ale z
+core.models.Site.lease_subject_text (viz _fill_article1). Pocet odstavcu
+vycetu nemovitosti se tak muze mezi generovanimi lisit → cokoli za clankem 1
+se MUSI dohledavat podle textu, ne podle pevneho indexu (na rozdil od bloku
+najemce v zahlavi, ktery je pred clankem 1 a indexy tam zustavaji stabilni).
 """
 import copy
 from decimal import Decimal
 from pathlib import Path
 
 import docx
-from docx.enum.text import WD_COLOR_INDEX
 from docx.opc.constants import RELATIONSHIP_TYPE as _RT
-from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
-from docx.shared import Pt
 from docx.text.paragraph import Paragraph
 
-TEMPLATE_PATH = Path(__file__).resolve().parent / "contract_templates" / "smlouva_fm_template.docx"
-
-# Bezna velikost textu ve Smlouve (viz napr. clanek 1) - u noveho runu vytvoreneho
-# pres paragraph.add_run() se NEDEDI formatovani od sousednich runu ani od pPr
-# odstavce, jinak spadne na vychozi styl dokumentu (11pt) - proto se vynucuje
-# explicitne u kazdeho nove vytvoreneho runu (viz _set_paragraph_runs/_set_paragraph_text).
-BODY_FONT_SIZE = Pt(8)
-BODY_FONT_NAME = "Arial Narrow"
+TEMPLATE_PATH = Path(__file__).resolve().parent / "contract_templates" / "smlouva_template.docx"
 
 _MONTHS = [
     "ledna", "února", "března", "dubna", "května", "června",
@@ -56,7 +54,6 @@ def _court_instrumental(court_name):
     for prefix, replacement in _COURT_INSTRUMENTAL_PREFIXES.items():
         if lowered.startswith(prefix):
             rest = court_name.strip()[len(prefix):]
-            # replacement uz ma spravnou velikost pismen na zacatku (mimo Praha)
             first_word, _, tail = replacement.partition(" ")
             return f"{first_word[0].upper()}{first_word[1:]} {tail}{rest}".rstrip()
     return court_name.strip()
@@ -74,6 +71,16 @@ def format_czk(amount):
     if isinstance(amount, Decimal):
         amount = int(amount)
     return f"{amount:,}".replace(",", " ") + " Kč"
+
+
+def format_months(n):
+    if n is None:
+        return ""
+    if n == 1:
+        return f"{n} měsíc"
+    if 2 <= n <= 4:
+        return f"{n} měsíce"
+    return f"{n} měsíců"
 
 
 def get_landlord():
@@ -111,17 +118,7 @@ def contract_to_template_data(contract):
         "site_name": str(contract.site) if contract.site else "",
         "lease_subject_text": (contract.site.lease_subject_text if contract.site else "") or "",
         "landlord_name": landlord.name,
-        "landlord_address": _format_address(landlord),
-        "landlord_ico": landlord.ico,
-        "landlord_dic": landlord.dic,
-        "landlord_bank_name": landlord.bank_name,
-        "landlord_bank_account": landlord.bank_account,
-        "landlord_bank_code": landlord.bank_code,
-        "landlord_registry_court": landlord.registry_court,
-        "landlord_registry_section": landlord.registry_section,
-        "landlord_registry_insert": landlord.registry_insert,
         "landlord_representative_name": landlord.representative_name,
-        "landlord_representative_role": landlord.representative_role,
         "client_name": client.name,
         "client_address": _format_address(client),
         "client_ico": client.ico,
@@ -141,28 +138,11 @@ def contract_to_template_data(contract):
     }
 
 
-def format_months(n):
-    if n is None:
-        return ""
-    if n == 1:
-        return f"{n} měsíc"
-    if 2 <= n <= 4:
-        return f"{n} měsíce"
-    return f"{n} měsíců"
-
-
-def _force_font(paragraph):
-    """Vynuti BODY_FONT_SIZE/BODY_FONT_NAME na vsech runech odstavce - viz
-    poznamka u BODY_FONT_SIZE, proc je to potreba."""
-    for run in paragraph.runs:
-        run.font.size = BODY_FONT_SIZE
-        run.font.name = BODY_FONT_NAME
-
-
-def _set_paragraph_text(paragraph, text):
-    """Prepise cely text odstavce do jednoho runu (zachova font/styl prvniho
-    puvodniho runu, pokud existoval). Nehodi se pro odstavce s vice styly textu
-    v jedne vete (tady zadny takovy mezi upravovanymi odstavci neni)."""
+def _set_paragraph_text_keep_format(paragraph, text):
+    """Prepise cely text odstavce do jednoho runu - PONECHA font/velikost/barvu
+    puvodniho prvniho runu (pokud existoval), nic se nevynucuje. Nehodi se pro
+    odstavce s vice styly textu v jedne vete (tady zadny takovy mezi
+    upravovanymi odstavci neni)."""
     runs = list(paragraph.runs)
     if runs:
         runs[0].text = text
@@ -170,77 +150,6 @@ def _set_paragraph_text(paragraph, text):
             run._element.getparent().remove(run._element)
     else:
         paragraph.add_run(text)
-    _force_font(paragraph)
-
-
-def _clear_paragraph(paragraph):
-    for run in list(paragraph.runs):
-        run._element.getparent().remove(run._element)
-
-
-def _set_paragraph_runs(paragraph, parts):
-    """Prepise odstavec podle `parts` = seznam dvojic (text, zvyraznit).
-    Kazda dvojice se stane samostatnym runem; zvyraznit=True dostane sedy
-    zvyraznovac (font.highlight_color) - na rozdil od zlute zustane citelny
-    i po cernobilem tisku - aby bylo v dokumentu na prvni pohled videt,
-    ktere hodnoty se doplnily z dat Smlouvy/Klienta."""
-    _clear_paragraph(paragraph)
-    for text, highlight in parts:
-        if not text:
-            continue
-        run = paragraph.add_run(text)
-        run.font.size = BODY_FONT_SIZE
-        run.font.name = BODY_FONT_NAME
-        if highlight:
-            run.font.highlight_color = WD_COLOR_INDEX.GRAY_25
-
-
-def _replace_substring_highlighted(paragraph, old, new):
-    """Nahradi vyskyt `old` v odstavci za `new` a zvyrazni jen `new` cast -
-    okolni puvodni text vety zustane beze zmeny stylu."""
-    text = paragraph.text
-    idx = text.find(old)
-    if idx == -1:
-        return
-    before, after = text[:idx], text[idx + len(old):]
-    _set_paragraph_runs(paragraph, [(before, False), (new, True), (after, False)])
-
-
-def _add_hyperlink(paragraph, url, text, highlight=False):
-    """Prida klikatelny odkaz (napr. mailto:) na konec odstavce jako novy run."""
-    part = paragraph.part
-    r_id = part.relate_to(url, _RT.HYPERLINK, is_external=True)
-
-    hyperlink = OxmlElement("w:hyperlink")
-    hyperlink.set(qn("r:id"), r_id)
-
-    run = OxmlElement("w:r")
-    rpr = OxmlElement("w:rPr")
-    rfonts = OxmlElement("w:rFonts")
-    rfonts.set(qn("w:ascii"), BODY_FONT_NAME)
-    rfonts.set(qn("w:hAnsi"), BODY_FONT_NAME)
-    rpr.append(rfonts)
-    sz = OxmlElement("w:sz")
-    sz.set(qn("w:val"), str(int(BODY_FONT_SIZE.pt * 2)))
-    rpr.append(sz)
-    color = OxmlElement("w:color")
-    color.set(qn("w:val"), "0563C1")
-    rpr.append(color)
-    underline = OxmlElement("w:u")
-    underline.set(qn("w:val"), "single")
-    rpr.append(underline)
-    if highlight:
-        hl = OxmlElement("w:highlight")
-        hl.set(qn("w:val"), "lightGray")
-        rpr.append(hl)
-    run.append(rpr)
-
-    t = OxmlElement("w:t")
-    t.text = text
-    run.append(t)
-
-    hyperlink.append(run)
-    paragraph._p.append(hyperlink)
 
 
 def _find_paragraph_index(paragraphs, marker):
@@ -253,8 +162,46 @@ def _find_paragraph_index(paragraphs, marker):
             return i
     raise ValueError(
         f"V šabloně smlouvy nenalezen odstavec obsahující {marker!r} - "
-        f"zkontroluj core/contract_templates/smlouva_fm_template.docx."
+        f"zkontroluj core/contract_templates/smlouva_template.docx."
     )
+
+
+def _replace_run_text(paragraphs, marker, old, new):
+    """Najde odstavec obsahujici `marker` (unikatni text pro dohledani spravneho
+    mista - napr. cely puvodni datum, ne jen cislo, aby se nespletlo s jinym
+    vyskytem stejne hodnoty jinde ve smlouve) a v nem run obsahujici `old`;
+    v tomto runu nahradi `old` za `new`. Format runu (font, velikost, barva)
+    se nemeni, meni se jen text."""
+    idx = _find_paragraph_index(paragraphs, marker)
+    para = paragraphs[idx]
+    for run in para.runs:
+        if old in run.text:
+            run.text = run.text.replace(old, new)
+            return
+    raise ValueError(
+        f"Marker {old!r} nalezen v odstavci {idx}, ale ne v samostatnem runu - "
+        f"zkontroluj core/contract_templates/smlouva_template.docx."
+    )
+
+
+def _set_hyperlink(paragraph, new_url, new_text):
+    """Prepise text a cil existujiciho hypertextoveho odkazu (w:hyperlink)
+    v odstavci - pouziva se pro e-mailovou adresu pro elektronickou fakturaci.
+    Bez `new_url` (prazdny e-mail) se odkaz cely odstrani - jinak by v dokumentu
+    zustal "mrtvy" odkaz na puvodni (uz nespravnou) adresu ze sablony. Jinak
+    puvodni vztah (relationship) na starou URL se ponecha nevyuzity (neskodi),
+    misto prepisu se jen prida novy a hyperlink se prepoji na nej."""
+    hyperlink_el = paragraph._p.find(qn("w:hyperlink"))
+    if hyperlink_el is None:
+        return
+    if not new_url:
+        hyperlink_el.getparent().remove(hyperlink_el)
+        return
+    t_el = hyperlink_el.find(".//" + qn("w:t"))
+    if t_el is not None:
+        t_el.text = new_text
+    new_r_id = paragraph.part.relate_to(new_url, _RT.HYPERLINK, is_external=True)
+    hyperlink_el.set(qn("r:id"), new_r_id)
 
 
 def _fill_article1(doc, lease_subject_text):
@@ -266,8 +213,8 @@ def _fill_article1(doc, lease_subject_text):
     prepise na miste; vycet pozemku/budov (puvodne pevny pocet odstavcu)
     se podle poctu radku bud zkrati (prebytecne odstavce smazou), nebo
     prodlouzi (posledni odrazkovy odstavec se naklonuje - sdili Word
-    cislovani seznamu numId, viz modulovy docstring, takze klon zustane
-    spravne formatovany i cislovany).
+    cislovani seznamu numId, takze klon zustane spravne formatovany
+    i cislovany, vc. puvodniho fontu).
 
     Vraci pocet odstavcu, o ktery se cely dokument zmensil/zvetsil oproti
     puvodnimu stavu (kladne cislo = pribylo odstavcu) - volajici podle
@@ -297,21 +244,22 @@ def _fill_article1(doc, lease_subject_text):
 
     lines = [line.strip() for line in (lease_subject_text or "").splitlines() if line.strip()]
     if not lines:
-        _set_paragraph_runs(intro_para, [
-            ("[DOPLNIT VYMEZENÍ PŘEDMĚTU NÁJMU PRO TENTO AREÁL - viz Areál v adminu]", True),
-        ])
+        _set_paragraph_text_keep_format(
+            intro_para,
+            "[DOPLNIT VYMEZENÍ PŘEDMĚTU NÁJMU PRO TENTO AREÁL - viz Areál v adminu]",
+        )
         for bp in bullet_paras:
             bp._p.getparent().remove(bp._p)
         return -len(bullet_paras)
 
     intro_text, bullet_lines = lines[0], lines[1:]
-    _set_paragraph_runs(intro_para, [(intro_text, False)])
+    _set_paragraph_text_keep_format(intro_para, intro_text)
 
     n_existing = len(bullet_paras)
     n_needed = len(bullet_lines)
 
     for i in range(min(n_existing, n_needed)):
-        _set_paragraph_runs(bullet_paras[i], [(bullet_lines[i], False)])
+        _set_paragraph_text_keep_format(bullet_paras[i], bullet_lines[i])
 
     if n_needed > n_existing:
         template_xml = bullet_paras[-1]._p if bullet_paras else intro_para._p
@@ -321,7 +269,7 @@ def _fill_article1(doc, lease_subject_text):
             anchor.addnext(new_xml)
             anchor = new_xml
             new_para = Paragraph(new_xml, bullet_paras[-1]._parent if bullet_paras else intro_para._parent)
-            _set_paragraph_runs(new_para, [(bullet_lines[i], False)])
+            _set_paragraph_text_keep_format(new_para, bullet_lines[i])
     elif n_needed < n_existing:
         for bp in bullet_paras[n_needed:]:
             bp._p.getparent().remove(bp._p)
@@ -333,6 +281,7 @@ def fill_contract_template(data, output_path, template_path=TEMPLATE_PATH):
     """
     `data` je dict s klici:
       site_name, lease_subject_text (viz core.models.Site.lease_subject_text),
+      landlord_name, landlord_representative_name,
       client_name, client_address (jednoradkovy retezec),
       client_ico, client_dic (s nebo bez "CZ" prefixu), registry_court,
       registry_section, registry_insert, representative_name, representative_role,
@@ -344,131 +293,87 @@ def fill_contract_template(data, output_path, template_path=TEMPLATE_PATH):
     je pak potreba pred odeslanim zkontrolovat.
     """
     doc = docx.Document(str(template_path))
-    p = doc.paragraphs
 
     client_name = data.get("client_name") or ""
     landlord_name = data.get("landlord_name") or ""
 
-    # Zahlavi dokumentu (nahoře na kazde strance) se NEZVYRAZNUJE - jen
-    # identifikuje areal/smluvni strany, neni to "doplneny udaj" smlouvy.
+    # --- zahlavi dokumentu (nahoře na kazde strance): 3 runy - kod/nazev
+    # arealu, tabulator, "Pronajimatel / Najemce" ---
     header_para = doc.sections[0].header.paragraphs[0]
-    _set_paragraph_text(header_para, f"{data.get('site_name') or ''}\t\t{landlord_name} / {client_name}")
+    header_runs = header_para.runs
+    header_runs[0].text = data.get("site_name") or ""
+    header_runs[-1].text = "\t" + f"{landlord_name} / {client_name}"
 
-    # --- blok Pronajimatele v zahlavi (odstavce 6-13) - bere se z Klienta
-    # oznaceneho Client.is_landlord=True (viz get_landlord()), NE ze
-    # sablony - aplikace tak neni navazana na jednu konkretni firmu.
-    # Neni to "doplneny udaj" teto konkretni Smlouvy (je stejny pro vsechny
-    # Smlouvy), proto se stejne jako zahlavi NEZVYRAZNUJE. ---
-    _set_paragraph_runs(p[6], [(landlord_name, False)])
-    _set_paragraph_runs(p[7], [("se sídlem na adrese ", False), (data.get("landlord_address") or "", False)])
-    _set_paragraph_runs(p[8], [("IČ: ", False), (data.get("landlord_ico") or "", False)])
-
-    landlord_dic = (data.get("landlord_dic") or "").strip()
-    landlord_dic_digits = landlord_dic[2:] if landlord_dic.upper().startswith("CZ") else landlord_dic
-    _set_paragraph_runs(p[9], [("DIČ: CZ", False), (landlord_dic_digits, False)])
-
-    _set_paragraph_runs(p[10], [("Bankovní spojení: ", False), (data.get("landlord_bank_name") or "", False)])
-    bank_account = data.get("landlord_bank_account") or ""
-    bank_code = data.get("landlord_bank_code") or ""
-    account_display = f"{bank_account}/{bank_code}" if bank_code else bank_account
-    _set_paragraph_runs(p[11], [("číslo účtu: ", False), (account_display, False)])
-
-    landlord_court = _court_instrumental(data.get("landlord_registry_court"))
-    _set_paragraph_runs(p[12], [
-        ("Společnost zapsána v obchodním rejstříku vedeném ", False), (landlord_court, False),
-        (", oddíl ", False), (data.get("landlord_registry_section") or "", False),
-        (", vložka ", False), (data.get("landlord_registry_insert") or "", False),
-    ])
-    _set_paragraph_runs(p[13], [
-        ("Společnost zastupuje: ", False), (data.get("landlord_representative_name") or "", False),
-        (", ", False), (data.get("landlord_representative_role") or "", False),
-    ])
-
-    # --- blok Najemce v zahlavi (odstavce 19-25) - PRED clankem 1, indexy
-    # tedy zustavaji stabilni bez ohledu na delku vyctu nemovitosti. ---
-    _set_paragraph_runs(p[19], [(client_name, True)])
-    _set_paragraph_runs(p[20], [("se sídlem ", False), (data.get("client_address") or "", True)])
-    _set_paragraph_runs(p[21], [("IČ: ", False), (data.get("client_ico") or "", True)])
+    # --- blok Najemce v zahlavi (odstavce 19-25, PRED clankem 1 - indexy
+    # tedy zustavaji stabilni bez ohledu na delku vyctu nemovitosti v cl. 1).
+    # Blok Pronajimatele (6-13) je zamerne staticky, viz modulovy docstring. ---
+    paragraphs = doc.paragraphs
+    paragraphs[19].runs[0].text = client_name
+    paragraphs[20].runs[-1].text = data.get("client_address") or ""
+    paragraphs[21].runs[-1].text = data.get("client_ico") or ""
 
     dic = (data.get("client_dic") or "").strip()
     dic_digits = dic[2:] if dic.upper().startswith("CZ") else dic
-    _set_paragraph_runs(p[22], [("DIČ: CZ", False), (dic_digits, True)])
+    paragraphs[22].runs[0].text = "DIČ: CZ" + dic_digits
 
     court = _court_instrumental(data.get("registry_court"))
     section = data.get("registry_section") or ""
     insert = data.get("registry_insert") or ""
-    _set_paragraph_runs(p[23], [
-        ("společnost zapsaná v obchodním rejstříku vedeném ", False), (court, True),
-        (", oddíl ", False), (section, True),
-        (", vložka ", False), (insert, True),
-    ])
+    reg_runs = paragraphs[23].runs
+    reg_runs[1].text = court
+    reg_runs[3].text = section
+    reg_runs[5].text = insert
 
-    _set_paragraph_runs(p[24], [
-        ("zastoupena ", False), (data.get("representative_name") or "", True),
-        (", ", False), (data.get("representative_role") or "", True),
-    ])
+    rep_runs = paragraphs[24].runs
+    rep_runs[1].text = data.get("representative_name") or ""
+    rep_runs[3].text = data.get("representative_role") or ""
 
     email = data.get("invoicing_email") or ""
-    _clear_paragraph(p[25])
-    run = p[25].add_run("e-mailová adresa pro elektronickou fakturaci: ")
-    run.font.size = BODY_FONT_SIZE
-    run.font.name = BODY_FONT_NAME
-    if email:
-        _add_hyperlink(p[25], f"mailto:{email}", email, highlight=True)
+    _set_hyperlink(paragraphs[25], f"mailto:{email}" if email else None, email)
 
     # --- clanek 1: vlastni text podle arealu (meni pocet odstavcu dokumentu) ---
     _fill_article1(doc, data.get("lease_subject_text"))
 
     # --- vse ZA clankem 1: dohledavat podle textu, ne podle indexu (viz docstring) ---
     paragraphs = doc.paragraphs
-    _replace_substring_highlighted(
-        paragraphs[_find_paragraph_index(paragraphs, "[datum podpisu]")],
-        "[datum podpisu]", format_date_cz(data.get("signed_on")),
+    _replace_run_text(
+        paragraphs, "1. ledna 2027", "1. ledna 2027",
+        format_date_cz(data.get("inflation_increase_from")),
     )
     paragraphs = doc.paragraphs
-    _replace_substring_highlighted(
-        paragraphs[_find_paragraph_index(paragraphs, "1. ledna 2025")],
-        "1. ledna 2025", format_date_cz(data.get("inflation_increase_from")),
+    _replace_run_text(
+        paragraphs, "50 000 Kč", "50 000 Kč",
+        format_czk(data.get("insurance_amount_czk")),
     )
     paragraphs = doc.paragraphs
-    _replace_substring_highlighted(
-        paragraphs[_find_paragraph_index(paragraphs, "XXXX Kč")],
-        "XXXX Kč", format_czk(data.get("insurance_amount_czk")),
+    _replace_run_text(
+        paragraphs, "1. srpna 2026", "1. srpna 2026",
+        format_date_cz(data.get("valid_from")),
     )
     paragraphs = doc.paragraphs
-    _replace_substring_highlighted(
-        paragraphs[_find_paragraph_index(paragraphs, "1. prosince 2019")],
-        "1. prosince 2019", format_date_cz(data.get("valid_from")),
+    _replace_run_text(
+        paragraphs, "3 měsíce", "3 měsíce",
+        format_months(data.get("notice_period_months")),
     )
     paragraphs = doc.paragraphs
-    _replace_substring_highlighted(
-        paragraphs[_find_paragraph_index(paragraphs, "6 měsíců")],
-        "6 měsíců", format_months(data.get("notice_period_months")),
+    _replace_run_text(
+        paragraphs, "15 000 Kč", "15 000 Kč",
+        format_czk(data.get("deposit_czk")),
     )
     paragraphs = doc.paragraphs
-    _replace_substring_highlighted(
-        paragraphs[_find_paragraph_index(paragraphs, "XX.XXX Kč")],
-        "XX.XXX Kč", format_czk(data.get("deposit_czk")),
-    )
-    paragraphs = doc.paragraphs
-    _replace_substring_highlighted(
-        paragraphs[_find_paragraph_index(paragraphs, "3. února 2024")],
-        "3. února 2024", format_date_cz(data.get("signed_on")),
+    _replace_run_text(
+        paragraphs, "V\xa0Ostravě dne 30. července 2026", "30. července 2026",
+        format_date_cz(data.get("signed_on")),
     )
 
-    # --- podpisovy radek: nadpis "Pronajímatel/Nájemce" a cara pod nim jsou
-    # staticky text sablony (stejne pro kazdou Smlouvu, viz odstavce pred
-    # "CEA SSF" v sablone) - doplnuje se jen radek se jmeny zastupcu, na
-    # miste puvodniho placeholderu "CEA SSF\tXXXX" (pozustatek puvodni
-    # smlouvy, viz modulovy docstring). ---
+    # --- podpisovy radek: jmena zastupcu pod carou (nadpis "Pronajímatel/
+    # Nájemce" a cara nad nimi jsou staticky text sablony, viz modulovy
+    # docstring) ---
     paragraphs = doc.paragraphs
-    names_idx = _find_paragraph_index(paragraphs, "CEA SSF")
-    landlord_rep = data.get("landlord_representative_name") or ""
-    tenant_rep = data.get("representative_name") or ""
-
-    _set_paragraph_runs(paragraphs[names_idx], [
-        (landlord_rep, False), ("\t", False), (tenant_rep, True),
-    ])
+    names_idx = _find_paragraph_index(paragraphs, "\tIng. Daniel DAVID")
+    names_runs = paragraphs[names_idx].runs
+    names_runs[0].text = "\t" + (data.get("landlord_representative_name") or "")
+    names_runs[-1].text = data.get("representative_name") or ""
 
     # python-docx prijima jak cestu (str/Path), tak zapisovatelny stream (napr. BytesIO)
     doc.save(output_path if hasattr(output_path, "write") else str(output_path))
