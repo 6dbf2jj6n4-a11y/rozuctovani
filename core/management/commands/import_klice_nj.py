@@ -182,7 +182,7 @@ class Command(BaseCommand):
                     skipped += 1
                     continue
                 value = jednotek_val.quantize(Decimal("0.0001"))
-                if meter.readings.exists():
+                if meter is not None and meter.readings.exists():
                     # Meridlo ma realne odecty -> podil se ma pocitat ze
                     # skutecne spotreby (submeter), value slouzi jen jako
                     # vaha pro rozdeleni MEZI KARTY, ktere si tohle jedno
