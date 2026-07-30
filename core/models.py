@@ -412,6 +412,17 @@ class Meter(models.Model):
         "Vzorec", max_length=300, blank=True,
         help_text="Pouze pro virtualni mericí, napr. E_A1+E_AB1 (kody jinych mericí).",
     )
+    weight_unit_label = models.CharField(
+        "Co je váhou (u klíčů 'Podle váhy' na tomto měřidle)", max_length=100, blank=True,
+        help_text=(
+            "Kratky popis, co hodnota Klice typu 'Podle vahy' napojeneho na "
+            "toto meridlo znamena - napr. 'm2', 'počet osob', 'počet "
+            "radiátorů'. Typicke pro virtualni 'zbytkova' meridla jako "
+            "E_SPOL, kde se jejich spotreba deli mezi vice karet vahou. Jen "
+            "informativni (zobrazuje se v adminu a v Karte klienta), na "
+            "samotny vypocet nema vliv."
+        ),
+    )
 
     class Meta:
         verbose_name = "Měřidlo"
@@ -549,16 +560,6 @@ class ServicePoolItem(models.Model):
             "zadany, ma vzdy prednost pred touto vychozi castkou."
         ),
     )
-    weight_unit_label = models.CharField(
-        "Co je váhou (u typu 'Podle váhy')", max_length=100, blank=True,
-        help_text=(
-            "Kratky popis, co hodnota klice typu 'Podle vahy' na teto polozce "
-            "znamena - napr. 'm2', 'počet osob', 'počet radiátorů'. Jen "
-            "informativni (zobrazuje se v adminu a v Karte klienta), na "
-            "samotny vypocet nema vliv."
-        ),
-    )
-
     class Meta:
         verbose_name = "Položka zásobníku"
         verbose_name_plural = "Zásobník"

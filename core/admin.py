@@ -843,7 +843,7 @@ class MeterReadingInline(TabularInline):
 class MeterAdmin(ModelAdmin):
     list_display = (
         "code", "name", "site", "meter_type", "parent_meter",
-        "reading_mode", "is_virtual", "unit_of_measure",
+        "reading_mode", "is_virtual", "unit_of_measure", "weight_unit_label",
     )
     list_filter = ("site", "meter_type", "reading_mode", "is_virtual")
     search_fields = ("name", "code", "serial_number")
@@ -868,6 +868,15 @@ class MeterAdmin(ModelAdmin):
         ("Virtuální měřidlo", {
             "fields": (("is_virtual", "formula"),),
             "description": "Vyplnit pouze pokud se spotřeba nepočítá z odečtů, ale ze vzorce odkazujícího na kódy jiných měřidel (např. E_A1+E_AB1).",
+        }),
+        ("Podle váhy", {
+            "fields": ("weight_unit_label",),
+            "description": (
+                "Vyplnit jen pokud jsou na toto měřidlo napojené klíče typu "
+                "'Podle váhy' (typicky virtuální 'zbytkové' měřidlo jako "
+                "E_SPOL) - krátký popis, co hodnota váhy znamená (m², počet "
+                "osob, počet radiátorů...)."
+            ),
         }),
     )
 
@@ -999,7 +1008,7 @@ def _format_kc(value, decimals=2):
 class ServicePoolItemAdmin(ModelAdmin):
     list_display = (
         "name", "site", "invoice_class", "unit", "meter", "jednotka",
-        "default_allocation_type", "weight_unit_label", "default_amount_czk_display",
+        "default_allocation_type", "default_amount_czk_display",
     )
     list_filter = ("site", "invoice_class")
     search_fields = ("name",)
@@ -1082,8 +1091,8 @@ class AllocationKeyAdmin(ModelAdmin):
             return _format_kc(obj.value)
         if obj.allocation_type == AllocationKey.AllocationType.AREA_PRICE:
             return "-" if obj.value is None else f"{obj.value} m²"
-        if obj.allocation_type == AllocationKey.AllocationType.WEIGHTED_COUNT and obj.service_item.weight_unit_label:
-            return f"{obj.value} ({obj.service_item.weight_unit_label})"
+        if obj.allocation_type == AllocationKey.AllocationType.WEIGHTED_COUNT and obj.meter and obj.meter.weight_unit_label:
+            return f"{obj.value} ({obj.meter.weight_unit_label})"
         return obj.value
 
 
