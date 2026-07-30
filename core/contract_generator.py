@@ -180,9 +180,10 @@ def _clear_paragraph(paragraph):
 
 def _set_paragraph_runs(paragraph, parts):
     """Prepise odstavec podle `parts` = seznam dvojic (text, zvyraznit).
-    Kazda dvojice se stane samostatnym runem; zvyraznit=True dostane zluty
-    zvyraznovac (font.highlight_color), aby bylo v dokumentu na prvni pohled
-    videt, ktere hodnoty se doplnily z dat Smlouvy/Klienta."""
+    Kazda dvojice se stane samostatnym runem; zvyraznit=True dostane sedy
+    zvyraznovac (font.highlight_color) - na rozdil od zlute zustane citelny
+    i po cernobilem tisku - aby bylo v dokumentu na prvni pohled videt,
+    ktere hodnoty se doplnily z dat Smlouvy/Klienta."""
     _clear_paragraph(paragraph)
     for text, highlight in parts:
         if not text:
@@ -191,7 +192,7 @@ def _set_paragraph_runs(paragraph, parts):
         run.font.size = BODY_FONT_SIZE
         run.font.name = BODY_FONT_NAME
         if highlight:
-            run.font.highlight_color = WD_COLOR_INDEX.YELLOW
+            run.font.highlight_color = WD_COLOR_INDEX.GRAY_25
 
 
 def _replace_substring_highlighted(paragraph, old, new):
@@ -230,7 +231,7 @@ def _add_hyperlink(paragraph, url, text, highlight=False):
     rpr.append(underline)
     if highlight:
         hl = OxmlElement("w:highlight")
-        hl.set(qn("w:val"), "yellow")
+        hl.set(qn("w:val"), "lightGray")
         rpr.append(hl)
     run.append(rpr)
 
