@@ -55,12 +55,22 @@ def _fmt_kc(value, whole=False):
     return f"{value:,.2f} Kč".replace(",", " ")
 
 
+def _strip_trailing_zeros(value):
+    """Ustripuje nadbytecne nuly z Decimalu bez rizika vedecke notace, na
+    rozdil od Decimal.normalize() (napr. Decimal('140.0000').normalize()
+    da '1.4E+2' - nechteny format pro zobrazeni klientovi)."""
+    text = f"{value:f}"
+    if "." in text:
+        text = text.rstrip("0").rstrip(".")
+    return text
+
+
 def _fmt_key_value(key):
     """Hodnota klíče formátovaná podle typu výpočtu - měna jen tam, kam patří."""
     if key.value is None:
         return "—"
     t = AllocationKey.AllocationType
-    value = key.value.normalize()
+    value = _strip_trailing_zeros(key.value)
     if key.allocation_type == t.AREA_PRICE:
         return f"{value} m²"
     if key.allocation_type == t.FIXED_AMOUNT:
