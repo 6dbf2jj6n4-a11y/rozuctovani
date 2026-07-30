@@ -10,8 +10,8 @@ from django.db import models
 
 class User(AbstractUser):
     class Role(models.TextChoices):
-        ADMIN = "admin", "Administrator"
-        SPRAVCE = "spravce", "Spravce"
+        ADMIN = "admin", "Administrátor"
+        SPRAVCE = "spravce", "Správce"
         KLIENT = "klient", "Klient"
 
     role = models.CharField(
@@ -41,8 +41,8 @@ class User(AbstractUser):
     )
 
     class Meta:
-        verbose_name = "Uzivatel"
-        verbose_name_plural = "Uzivatele"
+        verbose_name = "Uživatel"
+        verbose_name_plural = "Uživatelé"
 
     def __str__(self):
         return f"{self.get_username()} ({self.get_role_display()})"

@@ -23,7 +23,7 @@ ALLOCATION_TYPE_CHOICES = [
 class Site(models.Model):
     """Areal nebo objekt (prumyslovy areal, bytovy dum...)."""
 
-    name = models.CharField("Nazev", max_length=200)
+    name = models.CharField("Název", max_length=200)
     address = models.CharField("Adresa", max_length=300, blank=True)
     lease_subject_text = models.TextField(
         "Vymezení předmětu nájmu (text čl. 1 Smlouvy)", blank=True,
@@ -103,18 +103,18 @@ class Client(models.Model):
 
     registry_court = models.CharField(
         "Rejstříkový soud", max_length=100, blank=True,
-        help_text="Napr. 'Krajský soud v Ostravě' - lze dohledat/overit pres ARES podle IČO.",
+        help_text="Např. 'Krajský soud v Ostravě' - lze dohledat/ověřit přes ARES podle IČO.",
     )
     registry_section = models.CharField("Oddíl", max_length=20, blank=True)
     registry_insert = models.CharField("Vložka", max_length=20, blank=True)
 
     representative_name = models.CharField(
         "Zástupce (jméno)", max_length=200, blank=True,
-        help_text="Napr. 'Ing. Daniel DAVID' - u Pronajímatele se použije jako podpis ve Smlouvě.",
+        help_text="Např. 'Ing. Daniel DAVID' - u Pronajímatele se použije jako podpis ve Smlouvě.",
     )
     representative_role = models.CharField(
         "Zástupce (funkce)", max_length=200, blank=True,
-        help_text="Napr. 'jediný člen představenstva' nebo 'jednatel'.",
+        help_text="Např. 'jediný člen představenstva' nebo 'jednatel'.",
     )
 
     bank_name = models.CharField("Banka", max_length=50, blank=True)
@@ -187,7 +187,7 @@ class Contract(models.Model):
     representative_name = models.CharField("Zastupuje (jméno)", max_length=200, blank=True)
     representative_role = models.CharField(
         "Zastupuje (funkce)", max_length=100, blank=True,
-        help_text="Napr. 'jednatel', 'na základě plné moci'.",
+        help_text="Např. 'jednatel', 'na základě plné moci'.",
     )
 
     document = models.FileField(
@@ -389,7 +389,7 @@ class Meter(models.Model):
     )
     code = models.CharField(
         "Kód", max_length=50, blank=True,
-        help_text="Kratky kod pro odkazovani ve vzorcich virtualnich mericu (napr. E_A1).",
+        help_text="Krátký kód pro odkazování ve vzorcích virtuálních měřičů (např. E_A1).",
     )
     name = models.CharField("Název / označení", max_length=200)
     meter_type = models.CharField("Typ", max_length=20, choices=MeterType.choices)
@@ -397,30 +397,30 @@ class Meter(models.Model):
     reading_mode = models.CharField(
         "Způsob zadávání odečtů", max_length=20, choices=ReadingMode.choices, default=ReadingMode.STATE,
         help_text=(
-            "Vetsina meridel hlasi kumulativni Stav (spotreba se dopocita jako "
-            "rozdil vuci minulemu obdobi). Pokud dodavatel hlasi rovnou Spotrebu "
-            "za obdobi (napr. hlavni odberne misto elektro), prepni na tento rezim "
-            "- pak staci zadat odecet jen za aktualni obdobi, hodnota se pouzije primo."
+            "Většina měřidel hlásí kumulativní Stav (spotřeba se dopočítá jako "
+            "rozdíl vůči minulému období). Pokud dodavatel hlásí rovnou Spotřebu "
+            "za období (např. hlavní odběrné místo elektro), přepni na tento režim "
+            "- pak stačí zadat odečet jen za aktuální období, hodnota se použije přímo."
         ),
     )
     serial_number = models.CharField("Výrobní číslo", max_length=100, blank=True)
     is_virtual = models.BooleanField(
         "Virtuální (vypočtené)", default=False,
-        help_text="Spotreba se nepocita z odectu, ale ze vzorce odkazujiciho na jine mericí (pole Vzorec).",
+        help_text="Spotřeba se nepočítá z odečtů, ale ze vzorce odkazujícího na jiná měřidla (pole Vzorec).",
     )
     formula = models.CharField(
         "Vzorec", max_length=300, blank=True,
-        help_text="Pouze pro virtualni mericí, napr. E_A1+E_AB1 (kody jinych mericí).",
+        help_text="Pouze pro virtuální měřidla, např. E_A1+E_AB1 (kódy jiných měřidel).",
     )
     weight_unit_label = models.CharField(
         "Co je váhou (u klíčů 'Podle váhy' na tomto měřidle)", max_length=100, blank=True,
         help_text=(
-            "Kratky popis, co hodnota Klice typu 'Podle vahy' napojeneho na "
-            "toto meridlo znamena - napr. 'm2', 'počet osob', 'počet "
-            "radiátorů'. Typicke pro virtualni 'zbytkova' meridla jako "
-            "E_SPOL, kde se jejich spotreba deli mezi vice karet vahou. Jen "
-            "informativni (zobrazuje se v adminu a v Karte klienta), na "
-            "samotny vypocet nema vliv."
+            "Krátký popis, co hodnota Klíče typu 'Podle váhy' napojeného na "
+            "toto měřidlo znamená - např. 'm2', 'počet osob', 'počet "
+            "radiátorů'. Typické pro virtuální 'zbytková' měřidla jako "
+            "E_SPOL, kde se jejich spotřeba dělí mezi více karet vahou. Jen "
+            "informativní (zobrazuje se v adminu a v Kartě klienta), na "
+            "samotný výpočet nemá vliv."
         ),
     )
 
@@ -510,7 +510,7 @@ class MeterReading(models.Model):
     reading_date = models.DateField("Datum odečtu")
     value = models.DecimalField(
         "Stav / spotřeba", max_digits=14, decimal_places=3,
-        help_text="Podle nastaveni mericí: bud kumulativni stav, nebo rovnou spotreba za obdobi.",
+        help_text="Podle nastavení měřidla: buď kumulativní stav, nebo rovnou spotřeba za období.",
     )
     is_estimate = models.BooleanField("Odhad", default=False)
     note = models.CharField("Poznámka", max_length=300, blank=True)
@@ -548,16 +548,16 @@ class ServicePoolItem(models.Model):
     )
     default_allocation_type = models.CharField(
         "Výchozí typ rozpočtu", max_length=20, choices=ALLOCATION_TYPE_CHOICES, blank=True,
-        help_text="Predvyplni se pri zalozeni noveho klice na karte klienta pro tuto polozku.",
+        help_text="Předvyplní se při založení nového klíče na kartě klienta pro tuto položku.",
     )
     default_amount_czk = models.DecimalField(
         "Výchozí měsíční částka (Kč)", max_digits=12, decimal_places=2, null=True, blank=True,
         help_text=(
-            "Pouzije se pri vypoctu rozuctovani pro obdobi, pro ktere neni "
-            "zadany zadny Naklad za obdobi (CostEntry) - typicky pro sluzby "
+            "Použije se při výpočtu rozúčtování pro období, pro které není "
+            "zadaný žádný Náklad za období (CostEntry) - typicky pro služby "
             "s neměnnou paušální cenou (ostraha, internet...), aby se nemusela "
-            "castka zadavat kazdy mesic rucne. Pokud je pro dane obdobi CostEntry "
-            "zadany, ma vzdy prednost pred touto vychozi castkou."
+            "částka zadávat každý měsíc ručně. Pokud je pro dané období CostEntry "
+            "zadaný, má vždy přednost před touto výchozí částkou."
         ),
     )
     class Meta:
@@ -586,16 +586,16 @@ class AllocationKey(models.Model):
     value = models.DecimalField(
         "Hodnota", max_digits=12, decimal_places=4, null=True, blank=True,
         help_text=(
-            "Vyznam zavisi na typu: u 'Pevna castka' jde o hotovou Kc castku/mesic, "
-            "u 'Dle vymery (m2)' jde o vymeru v m2 (cena/m2/rok se bere z Ceniku "
-            "polozky pro dane obdobi), u 'Podruzne meridlo' se pouzije jen pokud "
-            "stejne meridlo sdili vice karet - pak jde o vahu pro rozdeleni jeho "
-            "spotreby mezi ne (u jedne karty na meridlo se nepouzije, dostane celou "
-            "spotrebu). U 'Podle vahy' jde o libovolne relativni cislo vyjadrujici "
-            "podil na spolecnem nakladu (m2, pocet osob, pocet kusu, radiatoru "
-            "apod. - jednotka zalezi na tom, jak polozka danou spotrebu/naklad "
-            "rozpocitava) - system ho vzdy normalizuje tak, aby soucet vsech karet "
-            "dal dohromady 100 %, staci tedy zadat spravny POMER mezi kartami."
+            "Význam závisí na typu: u 'Pevná částka' jde o hotovou Kč částku/měsíc, "
+            "u 'Dle výměry (m2)' jde o výměru v m2 (cena/m2/rok se bere z Ceníku "
+            "položky pro dané období), u 'Podružné měřidlo' se použije jen pokud "
+            "stejné měřidlo sdílí více karet - pak jde o váhu pro rozdělení jeho "
+            "spotřeby mezi ně (u jedné karty na měřidlo se nepoužije, dostane celou "
+            "spotřebu). U 'Podle váhy' jde o libovolné relativní číslo vyjadřující "
+            "podíl na společném nákladu (m2, počet osob, počet kusů, radiátorů "
+            "apod. - jednotka záleží na tom, jak položka danou spotřebu/náklad "
+            "rozpočítává) - systém ho vždy normalizuje tak, aby součet všech karet "
+            "dal dohromady 100 %, stačí tedy zadat správný POMĚR mezi kartami."
         ),
     )
     meter = models.ForeignKey(
@@ -625,18 +625,18 @@ class AllocationKey(models.Model):
     )
     valid_from = models.DateField(
         "Platnost od", null=True, blank=True,
-        help_text="Volitelne - typicky se platnost resi na urovni cele Karty klienta.",
+        help_text="Volitelné - typicky se platnost řeší na úrovni celé Karty klienta.",
     )
     valid_to = models.DateField("Platnost do", null=True, blank=True)
     is_billed = models.BooleanField(
         "Fakturovat", default=True,
         help_text=(
-            "Odpovida sloupci 'FinTok' v puvodnich Excel tabulkach klicu. Pokud NE: "
-            "castka se i tak zapocita do vypoctu (spravedlive snizuje podil ostatnich "
-            "karet na sdilenem nakladu), ale klientovi se samostatne NEFAKTURUJE - "
-            "typicky proto, ze uz ji ma zahrnutou v pausalni platbe (najem + energie "
-            "dohromady). Promita se do BillingLine.is_billed a do klientskeho PDF "
-            "vyuctovani (billing/statement_generator.py)."
+            "Odpovídá sloupci 'FinTok' v původních Excel tabulkách klíčů. Pokud NE: "
+            "částka se i tak započítá do výpočtu (spravedlivě snižuje podíl ostatních "
+            "karet na sdíleném nákladu), ale klientovi se samostatně NEFAKTURUJE - "
+            "typicky proto, že už ji má zahrnutou v paušální platbě (nájem + energie "
+            "dohromady). Promítá se do BillingLine.is_billed a do klientského PDF "
+            "vyúčtování (billing/statement_generator.py)."
         ),
     )
 
@@ -778,9 +778,9 @@ class BillingLine(models.Model):
     is_billed = models.BooleanField(
         "Fakturováno klientovi", default=True,
         help_text=(
-            "Snimek AllocationKey.is_billed v okamziku vypoctu (viz billing/engine.py) - "
-            "castka se pocitala do rozpoctu vzdy, ale pokud NE, klientovi se v PDF "
-            "vyuctovani nepripocita do castky k uhrade (uz ji ma v pausalu)."
+            "Snímek AllocationKey.is_billed v okamžiku výpočtu (viz billing/engine.py) - "
+            "částka se počítala do rozpočtu vždy, ale pokud NE, klientovi se v PDF "
+            "vyúčtování nepřipočítá do částky k úhradě (už ji má v paušálu)."
         ),
     )
 
