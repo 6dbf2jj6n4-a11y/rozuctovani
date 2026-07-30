@@ -35,8 +35,8 @@ CLASS_TO_INVOICE_CLASS = {
 }
 
 TYP_VYPOCTU_TO_ALLOCATION = {
-    "K_CELKU": "percent",
-    "K_PLOSE": "area_ratio",
+    "K_CELKU": "weighted_count",
+    "K_PLOSE": "fixed_amount",
     "PEVNA_KC": "fixed_amount",
 }
 

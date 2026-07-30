@@ -8,8 +8,6 @@ Mapovani TYP_Polozky:
               soucet Jednotek pres vsechny karty se stejnym VODA_KodOM;
               pouzitim primo Jednotek si system podily dopocitava sam a
               nezastarava pri zmene poctu najemcu). Typ klice:
-                - person_count, pokud VODA_KodOM odpovida odberu na TUV
-                  (teplá užitková voda, napr. W_TUV)
                 - submeter, pokud meridlo ma v systemu realne odecty (podil
                   se pak pocita ze skutecne spotreby tohoto konkretniho
                   meridla - viz billing/engine.py _consumption_shares;
@@ -131,9 +129,7 @@ class Command(BaseCommand):
                     skipped += 1
                     continue
                 value = jednotek_val.quantize(Decimal("0.0001"))
-                if "TUV" in meter_code.upper():
-                    allocation_type = "person_count"
-                elif meter.readings.exists():
+                if meter.readings.exists():
                     # Meridlo ma realne odecty -> podil se ma pocitat ze
                     # skutecne spotreby (submeter), value slouzi jen jako
                     # vaha pro rozdeleni MEZI KARTY, ktere si tohle jedno

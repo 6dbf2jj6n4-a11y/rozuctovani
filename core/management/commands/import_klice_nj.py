@@ -11,7 +11,6 @@ FM-specifickeho prikazu:
   ELEKTRO/VODA/TEPLO (merene, meridlo se hleda podle kodu v Meter.code):
     K_CELKU  -> vaha (hodnota = sloupec Jednotek, NE Podil - viz
                 import_klice_teplo.py pro zduvodneni). Typ klice:
-                  - person_count, pokud kod odpovida TUV (teplá užitková voda)
                   - submeter, pokud meridlo ma v systemu realne odecty (podil
                     se pak pocita ze skutecne spotreby tohoto konkretniho
                     meridla - viz billing/engine.py _consumption_shares;
@@ -183,9 +182,7 @@ class Command(BaseCommand):
                     skipped += 1
                     continue
                 value = jednotek_val.quantize(Decimal("0.0001"))
-                if "TUV" in om_code.upper():
-                    allocation_type = "person_count"
-                elif meter.readings.exists():
+                if meter.readings.exists():
                     # Meridlo ma realne odecty -> podil se ma pocitat ze
                     # skutecne spotreby (submeter), value slouzi jen jako
                     # vaha pro rozdeleni MEZI KARTY, ktere si tohle jedno

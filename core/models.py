@@ -13,14 +13,10 @@ from django.db import models
 # Typy rozpoctu - sdileno mezi ServicePoolItem (vychozi typ) a AllocationKey
 # (skutecny typ pouzity na konkretni karte klienta).
 ALLOCATION_TYPE_CHOICES = [
-    ("percent", "Procento"),
-    ("area_ratio", "Podle výměry (m²)"),
-    ("person_count", "Podle počtu osob"),
-    ("equal_split", "Rovným dílem"),
     ("submeter", "Podružné měřidlo (1:1)"),
     ("fixed_amount", "Pevná částka"),
-    ("weighted_count", "Podle váhy (počet jednotek)"),
-    ("area_price", "Plocha × cena/m² (dynamicky)"),
+    ("weighted_count", "Podle váhy"),
+    ("area_price", "Dle výměry (m²)"),
 ]
 
 
@@ -565,14 +561,10 @@ class ServicePoolItem(models.Model):
 
 class AllocationKey(models.Model):
     class AllocationType(models.TextChoices):
-        PERCENT = "percent", "Procento"
-        AREA_RATIO = "area_ratio", "Podle výměry (m²)"
-        PERSON_COUNT = "person_count", "Podle počtu osob"
-        EQUAL_SPLIT = "equal_split", "Rovným dílem"
         SUBMETER = "submeter", "Podružné měřidlo (1:1)"
         FIXED_AMOUNT = "fixed_amount", "Pevná částka"
-        WEIGHTED_COUNT = "weighted_count", "Podle váhy (počet jednotek)"
-        AREA_PRICE = "area_price", "Plocha × cena/m² (dynamicky)"
+        WEIGHTED_COUNT = "weighted_count", "Podle váhy"
+        AREA_PRICE = "area_price", "Dle výměry (m²)"
 
     client_card = models.ForeignKey(
         ClientCard, on_delete=models.CASCADE, related_name="allocation_keys", verbose_name="Karta klienta"
@@ -585,11 +577,15 @@ class AllocationKey(models.Model):
         "Hodnota", max_digits=12, decimal_places=4, null=True, blank=True,
         help_text=(
             "Vyznam zavisi na typu: u 'Pevna castka' jde o hotovou Kc castku/mesic, "
-            "u 'Plocha x cena/m2' jde o vymeru v m2 (cena/m2/rok se bere z Ceniku "
+            "u 'Dle vymery (m2)' jde o vymeru v m2 (cena/m2/rok se bere z Ceniku "
             "polozky pro dane obdobi), u 'Podruzne meridlo' se pouzije jen pokud "
             "stejne meridlo sdili vice karet - pak jde o vahu pro rozdeleni jeho "
             "spotreby mezi ne (u jedne karty na meridlo se nepouzije, dostane celou "
-            "spotrebu), u ostatnich typu jde o vahu/procento."
+            "spotrebu). U 'Podle vahy' jde o libovolne relativni cislo vyjadrujici "
+            "podil na spolecnem nakladu (m2, pocet osob, pocet kusu, radiatoru "
+            "apod. - jednotka zalezi na tom, jak polozka danou spotrebu/naklad "
+            "rozpocitava) - system ho vzdy normalizuje tak, aby soucet vsech karet "
+            "dal dohromady 100 %, staci tedy zadat spravny POMER mezi kartami."
         ),
     )
     meter = models.ForeignKey(

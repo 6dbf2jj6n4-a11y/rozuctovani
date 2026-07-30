@@ -61,15 +61,11 @@ def _fmt_key_value(key):
         return "—"
     t = AllocationKey.AllocationType
     value = key.value.normalize()
-    if key.allocation_type == t.PERCENT:
-        return f"{value} %"
-    if key.allocation_type == t.PERSON_COUNT:
-        return f"{value} osob"
-    if key.allocation_type in (t.AREA_RATIO, t.AREA_PRICE):
+    if key.allocation_type == t.AREA_PRICE:
         return f"{value} m²"
     if key.allocation_type == t.FIXED_AMOUNT:
         return _fmt_kc(key.value)
-    if key.allocation_type in (t.EQUAL_SPLIT, t.SUBMETER):
+    if key.allocation_type == t.SUBMETER:
         return "—"
     return f"{value}"
 

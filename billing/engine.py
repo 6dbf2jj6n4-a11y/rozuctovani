@@ -85,9 +85,13 @@ def _fixed_amount_for(key, service_item, period, warnings):
 
 def _weighted_shares(keys, period, by_key_out=None):
     """
-    Spocita normalizovane podily (soucet = 1) pro seznam klicu
-    typu percent / area_ratio / person_count / equal_split,
-    s prihlednutim k aktivnim dnum karty v obdobi.
+    Spocita normalizovane podily (soucet = 1) pro seznam klicu typu
+    "Podle váhy" (WEIGHTED_COUNT, vaha = AllocationKey.value - libovolne
+    relativni cislo, m2/pocet osob/kusy/cokoliv) - nebo klicu typu
+    "Podružné měřidlo" (SUBMETER) pri lokalnim deleni jednoho konkretniho
+    meridla mezi vice karet, ktere ho sdili (viz _consumption_shares) -
+    tam ma value stejny vyznam (vaha pro rozdeleni). V obou pripadech se
+    prihlizi k aktivnim dnum karty v obdobi.
 
     Vraci dict {client_card_id: Decimal podil}.
 
@@ -109,24 +113,7 @@ def _weighted_shares(keys, period, by_key_out=None):
         if active_days <= 0:
             continue
 
-        if key.allocation_type == AllocationKey.AllocationType.AREA_RATIO:
-            base = card.unit.area_m2 or Decimal("0")
-        elif key.allocation_type in (
-            AllocationKey.AllocationType.PERSON_COUNT,
-            AllocationKey.AllocationType.WEIGHTED_COUNT,
-        ):
-            base = key.value or Decimal("0")
-        elif key.allocation_type == AllocationKey.AllocationType.EQUAL_SPLIT:
-            base = Decimal("1")
-        elif key.allocation_type == AllocationKey.AllocationType.SUBMETER:
-            # Sem se klice typu SUBMETER dostanou jen pri lokalnim deleni
-            # JEDNOHO konkretniho podruzneho meridla mezi vice karet, ktere
-            # ho sdili (viz _consumption_shares) - value je pak vaha pro
-            # rozdeleni spotreby TOHOTO meridla mezi ne.
-            base = key.value or Decimal("0")
-        else:  # PERCENT
-            base = key.value or Decimal("0")
-
+        base = key.value or Decimal("0")
         effective_weight = base * (Decimal(active_days) / days_in_period)
         raw_weights[card.id] = raw_weights.get(card.id, Decimal("0")) + effective_weight
         if by_key_out is not None:
