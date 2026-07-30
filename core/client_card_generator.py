@@ -28,6 +28,7 @@ _STYLE_H2 = ParagraphStyle("CardH2", fontName=FONT_BOLD, fontSize=_FONT_SIZE + 1
 _STYLE_SIG_LABEL = ParagraphStyle("CardSigLabel", fontName=FONT_BOLD, fontSize=_FONT_SIZE, alignment=1)  # 1 = center
 _STYLE_SIG_LINE = ParagraphStyle("CardSigLine", fontName=FONT_REGULAR, fontSize=_FONT_SIZE, alignment=1)
 _STYLE_SIG_NAME = ParagraphStyle("CardSigName", fontName=FONT_REGULAR, fontSize=_FONT_SIZE, alignment=1)
+_SIG_GAP = 3 * _FONT_SIZE * 1.2  # >= 3 blank lines between "Pronajímatel/Nájemce" heading and the signature line
 
 _TABLE_BASE_STYLE = [
     ("FONTNAME", (0, 0), (-1, -1), FONT_REGULAR),
@@ -193,6 +194,7 @@ def generate_client_card_document(card, output_path):
         ("BOTTOMPADDING", (0, 0), (-1, -1), 1),
         ("LEFTPADDING", (0, 0), (-1, -1), 0),
         ("RIGHTPADDING", (0, 0), (-1, -1), 0),
+        ("TOPPADDING", (0, 1), (-1, 1), _SIG_GAP),
     ]))
     elements.append(sig_table)
 
