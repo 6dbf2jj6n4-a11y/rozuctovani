@@ -32,7 +32,7 @@ TEMPLATE_PATH = Path(__file__).resolve().parent / "contract_templates" / "smlouv
 # odstavce, jinak spadne na vychozi styl dokumentu (11pt) - proto se vynucuje
 # explicitne u kazdeho nove vytvoreneho runu (viz _set_paragraph_runs/_set_paragraph_text).
 BODY_FONT_SIZE = Pt(8)
-BODY_FONT_NAME = "Helvetica Neue Thin"
+BODY_FONT_NAME = "Arial Narrow"
 
 _MONTHS = [
     "ledna", "února", "března", "dubna", "května", "června",
@@ -456,21 +456,17 @@ def fill_contract_template(data, output_path, template_path=TEMPLATE_PATH):
         "3. února 2024", format_date_cz(data.get("signed_on")),
     )
 
-    # --- podpisovy radek: nadpis strany / cara / jmeno zastupce pod carou,
-    # stejny vzor jako Karta najemce (core/client_card_generator.py). Puvodni
-    # 3 odstavce sablony (cara / "CEA SSF\tXXXX" / "Silvie...") jsou pozustatek
-    # puvodni smlouvy - obsah se cely prepise, jen se preskladá poradi na
-    # nadpis/cara/jmena. ---
+    # --- podpisovy radek: nadpis "Pronajímatel/Nájemce" a cara pod nim jsou
+    # staticky text sablony (stejne pro kazdou Smlouvu, viz odstavce pred
+    # "CEA SSF" v sablone) - doplnuje se jen radek se jmeny zastupcu, na
+    # miste puvodniho placeholderu "CEA SSF\tXXXX" (pozustatek puvodni
+    # smlouvy, viz modulovy docstring). ---
     paragraphs = doc.paragraphs
-    line_idx = _find_paragraph_index(paragraphs, "CEA SSF") - 1
+    names_idx = _find_paragraph_index(paragraphs, "CEA SSF")
     landlord_rep = data.get("landlord_representative_name") or ""
     tenant_rep = data.get("representative_name") or ""
 
-    _set_paragraph_runs(paragraphs[line_idx], [("Pronajímatel\tNájemce", False)])
-    _set_paragraph_runs(paragraphs[line_idx + 1], [
-        ("_" * 30 + "\t" + "_" * 30, False),
-    ])
-    _set_paragraph_runs(paragraphs[line_idx + 2], [
+    _set_paragraph_runs(paragraphs[names_idx], [
         (landlord_rep, False), ("\t", False), (tenant_rep, True),
     ])
 
