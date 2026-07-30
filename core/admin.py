@@ -499,10 +499,18 @@ class ContractAdmin(ModelAdmin):
 
     def get_changeform_initial_data(self, request):
         """Pri zalozeni nove Smlouvy (tlacitko "+ Pridat smlouvu" na Klientovi,
-        viz contract_inline_tabular.html) predvyplni zastupce a fakturacni
-        e-mail z navazaneho Klienta - jsou to samostatna pole Smlouvy (mohou
-        se od Klienta lisit), takze jde jen o initial hodnotu formulare,
-        ne o kopii pri ulozeni."""
+        viz contract_inline_tabular.html) predvyplni:
+        - zastupce a fakturacni e-mail z navazaneho Klienta - jsou to
+          samostatna pole Smlouvy (mohou se od Klienta lisit), takze jde jen
+          o initial hodnotu formulare, ne o kopii pri ulozeni;
+        - datum podpisu = dnes, vypovedni lhuta = 3 mesice, inflacni dolozka
+          zaskrtnuta a jeji navyseni od 1.1. nasledujiciho roku - bezne
+          vychozi hodnoty noveho pronajmu;
+        - kauci ve vysi jednoho najmu, pokud uz ma Klient aktivni Kartu
+          s vyplnenym najemnym na Plochach (CardUnit.monthly_rent) - jinak
+          se pole nechava prazdne k rucnimu doplneni."""
+        from datetime import date
+
         initial = super().get_changeform_initial_data(request)
         client_id = initial.get("client")
         if client_id:
@@ -511,6 +519,20 @@ class ContractAdmin(ModelAdmin):
                 initial.setdefault("representative_name", client.representative_name)
                 initial.setdefault("representative_role", client.representative_role)
                 initial.setdefault("invoicing_email", client.contact_email)
+
+                monthly_rent_total = sum(
+                    (cu.monthly_rent or 0)
+                    for card in client.cards.filter(is_active=True)
+                    for cu in card.card_units.all()
+                )
+                if monthly_rent_total:
+                    initial.setdefault("deposit_czk", monthly_rent_total)
+
+        today = date.today()
+        initial.setdefault("signed_on", today)
+        initial.setdefault("notice_period_months", 3)
+        initial.setdefault("has_inflation_clause", True)
+        initial.setdefault("inflation_increase_from", date(today.year + 1, 1, 1))
         return initial
 
     fieldsets = (
