@@ -6,10 +6,11 @@ shodu) a vypise klienty/karty/polozky, ktere ho pouzivaji.
 Pouziti:
   python manage.py diag_meridlo_pouziti T_SPOL
   python manage.py diag_meridlo_pouziti T_SPOL --presne
+  python manage.py diag_meridlo_pouziti T_SPOL --site FM
 """
 from django.core.management.base import BaseCommand
 
-from core.models import AllocationKey, Meter
+from core.models import AllocationKey, Meter, Site
 
 
 class Command(BaseCommand):
@@ -18,6 +19,7 @@ class Command(BaseCommand):
     def add_arguments(self, parser):
         parser.add_argument("kod")
         parser.add_argument("--presne", action="store_true", help="Jen přesná shoda kódu.")
+        parser.add_argument("--site", default=None, help="Omezit jen na daný areál (např. FM, NJ).")
 
     def handle(self, *args, **options):
         kod = options["kod"]
@@ -25,6 +27,13 @@ class Command(BaseCommand):
             meters = Meter.objects.filter(code=kod)
         else:
             meters = Meter.objects.filter(code__icontains=kod)
+
+        if options["site"]:
+            site = Site.objects.filter(name__icontains=options["site"]).first()
+            if not site:
+                self.stdout.write(self.style.ERROR(f"Areál '{options['site']}' nenalezen."))
+                return
+            meters = meters.filter(site=site)
 
         if not meters:
             self.stdout.write(self.style.WARNING(f"Žádné měřidlo neodpovídá '{kod}'."))
