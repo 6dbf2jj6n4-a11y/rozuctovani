@@ -496,6 +496,23 @@ class ContractAdmin(ModelAdmin):
     search_fields = ("number", "client__name", "client__ico")
     autocomplete_fields = ("client", "site")
     actions = ["generate_document", "generovat_karty_inflace"]
+
+    def get_changeform_initial_data(self, request):
+        """Pri zalozeni nove Smlouvy (tlacitko "+ Pridat smlouvu" na Klientovi,
+        viz contract_inline_tabular.html) predvyplni zastupce a fakturacni
+        e-mail z navazaneho Klienta - jsou to samostatna pole Smlouvy (mohou
+        se od Klienta lisit), takze jde jen o initial hodnotu formulare,
+        ne o kopii pri ulozeni."""
+        initial = super().get_changeform_initial_data(request)
+        client_id = initial.get("client")
+        if client_id:
+            client = Client.objects.filter(pk=client_id).first()
+            if client:
+                initial.setdefault("representative_name", client.representative_name)
+                initial.setdefault("representative_role", client.representative_role)
+                initial.setdefault("invoicing_email", client.contact_email)
+        return initial
+
     fieldsets = (
         ("Základní údaje", {
             "fields": (("client", "site"), ("number", "signed_on"))
@@ -849,6 +866,10 @@ class MeterAdmin(ModelAdmin):
     search_fields = ("name", "code", "serial_number")
     autocomplete_fields = ("parent_meter",)
     inlines = [MeterReadingInline]
+    # U virtualniho meridla se spotreba pocita ze vzorce (viz
+    # Meter.consumption_for) - "Zpusob zadavani odectu" se pak vubec
+    # nepouziva, takze pole schovame (Unfold Alpine.js x-show).
+    conditional_fields = {"reading_mode": "!is_virtual"}
     fieldsets = (
         (None, {
             "fields": (("site", "code", "name"), ("meter_type", "unit_of_measure", "serial_number"))
