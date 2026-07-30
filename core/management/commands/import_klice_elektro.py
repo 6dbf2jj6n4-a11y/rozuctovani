@@ -119,10 +119,14 @@ class Command(BaseCommand):
                 # Hlavni polozka nema zadne meridlo primo napojene (jen
                 # jeden spolecny naklad za obdobi, viz billing/engine.py
                 # implicitni celek pocitany ze souctu meridel klicu) -
-                # dohledej podle konvence pojmenovani.
-                service_item = ServicePoolItem.objects.filter(
-                    site=site, invoice_class="electricity", name__icontains="hlavní odběr"
-                ).first()
+                # dohledej podle konvence pojmenovani, ale JEN pokud je
+                # pro tuto tridu+areal jednoznacne jedina polozka (jinak
+                # hrozi chybne prirazeni k jine specializovane polozce,
+                # napr. "odběr EAN 668 FM" - radsi selhat explicitne).
+                if ServicePoolItem.objects.filter(site=site, invoice_class="electricity").count() == 1:
+                    service_item = ServicePoolItem.objects.filter(
+                        site=site, invoice_class="electricity", name__icontains="hlavní odběr"
+                    ).first()
 
             if not service_item:
                 self.stdout.write(f"  ServicePoolItem nenalezen pro měřidlo: {meter_code}")
