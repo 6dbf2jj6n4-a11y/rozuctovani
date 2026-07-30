@@ -503,9 +503,10 @@ class ContractAdmin(ModelAdmin):
         - zastupce a fakturacni e-mail z navazaneho Klienta - jsou to
           samostatna pole Smlouvy (mohou se od Klienta lisit), takze jde jen
           o initial hodnotu formulare, ne o kopii pri ulozeni;
-        - datum podpisu = dnes, vypovedni lhuta = 3 mesice, inflacni dolozka
-          zaskrtnuta a jeji navyseni od 1.1. nasledujiciho roku - bezne
-          vychozi hodnoty noveho pronajmu;
+        - datum podpisu = dnes, platnost od = 1. den nasledujiciho mesice,
+          vypovedni lhuta = 3 mesice, inflacni dolozka zaskrtnuta a jeji
+          navyseni od 1.1. nasledujiciho roku - bezne vychozi hodnoty
+          noveho pronajmu;
         - kauci ve vysi jednoho najmu, pokud uz ma Klient aktivni Kartu
           s vyplnenym najemnym na Plochach (CardUnit.monthly_rent) - jinak
           se pole nechava prazdne k rucnimu doplneni."""
@@ -529,7 +530,13 @@ class ContractAdmin(ModelAdmin):
                     initial.setdefault("deposit_czk", monthly_rent_total)
 
         today = date.today()
+        if today.month == 12:
+            next_month_first = date(today.year + 1, 1, 1)
+        else:
+            next_month_first = date(today.year, today.month + 1, 1)
+
         initial.setdefault("signed_on", today)
+        initial.setdefault("valid_from", next_month_first)
         initial.setdefault("notice_period_months", 3)
         initial.setdefault("has_inflation_clause", True)
         initial.setdefault("inflation_increase_from", date(today.year + 1, 1, 1))
