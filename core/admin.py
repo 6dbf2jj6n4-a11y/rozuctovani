@@ -999,7 +999,7 @@ def _format_kc(value, decimals=2):
 class ServicePoolItemAdmin(ModelAdmin):
     list_display = (
         "name", "site", "invoice_class", "unit", "meter", "jednotka",
-        "default_allocation_type", "default_amount_czk_display",
+        "default_allocation_type", "weight_unit_label", "default_amount_czk_display",
     )
     list_filter = ("site", "invoice_class")
     search_fields = ("name",)
@@ -1082,6 +1082,8 @@ class AllocationKeyAdmin(ModelAdmin):
             return _format_kc(obj.value)
         if obj.allocation_type == AllocationKey.AllocationType.AREA_PRICE:
             return "-" if obj.value is None else f"{obj.value} m²"
+        if obj.allocation_type == AllocationKey.AllocationType.WEIGHTED_COUNT and obj.service_item.weight_unit_label:
+            return f"{obj.value} ({obj.service_item.weight_unit_label})"
         return obj.value
 
 

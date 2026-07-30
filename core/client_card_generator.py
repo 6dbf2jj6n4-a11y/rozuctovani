@@ -77,6 +77,8 @@ def _fmt_key_value(key):
         return _fmt_kc(key.value)
     if key.allocation_type == t.SUBMETER:
         return "—"
+    if key.allocation_type == t.WEIGHTED_COUNT and key.service_item.weight_unit_label:
+        return f"{value} ({key.service_item.weight_unit_label})"
     return f"{value}"
 
 

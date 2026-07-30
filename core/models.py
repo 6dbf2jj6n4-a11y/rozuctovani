@@ -549,6 +549,15 @@ class ServicePoolItem(models.Model):
             "zadany, ma vzdy prednost pred touto vychozi castkou."
         ),
     )
+    weight_unit_label = models.CharField(
+        "Co je váhou (u typu 'Podle váhy')", max_length=100, blank=True,
+        help_text=(
+            "Kratky popis, co hodnota klice typu 'Podle vahy' na teto polozce "
+            "znamena - napr. 'm2', 'počet osob', 'počet radiátorů'. Jen "
+            "informativni (zobrazuje se v adminu a v Karte klienta), na "
+            "samotny vypocet nema vliv."
+        ),
+    )
 
     class Meta:
         verbose_name = "Položka zásobníku"
