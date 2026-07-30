@@ -52,6 +52,7 @@ from core.models import Site, Meter, ServicePoolItem, ClientCard, AllocationKey,
 DEFAULT_ZASOBNIK_NAME = "Zasobnik_sluzeb.xlsx"
 
 METERED_KATEGORIE = {"ELEKTRO", "VODA", "TEPLO"}
+KATEGORIE_TO_INVOICE_CLASS = {"ELEKTRO": "electricity", "VODA": "water", "TEPLO": "heat"}
 
 
 class Command(BaseCommand):
@@ -146,6 +147,16 @@ class Command(BaseCommand):
                     while root.parent_meter:
                         root = root.parent_meter
                     service_item = ServicePoolItem.objects.filter(meter=root, site=site).first()
+                if not service_item:
+                    # Hlavni polozka nema zadne meridlo primo napojene (jen
+                    # jeden spolecny naklad za obdobi, viz billing/engine.py
+                    # implicitni celek pocitany ze souctu meridel klicu) -
+                    # dohledej podle konvence pojmenovani.
+                    service_item = ServicePoolItem.objects.filter(
+                        site=site,
+                        invoice_class=KATEGORIE_TO_INVOICE_CLASS[kategorie],
+                        name__icontains="hlavní odběr",
+                    ).first()
                 if not service_item:
                     self.stdout.write(f"  ServicePoolItem nenalezen pro měřidlo: {om_code}")
                     skipped += 1
