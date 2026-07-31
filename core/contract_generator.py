@@ -366,14 +366,19 @@ def fill_contract_template(data, output_path, template_path=TEMPLATE_PATH):
         format_date_cz(data.get("signed_on")),
     )
 
-    # --- podpisovy radek: jmena zastupcu pod carou (nadpis "Pronajímatel/
-    # Nájemce" a cara nad nimi jsou staticky text sablony, viz modulovy
-    # docstring) ---
+    # --- podpisovy radek: jmena zastupcu pod carou a pod nimi nazvy
+    # smluvnich stran (nadpis "Pronajímatel/Nájemce" a cara nad nimi jsou
+    # staticky text sablony, viz modulovy docstring) ---
     paragraphs = doc.paragraphs
     names_idx = _find_paragraph_index(paragraphs, "\tIng. Daniel DAVID")
     names_runs = paragraphs[names_idx].runs
     names_runs[0].text = "\t" + (data.get("landlord_representative_name") or "")
     names_runs[-1].text = data.get("representative_name") or ""
+
+    _set_paragraph_text_keep_format(
+        paragraphs[names_idx + 1],
+        "\t" + landlord_name + "\t" + client_name,
+    )
 
     # python-docx prijima jak cestu (str/Path), tak zapisovatelny stream (napr. BytesIO)
     doc.save(output_path if hasattr(output_path, "write") else str(output_path))
