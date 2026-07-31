@@ -375,10 +375,9 @@ def fill_contract_template(data, output_path, template_path=TEMPLATE_PATH):
     names_runs[0].text = "\t" + (data.get("landlord_representative_name") or "")
     names_runs[-1].text = data.get("representative_name") or ""
 
-    _set_paragraph_text_keep_format(
-        paragraphs[names_idx + 1],
-        "\t" + landlord_name + "\t" + client_name,
-    )
+    company_runs = paragraphs[names_idx + 1].runs
+    company_runs[0].text = "\t" + landlord_name
+    company_runs[-1].text = "\t" + client_name
 
     # python-docx prijima jak cestu (str/Path), tak zapisovatelny stream (napr. BytesIO)
     doc.save(output_path if hasattr(output_path, "write") else str(output_path))
