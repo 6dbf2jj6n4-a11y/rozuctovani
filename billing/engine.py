@@ -69,6 +69,18 @@ ABSOLUTE_AMOUNT_TYPES = (
 )
 
 
+def _meter_provides_consumption(meter):
+    """Rozliší meridlo skutecne pouzivane pro rozpocet spotreby (realne s
+    odecty, nebo virtualni se vzorcem) od meridla napojeneho na klic typu
+    "Podle váhy" JEN kvuli Meter.weight_unit_label (napr. "pocet
+    radiatoru", viz help_text pole - "jen informativni, na vypocet nema
+    vliv"). Bez tohoto rozliseni by kazde takove "popiskove" meridlo bez
+    jedineho odectu prepnulo _consumption_shares do rezimu zalozeneho na
+    spotrebe a celou polozku vyradilo (chybi odecet -> 0 - viz bug u
+    "teplo - spotřeba pelet NJ"/"úklidové služby..."/"odvoz..." NJ)."""
+    return meter.is_virtual or meter.readings.exists()
+
+
 def _fixed_amount_for(key, service_item, period, warnings):
     """Vrati absolutni mesicni Kc castku pro klic typu FIXED_AMOUNT/AREA_PRICE."""
     if key.allocation_type == AllocationKey.AllocationType.AREA_PRICE:
@@ -213,7 +225,7 @@ def _consumption_shares(service_item, period, warnings, by_key_out=None, by_key_
     keys_by_meter = {}
     weight_keys = []
     for key in keys:
-        if key.meter_id is not None:
+        if key.meter_id is not None and _meter_provides_consumption(key.meter):
             keys_by_meter.setdefault(key.meter_id, []).append(key)
         else:
             weight_keys.append(key)
@@ -440,7 +452,7 @@ def calculate_period(period, site=None):
             # "Podružné měřidlo", viz _consumption_shares) - v tom pripade
             # se "celek" dopocita jako soucet spotreby takovych meridel.
             has_meter_keys = any(
-                k.meter_id is not None
+                k.meter_id is not None and _meter_provides_consumption(k.meter)
                 for k in valid_keys if k.allocation_type not in ABSOLUTE_AMOUNT_TYPES
             )
             if service_item.meter or has_meter_keys:
