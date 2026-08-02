@@ -1165,30 +1165,51 @@ class CostEntryAdmin(ModelAdmin):
     )
     list_filter = ("period", "service_item__site")
     autocomplete_fields = ("service_item",)
+    readonly_fields = ("kontrola_cena_za_jednotku", "kontrola_castka_celkem")
 
     @admin.display(description="Jednotka")
     def jednotka(self, obj):
         return _jednotka_polozky(obj.service_item)
 
-    @admin.display(description="Kč/jednotka")
-    def kc_za_jednotku(self, obj):
+    def _efektivni_cena_za_jednotku(self, obj):
         """Efektivni cena za jednotku - primo z amount_czk/amount_units,
         pripadne (u merenych polozek bez primo zadaneho amount_czk)
         z aktualne platneho Ceniku pro dane obdobi."""
         if obj.amount_units:
             if obj.amount_czk is not None:
                 try:
-                    return _format_kc(obj.amount_czk / obj.amount_units, decimals=4)
-                except (ZeroDivisionError, TypeError):
+                    return obj.amount_czk / obj.amount_units
+                except ZeroDivisionError:
                     pass
-            price = PriceList.get_price_for_period(obj.service_item, obj.period)
-            if price is not None:
-                return _format_kc(price, decimals=4)
-        return "-"
+            return PriceList.get_price_for_period(obj.service_item, obj.period)
+        return None
+
+    @admin.display(description="Kč/jednotka")
+    def kc_za_jednotku(self, obj):
+        price = self._efektivni_cena_za_jednotku(obj)
+        return _format_kc(price, decimals=4) if price is not None else "-"
 
     @admin.display(description="Částka (Kč)", ordering="amount_czk")
     def amount_czk_display(self, obj):
-        return _format_kc(obj.amount_czk)
+        return _format_kc(obj.get_amount_czk())
+
+    @admin.display(description="Cena za jednotku (kontrola)")
+    def kontrola_cena_za_jednotku(self, obj):
+        """Zobrazeno primo ve formulari zaznamu (ne jen ve vypisu) - aby
+        bylo pri zadavani nakladu hned videt, jaka cena/jednotku se
+        skutecne pouzije (vlastni amount_czk, nebo dopocet z Ceniku),
+        bez nutnosti dohledavat to zvlast. Viz konverzace s Danielem -
+        chce to vidy pro kontrolu proti fakturovanemu tarifu dodavatele."""
+        if obj is None or obj.pk is None:
+            return "(uloží se po prvním uložení záznamu)"
+        price = self._efektivni_cena_za_jednotku(obj)
+        return _format_kc(price, decimals=4) if price is not None else "-"
+
+    @admin.display(description="Celková částka (kontrola)")
+    def kontrola_castka_celkem(self, obj):
+        if obj is None or obj.pk is None:
+            return "(uloží se po prvním uložení záznamu)"
+        return _format_kc(obj.get_amount_czk())
 
 
 @admin.register(BillingLine)
