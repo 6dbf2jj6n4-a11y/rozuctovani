@@ -238,6 +238,11 @@ UNFOLD = {
                         "icon": "query_stats",
                         "link": reverse_lazy("admin:core_billingline_detail"),
                     },
+                    {
+                        "title": _("Přehled Náklad/Výnos"),
+                        "icon": "account_balance",
+                        "link": reverse_lazy("admin:core_billingline_prehled"),
+                    },
                 ],
             },
             {
