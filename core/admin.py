@@ -1,6 +1,7 @@
 from decimal import Decimal
 
 from django.contrib import admin, messages
+from django.db.models import Q
 from django.contrib.auth.models import Group
 
 admin.site.unregister(Group)
@@ -967,7 +968,7 @@ class PeriodAdmin(ModelAdmin):
     list_display = ("__str__", "status", "days_in_period")
     list_filter = ("status",)
     ordering = ("-year", "-month")
-    actions = ["spocitat_rozuctovani", "uzavrit_obdobi", "znovu_otevrit_obdobi"]
+    actions = ["spocitat_rozuctovani", "zkontrolovat_co_zadat", "uzavrit_obdobi", "znovu_otevrit_obdobi"]
 
     def get_actions(self, request):
         actions = super().get_actions(request)
@@ -1005,6 +1006,81 @@ class PeriodAdmin(ModelAdmin):
                 self.message_user(request, text, level=messages.WARNING)
             else:
                 self.message_user(request, text, level=messages.SUCCESS)
+
+    @admin.action(description="Zkontrolovat, co je potřeba zadat (Náklady/Ceník)")
+    def zkontrolovat_co_zadat(self, request, queryset):
+        """Pro vybraná Období projde vsechny polozky zasobniku a nahlasi:
+        - polozky bez Nakladu za obdobi (CostEntry) A bez Vychozi mesicni
+          castky (ServicePoolItem.default_amount_czk) - takove polozky
+          billing/engine.py potichu preskoci, castka za ne nikomu nepadne
+        - merene polozky, ktere maji zadane jednotky, ale nemaji zadnou
+          platnou cenu v Ceniku (ani starsi) - spadnou na varovani pri
+          samotnem prepoctu
+
+        Sezonni polozky (napr. "odklizeni snehu") se NEROZLISUJI - v
+        mesicich bez nakladu se objevi jako "chybi" i kdyz je to spravne,
+        Daniel si to vyhodnoti sam (viz konverzace)."""
+        for period in queryset:
+            missing_cost = []
+            missing_price = []
+            stale_price = []
+
+            for item in ServicePoolItem.objects.select_related("site").all():
+                cost_entry = CostEntry.objects.filter(service_item=item, period=period).first()
+                if cost_entry is None:
+                    if item.default_amount_czk is None:
+                        missing_cost.append(item)
+                    continue
+
+                if cost_entry.amount_czk is not None or cost_entry.amount_units is None:
+                    continue
+
+                price_entry = (
+                    PriceList.objects.filter(service_item=item)
+                    .filter(
+                        Q(period__year__lt=period.year)
+                        | Q(period__year=period.year, period__month__lte=period.month)
+                    )
+                    .order_by("-period__year", "-period__month")
+                    .first()
+                )
+                if price_entry is None:
+                    missing_price.append(item)
+                elif price_entry.period_id != period.id:
+                    age_months = (
+                        (period.year - price_entry.period.year) * 12
+                        + (period.month - price_entry.period.month)
+                    )
+                    stale_price.append((item, price_entry.period, age_months))
+
+            label = str(period)
+            if missing_cost:
+                names = ", ".join(str(i) for i in missing_cost)
+                self.message_user(
+                    request,
+                    f"{label}: chybí Náklad za období (a nemá Výchozí částku) - nebude se počítat: {names}",
+                    level=messages.WARNING,
+                )
+            if missing_price:
+                names = ", ".join(str(i) for i in missing_price)
+                self.message_user(
+                    request,
+                    f"{label}: má zadané jednotky, ale chybí jakákoliv cena v Ceníku: {names}",
+                    level=messages.WARNING,
+                )
+            if stale_price:
+                text = "; ".join(
+                    f"{item} (cena naposledy nastavena {price_period}, {age} měs. zpět)"
+                    for item, price_period, age in stale_price
+                )
+                self.message_user(
+                    request, f"{label}: platné ceny z dřívějška - zkontroluj, jestli se nezměnily: {text}",
+                    level=messages.INFO,
+                )
+            if not (missing_cost or missing_price or stale_price):
+                self.message_user(
+                    request, f"{label}: vše zadané, nic nechybí.", level=messages.SUCCESS
+                )
 
     @admin.action(description="Uzavřít vybraná období (zamkne proti přepočtu)")
     def uzavrit_obdobi(self, request, queryset):
