@@ -77,8 +77,16 @@ def _meter_provides_consumption(meter):
     vliv"). Bez tohoto rozliseni by kazde takove "popiskove" meridlo bez
     jedineho odectu prepnulo _consumption_shares do rezimu zalozeneho na
     spotrebe a celou polozku vyradilo (chybi odecet -> 0 - viz bug u
-    "teplo - spotřeba pelet NJ"/"úklidové služby..."/"odvoz..." NJ)."""
-    return meter.is_virtual or meter.readings.exists()
+    "teplo - spotřeba pelet NJ"/"úklidové služby..."/"odvoz..." NJ).
+
+    Virtualni meridlo bez vyplneneho Vzorce (napr. ODPAD/UKLID - "Virtuální"
+    zaskrtnute jen aby v adminu zmizelo nepotrebne pole Odečty, ne proto,
+    ze by melo skutecny vzorec) nikdy nevrati zadnou hodnotu
+    (_formula_consumption_for na prazdnem vzorci vzdy da None) - takove
+    meridlo se tedy pocita stejne jako nevirtualni bez odectu."""
+    if meter.is_virtual:
+        return bool(meter.formula.strip())
+    return meter.readings.exists()
 
 
 def _fixed_amount_for(key, service_item, period, warnings):
