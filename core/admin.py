@@ -968,7 +968,10 @@ class PeriodAdmin(ModelAdmin):
     list_display = ("__str__", "status", "days_in_period")
     list_filter = ("status",)
     ordering = ("-year", "-month")
-    actions = ["spocitat_rozuctovani", "zkontrolovat_co_zadat", "uzavrit_obdobi", "znovu_otevrit_obdobi"]
+    actions = [
+        "spocitat_rozuctovani", "zkontrolovat_co_zadat", "vygenerovat_chybejici_naklady",
+        "uzavrit_obdobi", "znovu_otevrit_obdobi",
+    ]
 
     def get_actions(self, request):
         actions = super().get_actions(request)
@@ -1080,6 +1083,47 @@ class PeriodAdmin(ModelAdmin):
             if not (missing_cost or missing_price or stale_price):
                 self.message_user(
                     request, f"{label}: vše zadané, nic nechybí.", level=messages.SUCCESS
+                )
+
+    @admin.action(description="Vygenerovat chybějící Náklady za období (prázdné, k doplnění)")
+    def vygenerovat_chybejici_naklady(self, request, queryset):
+        """Pro vybrana Obdobi vytvori PRAZDNY CostEntry (bez amount_units
+        i amount_czk, jen s poznamkou 'K DOPLNĚNÍ') pro kazdou polozku,
+        ktera pro dane obdobi zadny CostEntry nema a nema ani Vychozi
+        mesicni castku - aby je Daniel nemusel zakladat rucne jednu po
+        druhe pres "Pridat", jen dohledat v seznamu Nakladu (vyhledavani
+        podle poznamky) a doplnit realna cisla.
+
+        ZAMERNE se nevyplnuje amount_czk=0 (i kdyz o to Daniel puvodne
+        zadal) - prazdny CostEntry porad spadne na varovani "chybí cena/
+        náklad" pri "Spočítat rozúčtování" (billing/engine.py), takze
+        zapomenuty/nedoplneny radek nikdy tise neuctuje 0 Kc. Kdyby mel
+        amount_czk rovnou 0, engine by to vzal jako platnou nulovou
+        castku BEZ JAKEHOKOLIV varovani - to by bylo nebezpecnejsi nez
+        zadny CostEntry vubec."""
+        for period in queryset:
+            created = []
+            for item in ServicePoolItem.objects.all():
+                if item.default_amount_czk is not None:
+                    continue
+                if CostEntry.objects.filter(service_item=item, period=period).exists():
+                    continue
+                CostEntry.objects.create(service_item=item, period=period, note="K DOPLNĚNÍ")
+                created.append(item)
+
+            label = str(period)
+            if created:
+                names = ", ".join(str(i) for i in created)
+                self.message_user(
+                    request,
+                    f"{label}: vytvořeno {len(created)} prázdných Nákladů (poznámka „K DOPLNĚNÍ“) - "
+                    f"doplň částky v seznamu Náklady za období (vyhledej „K DOPLNĚNÍ“): {names}",
+                    level=messages.WARNING,
+                )
+            else:
+                self.message_user(
+                    request, f"{label}: nic k vygenerování, vše už existuje nebo má Výchozí částku.",
+                    level=messages.SUCCESS,
                 )
 
     @admin.action(description="Uzavřít vybraná období (zamkne proti přepočtu)")
@@ -1240,6 +1284,7 @@ class CostEntryAdmin(ModelAdmin):
         "service_item", "period", "amount_units", "jednotka", "kc_za_jednotku", "amount_czk_display",
     )
     list_filter = ("period", "service_item__site")
+    search_fields = ("note", "service_item__name")
     autocomplete_fields = ("service_item",)
     readonly_fields = ("kontrola_cena_za_jednotku", "kontrola_castka_celkem")
 
