@@ -26,9 +26,10 @@
     <p style="color:#999; font-size:13px;">
         Interní přehled - nikdy neukazovat klientům. "Výnos (fakturováno)" = co klienti skutečně zaplatí
         (bez položek "v paušálu"). "Výnos (vč. paušálu)" = úplně vše, co se jim vyúčtovalo, i kdyby to
-        neplatili navíc.
+        neplatili navíc. U měřených položek je výnos jednotlivého měřidla jen ODHAD (podíl na naměřené
+        spotřebě &times; výnos celé položky), ne nezávisle dopočítaný.
         &middot;
-        <a href="{% url 'admin:core_billingline_prehled_meridla' %}?period={{ selected_period.pk }}{% if selected_site_id %}&site={{ selected_site_id }}{% endif %}">Zobrazit s rozpadem na měřidla &rarr;</a>
+        <a href="{% url 'admin:core_billingline_prehled' %}?period={{ selected_period.pk }}{% if selected_site_id %}&site={{ selected_site_id }}{% endif %}">Zobrazit bez rozpadu na měřidla &rarr;</a>
     </p>
 
     {% if not selected_period %}
@@ -44,7 +45,7 @@
             <thead>
                 <tr style="border-bottom:2px solid #666; text-align:left;">
                     <th style="padding:6px 8px;">Areál</th>
-                    <th style="padding:6px 8px;">Položka</th>
+                    <th style="padding:6px 8px;">Položka / Měřidlo</th>
                     <th style="padding:6px 8px; text-align:right;">Jednotky (dodavatel → naměřeno)</th>
                     <th style="padding:6px 8px; text-align:right;">Náklad (Kč)</th>
                     <th style="padding:6px 8px; text-align:right;">Výnos (fakturováno)</th>
@@ -80,6 +81,20 @@
                             {% if row.rozdil_vcetne_pausalu != None %}{{ row.rozdil_vcetne_pausalu|floatformat:2 }} Kč{% else %}—{% endif %}
                         </td>
                     </tr>
+                    {% for m in row.meter_breakdown %}
+                        <tr style="border-bottom:1px solid #333; color:#999; font-size:12px;">
+                            <td style="padding:2px 8px;"></td>
+                            <td style="padding:2px 8px 2px 24px;">
+                                {{ m.meter.code|default:m.meter.name }} — {{ m.cards|join:", " }}
+                            </td>
+                            <td style="padding:2px 8px; text-align:right;">{{ m.consumption|floatformat:3 }} {{ row.unit_of_measure }} ({{ m.contribution|percent }})</td>
+                            <td style="padding:2px 8px;"></td>
+                            <td style="padding:2px 8px; text-align:right;">{{ m.vynos_fakturovano|floatformat:2 }} Kč</td>
+                            <td style="padding:2px 8px;"></td>
+                            <td style="padding:2px 8px; text-align:right;">{{ m.vynos_vcetne_pausalu|floatformat:2 }} Kč</td>
+                            <td style="padding:2px 8px;"></td>
+                        </tr>
+                    {% endfor %}
                 {% endfor %}
                 <tr style="border-top:2px solid #666; font-weight:700;">
                     <td colspan="3" style="padding:8px; text-align:right;">Mezisoučet {{ group.label }}</td>

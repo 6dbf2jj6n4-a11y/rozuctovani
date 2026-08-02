@@ -175,7 +175,7 @@ def _owned_consumption(meter, period, billed_meter_ids, cache):
     return result
 
 
-def _consumption_shares(service_item, period, warnings, by_key_out=None, by_key_local_out=None):
+def _consumption_shares(service_item, period, warnings, by_key_out=None, by_key_local_out=None, by_meter_out=None):
     """
     Spocita podily pro polozku, kde se aspon cast klicu opira o skutecnou
     namerenou spotrebu meridla - bud primo pres service_item.meter (hlavni
@@ -221,6 +221,12 @@ def _consumption_shares(service_item, period, warnings, by_key_out=None, by_key_
     vzdy 1 (100 %); u sdileneho meridla je to jeho vaha normalizovana jen
     proti ostatnim kartam na TOMTO meridle. Slouzi jen k auditu ("mam
     spravne rozdelene sdilene meridlo?"), na skutecny vypocet nema vliv.
+
+    `by_meter_out`: volitelny dict {meter_id: {"meter", "consumption",
+    "contribution", "cards"}}, jen pro auditovaci rozpad po MERIDLECH
+    (ne po klicich/kartach) - viz billing/item_summary.py, prehled
+    Naklad/Vynos s rozpadem na meridla. Bez vlivu na vysledek ani
+    chovani, pokud zustane None.
     """
     keys = [
         k for k in service_item.allocation_keys.select_related("client_card", "client_card__unit", "meter")
@@ -284,8 +290,16 @@ def _consumption_shares(service_item, period, warnings, by_key_out=None, by_key_
             )
             return {}, None
 
-    for group_consumption, group_keys in resolved_groups.values():
+    for meter_id, (group_consumption, group_keys) in resolved_groups.items():
         contribution = group_consumption / total_consumption
+
+        if by_meter_out is not None:
+            by_meter_out[meter_id] = {
+                "meter": group_keys[0].meter,
+                "consumption": group_consumption,
+                "contribution": contribution,
+                "cards": [str(k.client_card) for k in group_keys],
+            }
 
         if len(group_keys) == 1:
             key = group_keys[0]

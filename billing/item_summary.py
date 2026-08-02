@@ -19,7 +19,13 @@ from core.models import BillingLine, CostEntry, ServicePoolItem
 from .engine import ABSOLUTE_AMOUNT_TYPES, _consumption_shares, _meter_provides_consumption
 
 
-def get_item_summary_rows(period, site=None):
+def get_item_summary_rows(period, site=None, with_meters=False):
+    """`with_meters=True`: ke kazde merene polozce navic prida
+    "meter_breakdown" - seznam radku po JEDNOTLIVYCH meridlech/skupinach
+    (viz billing/engine.py _consumption_shares by_meter_out), s jejich
+    spotrebou a odhadovanym podilem na Vynosu (podil spotreby * Vynos
+    polozky - priblizny rozpad, ne nezavisle dopocitany, viz konverzace
+    s Danielem - druha varianta prehledu k porovnani s tou bez rozpadu)."""
     items = (
         ServicePoolItem.objects.select_related("site", "meter")
         .order_by("site__name", "invoice_class", "name")
@@ -55,6 +61,7 @@ def get_item_summary_rows(period, site=None):
         reported_units = cost_entry.amount_units if cost_entry else None
         measured_units = None
         unit_of_measure = item.meter.unit_of_measure if item.meter else ""
+        meter_breakdown = [] if with_meters else None
         if reported_units and not item.meter:
             valid_keys = [
                 k for k in item.allocation_keys.select_related("meter", "client_card")
@@ -64,10 +71,21 @@ def get_item_summary_rows(period, site=None):
                 k.meter_id is not None and _meter_provides_consumption(k.meter) for k in valid_keys
             )
             if has_meter_keys:
-                _, measured_units = _consumption_shares(item, period, [])
+                by_meter = {} if with_meters else None
+                _, measured_units = _consumption_shares(item, period, [], by_meter_out=by_meter)
                 key_with_meter = next((k for k in valid_keys if k.meter_id), None)
                 if key_with_meter:
                     unit_of_measure = key_with_meter.meter.unit_of_measure
+                if by_meter:
+                    for info in sorted(by_meter.values(), key=lambda i: -i["contribution"]):
+                        meter_breakdown.append({
+                            "meter": info["meter"],
+                            "consumption": info["consumption"],
+                            "contribution": info["contribution"],
+                            "cards": info["cards"],
+                            "vynos_fakturovano": vynos_fakturovano * info["contribution"],
+                            "vynos_vcetne_pausalu": vynos_vcetne_pausalu * info["contribution"],
+                        })
 
         rows.append({
             "site": item.site,
@@ -82,5 +100,6 @@ def get_item_summary_rows(period, site=None):
             "reported_units": reported_units,
             "measured_units": measured_units,
             "unit_of_measure": unit_of_measure,
+            "meter_breakdown": meter_breakdown,
         })
     return rows

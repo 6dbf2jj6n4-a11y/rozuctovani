@@ -1464,6 +1464,11 @@ class BillingLineAdmin(DefaultToLatestPeriodMixin, ModelAdmin):
                 self.admin_site.admin_view(self.prehled_view),
                 name="core_billingline_prehled",
             ),
+            path(
+                "prehled/meridla/",
+                self.admin_site.admin_view(self.prehled_meridla_view),
+                name="core_billingline_prehled_meridla",
+            ),
         ]
         return custom + urls
 
@@ -1472,8 +1477,21 @@ class BillingLineAdmin(DefaultToLatestPeriodMixin, ModelAdmin):
         (ne po klientech) - kolik polozka skutecne stoji vs. kolik se z
         ni vyfakturuje klientum, vc. zisku/ztraty. Viz billing/
         item_summary.py a konverzace s Danielem (chtel oddeleny prehled
-        od per-klientskeho Detailu, se sumaci za vsechny tridy a
-        rozpadem na jednotlive polozky/meridla)."""
+        od per-klientskeho Detailu, se sumaci za vsechny tridy). Druha
+        varianta (prehled_meridla_view) navic rozepisuje merene polozky
+        po jednotlivych meridlech - obe existuji soubezne, ať si Daniel
+        vybere, kterou chce pouzivat dal."""
+        return self._prehled(request, with_meters=False, template="admin/core/billingline/prehled.html")
+
+    def prehled_meridla_view(self, request):
+        """Stejne jako prehled_view, ale s rozpadem merenych polozek na
+        jednotliva meridla (viz billing/item_summary.py
+        get_item_summary_rows(with_meters=True))."""
+        return self._prehled(
+            request, with_meters=True, template="admin/core/billingline/prehled_meridla.html"
+        )
+
+    def _prehled(self, request, with_meters, template):
         from django.shortcuts import render
         from billing.item_summary import get_item_summary_rows
 
@@ -1495,7 +1513,7 @@ class BillingLineAdmin(DefaultToLatestPeriodMixin, ModelAdmin):
 
         if period is not None:
             site = Site.objects.filter(pk=site_id).first() if site_id else None
-            for row in get_item_summary_rows(period, site=site):
+            for row in get_item_summary_rows(period, site=site, with_meters=with_meters):
                 groups_by_class.setdefault(row["invoice_class_key"], []).append(row)
                 if row["naklad"] is not None:
                     totals["naklad"] += row["naklad"]
@@ -1521,7 +1539,8 @@ class BillingLineAdmin(DefaultToLatestPeriodMixin, ModelAdmin):
 
         context = {
             **self.admin_site.each_context(request),
-            "title": "Přehled nákladů a výnosů",
+            "title": "Přehled nákladů a výnosů" + (" (rozpad na měřidla)" if with_meters else ""),
+            "with_meters": with_meters,
             "periods": periods,
             "sites": sites,
             "selected_period": period,
@@ -1534,7 +1553,7 @@ class BillingLineAdmin(DefaultToLatestPeriodMixin, ModelAdmin):
             "total_rozdil_vcetne_pausalu": totals["vynos_vcetne_pausalu"] - totals["naklad"],
             "opts": self.model._meta,
         }
-        return render(request, "admin/core/billingline/prehled.html", context)
+        return render(request, template, context)
 
     def detail_client_view(self, request, client_id):
         """Podrobny detail po jednotlivych Klicich pro jednoho klienta (viz

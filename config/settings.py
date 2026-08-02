@@ -243,6 +243,11 @@ UNFOLD = {
                         "icon": "account_balance",
                         "link": reverse_lazy("admin:core_billingline_prehled"),
                     },
+                    {
+                        "title": _("Přehled Náklad/Výnos (měřidla)"),
+                        "icon": "speed",
+                        "link": reverse_lazy("admin:core_billingline_prehled_meridla"),
+                    },
                 ],
             },
             {
