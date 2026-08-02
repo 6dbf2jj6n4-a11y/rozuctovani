@@ -32,6 +32,19 @@
 
     {% for group in groups %}
         <h2 style="margin-top:28px;">{{ group.label }}</h2>
+        {% if group.losses %}
+            <div style="margin-bottom:10px;">
+                {% for loss in group.losses %}
+                    <div style="font-size:12px; color:#b45309;">
+                        Ztráta „{{ loss.service_item }}“ (jen interní, klientům se neukazuje - promítá se do ceny/jednotku):
+                        dodavatel {{ loss.reported_units|floatformat:3 }} {{ loss.unit_of_measure }},
+                        naměřeno {{ loss.measured_units|floatformat:3 }} {{ loss.unit_of_measure }},
+                        rozdíl {{ loss.loss_units|floatformat:3 }} {{ loss.unit_of_measure }}
+                        ({{ loss.loss_pct|percent }})
+                    </div>
+                {% endfor %}
+            </div>
+        {% endif %}
         <div style="overflow-x:auto;">
         <table style="width:100%; border-collapse:collapse; font-size:13px;">
             <thead>

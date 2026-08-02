@@ -1230,14 +1230,21 @@ class BillingLineAdmin(ModelAdmin):
         warnings = []
         grand_total = Decimal("0")
         if period is not None:
-            rows, warnings = get_key_rows_for_client(client, period)
+            rows, warnings, item_losses = get_key_rows_for_client(client, period)
             class_labels = dict(ServicePoolItem.InvoiceClass.choices)
             groups_by_class = {key: [] for key, _ in ServicePoolItem.InvoiceClass.choices}
+            losses_by_class = {key: [] for key, _ in ServicePoolItem.InvoiceClass.choices}
             for row in rows:
                 groups_by_class.setdefault(row["invoice_class_key"], []).append(row)
                 grand_total += row["amount"]
+            for loss in item_losses:
+                losses_by_class.setdefault(loss["invoice_class_key"], []).append(loss)
             groups = [
-                {"label": class_labels[key], "rows": rs, "subtotal": sum((r["amount"] for r in rs), Decimal("0"))}
+                {
+                    "label": class_labels[key], "rows": rs,
+                    "subtotal": sum((r["amount"] for r in rs), Decimal("0")),
+                    "losses": losses_by_class.get(key, []),
+                }
                 for key, rs in groups_by_class.items() if rs
             ]
 

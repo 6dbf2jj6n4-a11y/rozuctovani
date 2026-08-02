@@ -14,7 +14,7 @@ vysledek je vzdy konzistentni se skutecnym vypoctem.
 """
 from decimal import Decimal
 
-from core.models import AllocationKey, BillingLine, PriceList
+from core.models import AllocationKey, BillingLine, CostEntry, PriceList
 from .engine import (
     ABSOLUTE_AMOUNT_TYPES,
     _consumption_shares,
@@ -25,11 +25,25 @@ from .engine import (
 
 
 def get_key_rows_for_client(client, period):
-    """Vrati seznam radku (dict) - jeden za kazdy platny Klic klienta v danem
+    """Vrati (rows, warnings, item_losses).
+
+    `rows`: seznam radku (dict) - jeden za kazdy platny Klic klienta v danem
     obdobi, napric vsemi Kartami klienta a polozkami zasobniku, na ktere ma
-    v tomto obdobi vyuctovanou polozku (BillingLine)."""
+    v tomto obdobi vyuctovanou polozku (BillingLine).
+
+    `item_losses`: INTERNI vodítko (nikdy nezobrazovat klientovi - viz
+    konverzace s Danielem, klientum se ztraty schovaji do ceny/jednotku,
+    ne zobrazuji zvlast) - u polozek BEZ hlavniho meridla (implicitni
+    "celek" dopocitany jako soucet podruznych meridel, viz
+    billing/engine.py _consumption_shares) porovna fakturovane mnozstvi
+    od dodavatele (CostEntry.amount_units) s tim, co skutecne nascitaly
+    nase podruzna meridla - rozdil je nezachycena spotreba (spolecne
+    prostory bez klice, technicke ztraty, chybejici odecet...). Jeden
+    zaznam za KAZDOU polozku (ne za kazdy klic/kartu)."""
     warnings = []
     rows = []
+    item_losses = []
+    seen_loss_items = set()
 
     lines = (
         BillingLine.objects.filter(period=period, client_card__client=client)
@@ -72,6 +86,26 @@ def get_key_rows_for_client(client, period):
         else:
             weight_keys = [k for k in valid_keys if k.allocation_type not in ABSOLUTE_AMOUNT_TYPES]
             _weighted_shares(weight_keys, period, by_key_out=by_key_share)
+
+        if (
+            not si.meter and has_meter_keys and total_consumption is not None
+            and si.id not in seen_loss_items
+        ):
+            seen_loss_items.add(si.id)
+            cost_entry = CostEntry.objects.filter(service_item=si, period=period).first()
+            reported_units = cost_entry.amount_units if cost_entry else None
+            if reported_units:
+                loss_units = reported_units - total_consumption
+                key_with_meter = next((k for k in valid_keys if k.meter_id), None)
+                item_losses.append({
+                    "service_item": si.name,
+                    "invoice_class_key": si.invoice_class,
+                    "reported_units": reported_units,
+                    "measured_units": total_consumption,
+                    "loss_units": loss_units,
+                    "loss_pct": (loss_units / reported_units) if reported_units else None,
+                    "unit_of_measure": key_with_meter.meter.unit_of_measure if key_with_meter else "",
+                })
 
         # Meridla, ktera jsou na teto polozce SAMA O SOBE take samostatne
         # uctovana (maji vlastni klic) - jen tahle se skutecne odecitaji od
@@ -188,4 +222,4 @@ def get_key_rows_for_client(client, period):
 
             rows.append(row)
 
-    return rows, warnings
+    return rows, warnings, item_losses
