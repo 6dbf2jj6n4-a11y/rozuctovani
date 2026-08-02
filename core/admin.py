@@ -21,6 +21,29 @@ from .models import (
 )
 
 
+class _PeriodDefaultMarkerFilter(admin.SimpleListFilter):
+    """Neviditelny "filtr" bez skutecneho efektu - jediny ucel je, aby
+    Django ChangeList rozpoznalo parametr '_pd' jako OCEKAVANY a vyjmulo
+    ho z 'remaining_lookup_params' (SimpleListFilter.__init__ ho vzdy
+    vytahne z params, bez ohledu na has_output()). Bez tohohle by se
+    '_pd' zkousel pouzit jako qs.filter(_pd=...) - CostEntry/PriceList/
+    MeterReading/BillingLine takove pole nemaji, takze by to spadlo na
+    FieldError -> IncorrectLookupParameters -> po druhem pokusu (uz s
+    '?e=1' v URL) na obecnou chybovou stranku Django adminu
+    "admin/invalid_setup.html" ("Potíže s nainstalovanou databází...") -
+    vypada to jako problem s DB, ale je to jen tohle. lookups() vraci
+    prazdny seznam, takze has_output() je False a filtr se v bocnim
+    panelu vubec nezobrazi. Viz DefaultToLatestPeriodMixin."""
+    title = "výchozí období"
+    parameter_name = "_pd"
+
+    def lookups(self, request, model_admin):
+        return ()
+
+    def queryset(self, request, queryset):
+        return queryset
+
+
 class DefaultToLatestPeriodMixin:
     """Pri prvnim otevreni seznamu (bez explicitne zvoleneho Obdobi)
     presmeruje na filtr podle nejnovejsiho Obdobi (Period.Meta.ordering =
@@ -29,7 +52,11 @@ class DefaultToLatestPeriodMixin:
     Period.objects.first() tam). Marker '_pd' v querystringu odlisi
     "cerstve otevreni" od situace, kdy uzivatel filtr na Obdobi vedome
     zrusil (klikl na 'Vše' u filtru) - jinak by ho to porad vracelo zpet
-    na nejnovejsi obdobi a nedalo by se videt vic obdobi najednou."""
+    na nejnovejsi obdobi a nedalo by se videt vic obdobi najednou.
+
+    DULEZITE: kazdy ModelAdmin pouzivajici tenhle mixin MUSI mit
+    _PeriodDefaultMarkerFilter v list_filter, jinak viz FieldError
+    popsany u _PeriodDefaultMarkerFilter vyse."""
     default_period_filter_param = "period__id__exact"
 
     def changelist_view(self, request, extra_context=None):
@@ -1174,7 +1201,7 @@ class InflationRateAdmin(ModelAdmin):
 @admin.register(MeterReading)
 class MeterReadingAdmin(DefaultToLatestPeriodMixin, ModelAdmin):
     list_display = ("meter", "period", "reading_date", "value", "is_estimate")
-    list_filter = ("meter__site", "meter__meter_type", "period", "is_estimate")
+    list_filter = ("meter__site", "meter__meter_type", "period", "is_estimate", _PeriodDefaultMarkerFilter)
     search_fields = ("meter__code", "meter__name")
     autocomplete_fields = ("meter",)
     ordering = ("meter__code", "-period")
@@ -1307,7 +1334,7 @@ class AllocationKeyAdmin(ModelAdmin):
 @admin.register(PriceList)
 class PriceListAdmin(DefaultToLatestPeriodMixin, ModelAdmin):
     list_display = ("service_item", "period", "price_per_unit_display", "note")
-    list_filter = ("period", "service_item__site")
+    list_filter = ("period", "service_item__site", _PeriodDefaultMarkerFilter)
     autocomplete_fields = ("service_item",)
     search_fields = ("service_item__name",)
 
@@ -1351,7 +1378,10 @@ class CostEntryAdmin(DefaultToLatestPeriodMixin, ModelAdmin):
     )
     list_display_links = ("service_item",)
     list_editable = ("amount_units", "amount_czk", "note")
-    list_filter = (CostEntryVyplnenoFilter, "period", "service_item__invoice_class", "service_item__site")
+    list_filter = (
+        CostEntryVyplnenoFilter, "period", "service_item__invoice_class", "service_item__site",
+        _PeriodDefaultMarkerFilter,
+    )
     search_fields = ("note", "service_item__name")
     autocomplete_fields = ("service_item",)
     readonly_fields = ("kontrola_cena_za_jednotku", "kontrola_castka_celkem")
@@ -1410,7 +1440,7 @@ class CostEntryAdmin(DefaultToLatestPeriodMixin, ModelAdmin):
 @admin.register(BillingLine)
 class BillingLineAdmin(DefaultToLatestPeriodMixin, ModelAdmin):
     list_display = ("client_card_display", "service_item", "period", "amount_display", "share_display")
-    list_filter = ("period",)
+    list_filter = ("period", _PeriodDefaultMarkerFilter)
     search_fields = ("client_card__client__name",)
     readonly_fields = ("client_card_display", "period", "service_item", "amount", "share_display", "calc_detail")
     actions = ["generovat_vyuctovani_pdf"]
