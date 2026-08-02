@@ -1174,6 +1174,20 @@ def _format_kc(value, decimals=2):
     return f"{text} Kč"
 
 
+def _efektivni_cena_za_jednotku(cost_entry):
+    """Efektivni cena za jednotku pro CostEntry - primo z amount_czk/
+    amount_units, pripadne (u merenych polozek bez primo zadaneho
+    amount_czk) z aktualne platneho Ceniku pro dane obdobi."""
+    if cost_entry.amount_units:
+        if cost_entry.amount_czk is not None:
+            try:
+                return cost_entry.amount_czk / cost_entry.amount_units
+            except ZeroDivisionError:
+                pass
+        return PriceList.get_price_for_period(cost_entry.service_item, cost_entry.period)
+    return None
+
+
 @admin.register(ServicePoolItem)
 class ServicePoolItemAdmin(ModelAdmin):
     list_display = (
@@ -1280,34 +1294,49 @@ class PriceListAdmin(ModelAdmin):
 
 @admin.register(CostEntry)
 class CostEntryAdmin(ModelAdmin):
+    """list_editable u amount_units/amount_czk/note - primo v seznamu (po
+    filtru na Obdobi) jde zadat cisla u vice polozek najednou a ulozit
+    jednim tlacitkem, misto otevirani kazdeho zaznamu zvlast. Kvuli tomu
+    (Django to vyzaduje) je list_display_links presunuty na service_item,
+    aby zustal jasny "odkazovaci" sloupec pro otevreni celeho formulare
+    (napr. kvuli kontrolnim polim)."""
     list_display = (
-        "service_item", "period", "amount_units", "jednotka", "kc_za_jednotku", "amount_czk_display",
+        "trida", "service_item", "period", "amount_units", "amount_czk", "jednotka", "kc_za_jednotku",
+        "amount_czk_display", "note",
     )
-    list_filter = ("period", "service_item__site")
+    list_display_links = ("service_item",)
+    list_editable = ("amount_units", "amount_czk", "note")
+    list_filter = ("period", "service_item__invoice_class", "service_item__site")
     search_fields = ("note", "service_item__name")
     autocomplete_fields = ("service_item",)
     readonly_fields = ("kontrola_cena_za_jednotku", "kontrola_castka_celkem")
+
+    def get_queryset(self, request):
+        """Serazeno podle Tridy (ve stejnem poradi jako vsude jinde v appce -
+        Najemne/Elektrina/Voda/Teplo/Ostatni, viz ServicePoolItem.InvoiceClass
+        a _CLASS_ORDER v billing/statement_generator.py), ne abecedne podle
+        kodu tridy - Daniel chce naklady v seznamu videt poseskupovane podle
+        typu."""
+        from django.db.models import Case, IntegerField, When
+
+        class_order = {code: i for i, (code, _) in enumerate(ServicePoolItem.InvoiceClass.choices)}
+        whens = [When(service_item__invoice_class=code, then=i) for code, i in class_order.items()]
+        qs = super().get_queryset(request)
+        return qs.annotate(_trida_poradi=Case(*whens, output_field=IntegerField())).order_by(
+            "_trida_poradi", "service_item__site", "service_item__name", "-period__year", "-period__month"
+        )
+
+    @admin.display(description="Třída")
+    def trida(self, obj):
+        return obj.service_item.get_invoice_class_display()
 
     @admin.display(description="Jednotka")
     def jednotka(self, obj):
         return _jednotka_polozky(obj.service_item)
 
-    def _efektivni_cena_za_jednotku(self, obj):
-        """Efektivni cena za jednotku - primo z amount_czk/amount_units,
-        pripadne (u merenych polozek bez primo zadaneho amount_czk)
-        z aktualne platneho Ceniku pro dane obdobi."""
-        if obj.amount_units:
-            if obj.amount_czk is not None:
-                try:
-                    return obj.amount_czk / obj.amount_units
-                except ZeroDivisionError:
-                    pass
-            return PriceList.get_price_for_period(obj.service_item, obj.period)
-        return None
-
     @admin.display(description="Kč/jednotka")
     def kc_za_jednotku(self, obj):
-        price = self._efektivni_cena_za_jednotku(obj)
+        price = _efektivni_cena_za_jednotku(obj)
         return _format_kc(price, decimals=4) if price is not None else "-"
 
     @admin.display(description="Částka (Kč)", ordering="amount_czk")
@@ -1323,7 +1352,7 @@ class CostEntryAdmin(ModelAdmin):
         chce to vidy pro kontrolu proti fakturovanemu tarifu dodavatele."""
         if obj is None or obj.pk is None:
             return "(uloží se po prvním uložení záznamu)"
-        price = self._efektivni_cena_za_jednotku(obj)
+        price = _efektivni_cena_za_jednotku(obj)
         return _format_kc(price, decimals=4) if price is not None else "-"
 
     @admin.display(description="Celková částka (kontrola)")
