@@ -21,6 +21,30 @@ from .models import (
 )
 
 
+class DefaultToLatestPeriodMixin:
+    """Pri prvnim otevreni seznamu (bez explicitne zvoleneho Obdobi)
+    presmeruje na filtr podle nejnovejsiho Obdobi (Period.Meta.ordering =
+    ["-year", "-month"]) - stejna konvence uz existuje na custom admin
+    views core_billingline_detail_client/core_billingline_detail (viz
+    Period.objects.first() tam). Marker '_pd' v querystringu odlisi
+    "cerstve otevreni" od situace, kdy uzivatel filtr na Obdobi vedome
+    zrusil (klikl na 'Vše' u filtru) - jinak by ho to porad vracelo zpet
+    na nejnovejsi obdobi a nedalo by se videt vic obdobi najednou."""
+    default_period_filter_param = "period__id__exact"
+
+    def changelist_view(self, request, extra_context=None):
+        if self.default_period_filter_param not in request.GET and "_pd" not in request.GET:
+            latest = Period.objects.first()
+            if latest is not None:
+                from django.shortcuts import redirect
+
+                q = request.GET.copy()
+                q[self.default_period_filter_param] = str(latest.pk)
+                q["_pd"] = "1"
+                return redirect(f"{request.path}?{q.urlencode()}")
+        return super().changelist_view(request, extra_context)
+
+
 class UnitInline(TabularInline):
     model = Unit
     extra = 0
@@ -1148,7 +1172,7 @@ class InflationRateAdmin(ModelAdmin):
 
 
 @admin.register(MeterReading)
-class MeterReadingAdmin(ModelAdmin):
+class MeterReadingAdmin(DefaultToLatestPeriodMixin, ModelAdmin):
     list_display = ("meter", "period", "reading_date", "value", "is_estimate")
     list_filter = ("meter__site", "meter__meter_type", "period", "is_estimate")
     search_fields = ("meter__code", "meter__name")
@@ -1281,7 +1305,7 @@ class AllocationKeyAdmin(ModelAdmin):
 
 
 @admin.register(PriceList)
-class PriceListAdmin(ModelAdmin):
+class PriceListAdmin(DefaultToLatestPeriodMixin, ModelAdmin):
     list_display = ("service_item", "period", "price_per_unit_display", "note")
     list_filter = ("period", "service_item__site")
     autocomplete_fields = ("service_item",)
@@ -1292,8 +1316,29 @@ class PriceListAdmin(ModelAdmin):
         return _format_kc(obj.price_per_unit, decimals=4)
 
 
+class CostEntryVyplnenoFilter(admin.SimpleListFilter):
+    """Filtr 'Stav' v seznamu Nakladu za obdobi - 'Nevyplneno' ukaze jen
+    zaznamy bez amount_units i bez amount_czk (typicky prazdne stuby
+    z akce "Vygenerovat chybějící Náklady", poznamka 'K DOPLNĚNÍ') - aby
+    Daniel nemusel psat hledani rucne a nemusel proklikavat uz hotove
+    polozky (viz konverzace - "Pult ochrany ALSYKO" priklad polozky,
+    ktera uz je vyplnena a nema co delat v seznamu k doplneni)."""
+    title = "stav"
+    parameter_name = "stav"
+
+    def lookups(self, request, model_admin):
+        return (("nevyplneno", "Nevyplněno"), ("vyplneno", "Vyplněno"))
+
+    def queryset(self, request, queryset):
+        if self.value() == "nevyplneno":
+            return queryset.filter(amount_units__isnull=True, amount_czk__isnull=True)
+        if self.value() == "vyplneno":
+            return queryset.exclude(amount_units__isnull=True, amount_czk__isnull=True)
+        return queryset
+
+
 @admin.register(CostEntry)
-class CostEntryAdmin(ModelAdmin):
+class CostEntryAdmin(DefaultToLatestPeriodMixin, ModelAdmin):
     """list_editable u amount_units/amount_czk/note - primo v seznamu (po
     filtru na Obdobi) jde zadat cisla u vice polozek najednou a ulozit
     jednim tlacitkem, misto otevirani kazdeho zaznamu zvlast. Kvuli tomu
@@ -1306,7 +1351,7 @@ class CostEntryAdmin(ModelAdmin):
     )
     list_display_links = ("service_item",)
     list_editable = ("amount_units", "amount_czk", "note")
-    list_filter = ("period", "service_item__invoice_class", "service_item__site")
+    list_filter = (CostEntryVyplnenoFilter, "period", "service_item__invoice_class", "service_item__site")
     search_fields = ("note", "service_item__name")
     autocomplete_fields = ("service_item",)
     readonly_fields = ("kontrola_cena_za_jednotku", "kontrola_castka_celkem")
@@ -1363,7 +1408,7 @@ class CostEntryAdmin(ModelAdmin):
 
 
 @admin.register(BillingLine)
-class BillingLineAdmin(ModelAdmin):
+class BillingLineAdmin(DefaultToLatestPeriodMixin, ModelAdmin):
     list_display = ("client_card_display", "service_item", "period", "amount_display", "share_display")
     list_filter = ("period",)
     search_fields = ("client_card__client__name",)
