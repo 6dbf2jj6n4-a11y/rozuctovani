@@ -712,6 +712,7 @@ class CostEntry(models.Model):
       - amount_czk = přímá fakturovaná částka v Kč
       - amount_units nechat prázdné
     """
+    NOTE_K_DOPLNENI = "K DOPLNĚNÍ"
     service_item = models.ForeignKey(
         ServicePoolItem, on_delete=models.CASCADE,
         related_name="cost_entries", verbose_name="Položka zásobníku"
@@ -744,6 +745,39 @@ class CostEntry(models.Model):
         if self.amount_units is not None:
             return f"{self.service_item} – {self.period}: {self.amount_units} j"
         return f"{self.service_item} – {self.period}: {self.amount_czk} Kč"
+
+    def clean(self):
+        """0 v amount_units/amount_czk NENÍ totéž co prázdné pole -
+        get_amount_czk() bere `is not None`, takže amount_czk=0 by se
+        vzalo jako skutečná (a konečná) nulová částka a amount_units by
+        se vůbec nepoužilo - položka by se klientům potichu vyúčtovala
+        na 0 Kč. Kdo nemá pro tenhle záznam částku/množství, ať pole
+        nechá prázdné, ne 0 (viz konverzace s Danielem)."""
+        if self.amount_units == 0:
+            raise ValidationError({
+                "amount_units": (
+                    "Nezadávej 0 - pokud tahle položka fakturované množství nemá, "
+                    "nech pole prázdné."
+                )
+            })
+        if self.amount_czk == 0:
+            raise ValidationError({
+                "amount_czk": (
+                    "Nezadávej 0 - Kč se buď dopočítá z jednotek přes Ceník, nebo "
+                    "sem zadej skutečnou fakturovanou částku. Nech pole prázdné, "
+                    "pokud přímou částku nezadáváš."
+                )
+            })
+
+    def save(self, *args, **kwargs):
+        """Jakmile se doplni amount_units nebo amount_czk, sama zmizi
+        znacka NOTE_K_DOPLNENI (viz core/admin.py
+        PeriodAdmin.vygenerovat_chybejici_naklady) - jinak by v Poznamce
+        zustavala navzdy, i kdyz uz zaznam neni "k doplneni", a matla by
+        pozdejsi hledani/filtr Stav=Nevyplneno."""
+        if self.note == self.NOTE_K_DOPLNENI and (self.amount_units is not None or self.amount_czk is not None):
+            self.note = ""
+        super().save(*args, **kwargs)
 
     def get_amount_czk(self, period=None):
         """Vrátí částku v Kč - buď přímo, nebo přes ceník."""

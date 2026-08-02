@@ -1159,7 +1159,7 @@ class PeriodAdmin(ModelAdmin):
                     continue
                 if CostEntry.objects.filter(service_item=item, period=period).exists():
                     continue
-                CostEntry.objects.create(service_item=item, period=period, note="K DOPLNĚNÍ")
+                CostEntry.objects.create(service_item=item, period=period, note=CostEntry.NOTE_K_DOPLNENI)
                 created.append(item)
 
             label = str(period)
@@ -1167,8 +1167,8 @@ class PeriodAdmin(ModelAdmin):
                 names = ", ".join(str(i) for i in created)
                 self.message_user(
                     request,
-                    f"{label}: vytvořeno {len(created)} prázdných Nákladů (poznámka „K DOPLNĚNÍ“) - "
-                    f"doplň částky v seznamu Náklady za období (vyhledej „K DOPLNĚNÍ“): {names}",
+                    f"{label}: vytvořeno {len(created)} prázdných Nákladů (poznámka „{CostEntry.NOTE_K_DOPLNENI}“) - "
+                    f"doplň částky v seznamu Náklady za období (vyhledej „{CostEntry.NOTE_K_DOPLNENI}“): {names}",
                     level=messages.WARNING,
                 )
             else:
@@ -1459,8 +1459,82 @@ class BillingLineAdmin(DefaultToLatestPeriodMixin, ModelAdmin):
                 self.admin_site.admin_view(self.detail_client_view),
                 name="core_billingline_detail_client",
             ),
+            path(
+                "prehled/",
+                self.admin_site.admin_view(self.prehled_view),
+                name="core_billingline_prehled",
+            ),
         ]
         return custom + urls
+
+    def prehled_view(self, request):
+        """Interni souhrn Naklad/Vynos PO POLOZKACH zasobniku za obdobi
+        (ne po klientech) - kolik polozka skutecne stoji vs. kolik se z
+        ni vyfakturuje klientum, vc. zisku/ztraty. Viz billing/
+        item_summary.py a konverzace s Danielem (chtel oddeleny prehled
+        od per-klientskeho Detailu, se sumaci za vsechny tridy a
+        rozpadem na jednotlive polozky/meridla)."""
+        from django.shortcuts import render
+        from billing.item_summary import get_item_summary_rows
+
+        period_id = request.GET.get("period")
+        site_id = request.GET.get("site")
+
+        periods = Period.objects.all()
+        period = periods.filter(pk=period_id).first() if period_id else None
+        if period is None:
+            period = periods.first()
+
+        sites = Site.objects.order_by("name")
+
+        class_labels = dict(ServicePoolItem.InvoiceClass.choices)
+        groups_by_class = {key: [] for key, _ in ServicePoolItem.InvoiceClass.choices}
+        totals = {
+            "naklad": Decimal("0"), "vynos_fakturovano": Decimal("0"), "vynos_vcetne_pausalu": Decimal("0"),
+        }
+
+        if period is not None:
+            site = Site.objects.filter(pk=site_id).first() if site_id else None
+            for row in get_item_summary_rows(period, site=site):
+                groups_by_class.setdefault(row["invoice_class_key"], []).append(row)
+                if row["naklad"] is not None:
+                    totals["naklad"] += row["naklad"]
+                totals["vynos_fakturovano"] += row["vynos_fakturovano"]
+                totals["vynos_vcetne_pausalu"] += row["vynos_vcetne_pausalu"]
+
+        def _subtotal(rows, key):
+            values = [r[key] for r in rows if r[key] is not None]
+            return sum(values, Decimal("0")) if values else None
+
+        groups = [
+            {
+                "label": class_labels[key],
+                "rows": rows,
+                "naklad": _subtotal(rows, "naklad"),
+                "vynos_fakturovano": _subtotal(rows, "vynos_fakturovano"),
+                "rozdil_fakturovano": _subtotal(rows, "rozdil_fakturovano"),
+                "vynos_vcetne_pausalu": _subtotal(rows, "vynos_vcetne_pausalu"),
+                "rozdil_vcetne_pausalu": _subtotal(rows, "rozdil_vcetne_pausalu"),
+            }
+            for key, rows in groups_by_class.items() if rows
+        ]
+
+        context = {
+            **self.admin_site.each_context(request),
+            "title": "Přehled nákladů a výnosů",
+            "periods": periods,
+            "sites": sites,
+            "selected_period": period,
+            "selected_site_id": int(site_id) if site_id else None,
+            "groups": groups,
+            "total_naklad": totals["naklad"],
+            "total_vynos_fakturovano": totals["vynos_fakturovano"],
+            "total_rozdil_fakturovano": totals["vynos_fakturovano"] - totals["naklad"],
+            "total_vynos_vcetne_pausalu": totals["vynos_vcetne_pausalu"],
+            "total_rozdil_vcetne_pausalu": totals["vynos_vcetne_pausalu"] - totals["naklad"],
+            "opts": self.model._meta,
+        }
+        return render(request, "admin/core/billingline/prehled.html", context)
 
     def detail_client_view(self, request, client_id):
         """Podrobny detail po jednotlivych Klicich pro jednoho klienta (viz
