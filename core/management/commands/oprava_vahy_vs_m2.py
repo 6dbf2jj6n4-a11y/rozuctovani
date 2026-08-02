@@ -1,12 +1,13 @@
 """
 Jednorazova oprava: nastavi hodnotu klice typu "Podle váhy" u
-"úklidové služby společných prostor NJ" a "odvoz komunálního odpadu NJ"
-na skutecny soucet m2 karty (soucet CardUnit.area_m2 pres vsechny Plochy
-karty) - Daniel potvrdil, ze u techto dvou polozek ma vaha VZDY
-odpovidat vymere. Zjisteno pres diag_vahy_vs_m2: 4 karty maly
-pozustatkovou hodnotu "1" misto skutecne vymery (Delphia MORAVIA,
-Maker Inspiration, MastrCrane Production, Michal Gnes), FSL CZ mel
-navic spatnou hodnotu jen u úklidu (423 misto 432).
+"úklidové služby společných prostor NJ", "odvoz komunálního odpadu NJ"
+a "odklizení sněhu v zimních obdobích" na skutecny soucet m2 karty
+(soucet CardUnit.area_m2 pres vsechny Plochy karty) - Daniel potvrdil,
+ze u techto polozek ma vaha VZDY odpovidat vymere. U prvnich dvou
+zjisteno pres diag_vahy_vs_m2: 4 karty maly pozustatkovou hodnotu "1"
+misto skutecne vymery (Delphia MORAVIA, Maker Inspiration, MastrCrane
+Production, Michal Gnes), FSL CZ mel navic spatnou hodnotu jen u
+úklidu (423 misto 432).
 
 BEZ --provest jen VYPISE, co by zmenil. S --provest ulozi.
 
@@ -23,6 +24,7 @@ from core.models import AllocationKey, ServicePoolItem
 ITEM_NAMES = [
     "úklidové služby společných prostor NJ",
     "odvoz komunálního odpadu NJ",
+    "odklizení sněhu v zimních obdobích",
 ]
 
 

@@ -18,6 +18,7 @@ from core.models import AllocationKey, ServicePoolItem
 DEFAULT_ITEM_NAMES = [
     "úklidové služby společných prostor NJ",
     "odvoz komunálního odpadu NJ",
+    "odklizení sněhu v zimních obdobích",
 ]
 
 
