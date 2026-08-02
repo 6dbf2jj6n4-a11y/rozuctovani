@@ -15,7 +15,13 @@ vysledek je vzdy konzistentni se skutecnym vypoctem.
 from decimal import Decimal
 
 from core.models import AllocationKey, BillingLine, PriceList
-from .engine import ABSOLUTE_AMOUNT_TYPES, _consumption_shares, _fixed_amount_for, _weighted_shares
+from .engine import (
+    ABSOLUTE_AMOUNT_TYPES,
+    _consumption_shares,
+    _fixed_amount_for,
+    _meter_provides_consumption,
+    _weighted_shares,
+)
 
 
 def get_key_rows_for_client(client, period):
@@ -56,7 +62,7 @@ def get_key_rows_for_client(client, period):
         by_key_local_share = {}
         total_consumption = None
         has_meter_keys = any(
-            k.meter_id is not None
+            k.meter_id is not None and _meter_provides_consumption(k.meter)
             for k in valid_keys if k.allocation_type not in ABSOLUTE_AMOUNT_TYPES
         )
         if si.meter or has_meter_keys:
