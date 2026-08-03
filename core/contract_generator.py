@@ -4,15 +4,17 @@ Generovani dokumentu Smlouvy (.docx) z sablony core/contract_templates/smlouva_t
 Sablona NENI cisty formular s placeholdery - je to skutecna, rucne doladena
 smlouva (konkretni najemce, konkretni castky, data, jmena). Generovani proto
 funguje tak, ze najde konkretni run(y) obsahujici tyto puvodni hodnoty a
-prepise jen jejich TEXT - format (font, velikost, barva, zvyrazneni...)
-kazdeho runu se nikde nevynucuje ani nemeni, zustava presne takovy, jaky uz
-v sablone je. Kde sablona nema zvyrazneni doplnenych udaju, nema ho ani
-vygenerovany dokument.
+prepise jen jejich TEXT - font/velikost/barva runu se nikde nevynucuje ani
+nemeni, zustava presne takovy, jaky uz v sablone je. Kazda dosazena hodnota
+navic dostane zluty zvyraznovac (viz _highlight), aby bylo v dokumentu na
+prvni pohled videt, co se automaticky doplnilo a co je potreba pred
+odeslanim zkontrolovat.
 
-Blok Pronajimatele v zahlavi dokumentu (odstavce 6-13) je zamerne staticky -
-Pronajimatel (CALAMARI SE) je v teto aplikaci jeden jediny a v sablone uz ma
-spravne udaje; dynamicky se doplnuje jen tam, kde je to bezriziko (nazev
-v zahlavi kazde stranky, jmeno zastupce v podpisovem radku - viz nize).
+Blok Pronajimatele v zahlavi dokumentu (odstavce 6-13) je zamerne staticky
+a NEzvyraznuje se - Pronajimatel (CALAMARI SE) je v teto aplikaci jeden
+jediny a v sablone uz ma spravne udaje; dynamicky (a zvyrazneny) se
+doplnuje jen nazev v zahlavi kazde stranky a jmeno zastupce v podpisovem
+radku (viz nize) - tam, kde je uprava bezriziko (samostatny run).
 
 Clanek 1 (Vymezeni predmetu a ucelu najmu) je pro kazdy areal jiny (vypis
 jinych pozemku/budov) - jeho text se necte ze sablony, ale z
@@ -26,9 +28,11 @@ from decimal import Decimal
 from pathlib import Path
 
 import docx
+from docx.enum.text import WD_COLOR_INDEX
 from docx.opc.constants import RELATIONSHIP_TYPE as _RT
 from docx.oxml.ns import qn
 from docx.text.paragraph import Paragraph
+from docx.text.run import Run
 
 TEMPLATE_PATH = Path(__file__).resolve().parent / "contract_templates" / "smlouva_template.docx"
 
@@ -138,18 +142,28 @@ def contract_to_template_data(contract):
     }
 
 
-def _set_paragraph_text_keep_format(paragraph, text):
+def _highlight(run):
+    """Oznaci run zlutym zvyraznovacem - pouziva se na kazdou hodnotu
+    dosazenou z databaze, aby bylo pred odeslanim smlouvy videt, co se
+    doplnilo automaticky."""
+    run.font.highlight_color = WD_COLOR_INDEX.YELLOW
+
+
+def _set_paragraph_text_keep_format(paragraph, text, highlight=True):
     """Prepise cely text odstavce do jednoho runu - PONECHA font/velikost/barvu
-    puvodniho prvniho runu (pokud existoval), nic se nevynucuje. Nehodi se pro
-    odstavce s vice styly textu v jedne vete (tady zadny takovy mezi
-    upravovanymi odstavci neni)."""
+    puvodniho prvniho runu (pokud existoval), jen font/velikost/barva se
+    nevynucuje. Nehodi se pro odstavce s vice styly textu v jedne vete (tady
+    zadny takovy mezi upravovanymi odstavci neni)."""
     runs = list(paragraph.runs)
     if runs:
         runs[0].text = text
         for run in runs[1:]:
             run._element.getparent().remove(run._element)
+        target = runs[0]
     else:
-        paragraph.add_run(text)
+        target = paragraph.add_run(text)
+    if highlight:
+        _highlight(target)
 
 
 def _find_paragraph_index(paragraphs, marker):
@@ -166,17 +180,64 @@ def _find_paragraph_index(paragraphs, marker):
     )
 
 
-def _replace_run_text(paragraphs, marker, old, new):
+def _split_and_highlight(run, old, new):
+    """Nahradi PRVNI vyskyt `old` v textu runu za `new` a zvyrazni JEN tuto
+    vlozenou cast - okolni puvodni text (pred/za `old` v ramci puvodniho
+    runu) zustane beze zmeny stylu i bez zvyrazneni. Nutne proto, ze Word
+    pri ukladani casto sloucí sousedni runy se stejnym formatovanim
+    (napr. cela veta v jednom runu) - zvyraznit cely takovy run by obarvilo
+    mnohem vic textu, nez jen dosazenou hodnotu. Puvodni run se rozdeli
+    na az 3 runy se stejnym formatovanim (font/velikost/barva/atd.), jake
+    mel puvodni cely run - zvyrazni se jen ten prostredni."""
+    text = run.text
+    pos = text.find(old)
+    before, after = text[:pos], text[pos + len(old):]
+
+    r_elem = run._element
+    new_r = copy.deepcopy(r_elem)
+    after_r = copy.deepcopy(r_elem)
+
+    # Puvodni run mohl uz mit zvyrazneni (napr. kdyz nekdo v sablone rucne
+    # oznacil celou vetu) - deepcopy by ho pak preneslo i do okolniho textu,
+    # ktery zvyraznit nechceme, proto se explicitne vycisti na vsech 3 castech
+    # pred tim, nez se zvyrazni jen ta prostredni (vlozena hodnota).
+    run.text = before
+    run.font.highlight_color = None
+
+    new_run = Run(new_r, run._parent)
+    new_run.text = new
+    new_run.font.highlight_color = None
+
+    after_run = Run(after_r, run._parent)
+    after_run.text = after
+    after_run.font.highlight_color = None
+
+    r_elem.addnext(new_r)
+    new_r.addnext(after_r)
+    _highlight(new_run)
+
+    if not before:
+        r_elem.getparent().remove(r_elem)
+    if not after:
+        after_r.getparent().remove(after_r)
+
+
+def _replace_run_text(paragraphs, marker, old, new, highlight=True):
     """Najde odstavec obsahujici `marker` (unikatni text pro dohledani spravneho
     mista - napr. cely puvodni datum, ne jen cislo, aby se nespletlo s jinym
     vyskytem stejne hodnoty jinde ve smlouve) a v nem run obsahujici `old`;
-    v tomto runu nahradi `old` za `new`. Format runu (font, velikost, barva)
-    se nemeni, meni se jen text."""
+    v tomto runu nahradi `old` za `new`. Font/velikost/barva puvodniho textu
+    se nemeni, jen se pripadne prida zvyraznovac na vlozenou hodnotu
+    (viz _split_and_highlight - ne na cely run, ktery muze obsahovat
+    i okolni nezmeneny text)."""
     idx = _find_paragraph_index(paragraphs, marker)
     para = paragraphs[idx]
     for run in para.runs:
         if old in run.text:
-            run.text = run.text.replace(old, new)
+            if highlight:
+                _split_and_highlight(run, old, new)
+            else:
+                run.text = run.text.replace(old, new)
             return
     raise ValueError(
         f"Marker {old!r} nalezen v odstavci {idx}, ale ne v samostatnem runu - "
@@ -200,6 +261,14 @@ def _set_hyperlink(paragraph, new_url, new_text):
     t_el = hyperlink_el.find(".//" + qn("w:t"))
     if t_el is not None:
         t_el.text = new_text
+    hl = hyperlink_el.find(".//" + qn("w:highlight"))
+    if hl is None:
+        rpr = hyperlink_el.find(".//" + qn("w:rPr"))
+        if rpr is not None:
+            hl = rpr.makeelement(qn("w:highlight"), {})
+            rpr.append(hl)
+    if hl is not None:
+        hl.set(qn("w:val"), "yellow")
     new_r_id = paragraph.part.relate_to(new_url, _RT.HYPERLINK, is_external=True)
     hyperlink_el.set(qn("r:id"), new_r_id)
 
@@ -297,36 +366,53 @@ def fill_contract_template(data, output_path, template_path=TEMPLATE_PATH):
     client_name = data.get("client_name") or ""
     landlord_name = data.get("landlord_name") or ""
 
-    # --- zahlavi dokumentu (nahoře na kazde strance): 3 runy - kod/nazev
-    # arealu, tabulator, "Pronajimatel / Najemce" ---
+    # --- zahlavi dokumentu (nahoře na kazde strance): prvni run je vzdy kod/
+    # nazev arealu; zbytek ("CALAMARI SE / nájemce") se dohledava podle textu,
+    # ne podle pozice runu - pocet runu tam neni pevny (zavisi na tom, jak
+    # sablonu naposledy nekdo v OK edit oval) a Pronajimatel se nezvyraznuje. ---
     header_para = doc.sections[0].header.paragraphs[0]
     header_runs = header_para.runs
     header_runs[0].text = data.get("site_name") or ""
-    header_runs[-1].text = "\t" + f"{landlord_name} / {client_name}"
+    _highlight(header_runs[0])
+    for run in header_runs:
+        if "CALAMARI SE" in run.text:
+            run.text = run.text.replace("CALAMARI SE", landlord_name)
+        if "nájemce" in run.text:
+            run.text = run.text.replace("nájemce", client_name)
+            _highlight(run)
 
     # --- blok Najemce v zahlavi (odstavce 19-25, PRED clankem 1 - indexy
     # tedy zustavaji stabilni bez ohledu na delku vyctu nemovitosti v cl. 1).
     # Blok Pronajimatele (6-13) je zamerne staticky, viz modulovy docstring. ---
     paragraphs = doc.paragraphs
     paragraphs[19].runs[0].text = client_name
+    _highlight(paragraphs[19].runs[0])
     paragraphs[20].runs[-1].text = data.get("client_address") or ""
+    _highlight(paragraphs[20].runs[-1])
     paragraphs[21].runs[-1].text = data.get("client_ico") or ""
+    _highlight(paragraphs[21].runs[-1])
 
     dic = (data.get("client_dic") or "").strip()
     dic_digits = dic[2:] if dic.upper().startswith("CZ") else dic
     paragraphs[22].runs[0].text = "DIČ: CZ" + dic_digits
+    _highlight(paragraphs[22].runs[0])
 
     court = _court_instrumental(data.get("registry_court"))
     section = data.get("registry_section") or ""
     insert = data.get("registry_insert") or ""
     reg_runs = paragraphs[23].runs
     reg_runs[1].text = court
+    _highlight(reg_runs[1])
     reg_runs[3].text = section
+    _highlight(reg_runs[3])
     reg_runs[5].text = insert
+    _highlight(reg_runs[5])
 
     rep_runs = paragraphs[24].runs
     rep_runs[1].text = data.get("representative_name") or ""
+    _highlight(rep_runs[1])
     rep_runs[3].text = data.get("representative_role") or ""
+    _highlight(rep_runs[3])
 
     email = data.get("invoicing_email") or ""
     _set_hyperlink(paragraphs[25], f"mailto:{email}" if email else None, email)
@@ -365,6 +451,11 @@ def fill_contract_template(data, output_path, template_path=TEMPLATE_PATH):
         paragraphs, "V\xa0Ostravě dne 30. července 2026", "30. července 2026",
         format_date_cz(data.get("signed_on")),
     )
+    paragraphs = doc.paragraphs
+    _replace_run_text(
+        paragraphs, "výpisu z obchodního rejstříku pořízeného ke dni", "30. července 2026",
+        format_date_cz(data.get("signed_on")),
+    )
 
     # --- podpisovy radek: jmena zastupcu pod carou a pod nimi nazvy
     # smluvnich stran (nadpis "Pronajímatel/Nájemce" a cara nad nimi jsou
@@ -374,10 +465,11 @@ def fill_contract_template(data, output_path, template_path=TEMPLATE_PATH):
     names_runs = paragraphs[names_idx].runs
     names_runs[0].text = "\t" + (data.get("landlord_representative_name") or "")
     names_runs[-1].text = data.get("representative_name") or ""
+    _highlight(names_runs[-1])
 
     company_runs = paragraphs[names_idx + 1].runs
-    company_runs[0].text = "\t" + landlord_name
-    company_runs[-1].text = "\t" + client_name
+    company_runs[0].text = company_runs[0].text.replace("CALAMARI SE", landlord_name)
+    _split_and_highlight(company_runs[-1], "název nájemce", client_name)
 
     # python-docx prijima jak cestu (str/Path), tak zapisovatelny stream (napr. BytesIO)
     doc.save(output_path if hasattr(output_path, "write") else str(output_path))
