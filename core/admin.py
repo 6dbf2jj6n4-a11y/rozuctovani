@@ -72,6 +72,40 @@ class DefaultToLatestPeriodMixin:
         return super().changelist_view(request, extra_context)
 
 
+class DuplicateModelAdminMixin:
+    """Prida bulk akci "Kopírovat vybrané záznamy" - standardni Django
+    trik pro klonovani instance (pk=None, _state.adding=True, save()).
+    Overeno u Unit/Meter/Contract, ze zadny z nich nema unique/unique_together
+    omezeni krome PK, takze takto vytvorena kopie projde bez IntegrityError.
+
+    `prepare_duplicate(copy, original)`: hook pro upravu poli PRED ulozenim
+    (napr. pridat "(kopie)" do nazvu, vynechat FileField) - `copy` uz ma
+    pk=None, `original` jeste drzi puvodni pk.
+
+    `after_duplicate(copy, original)`: hook PO ulozeni kopie (uz ma svuj
+    novy pk) - pro dokopirovani souvisejicich radku (reverse FK), ktere
+    field-by-field klon nezachyti (napr. UnitService u Unit)."""
+
+    @admin.action(description="Kopírovat vybrané záznamy")
+    def duplicate_selected(self, request, queryset):
+        count = 0
+        for original in queryset:
+            copy = self.model.objects.get(pk=original.pk)
+            copy.pk = None
+            copy._state.adding = True
+            self.prepare_duplicate(copy, original)
+            copy.save()
+            self.after_duplicate(copy, original)
+            count += 1
+        self.message_user(request, f"Zkopírováno {count} záznam(ů) - zkontroluj a uprav podle potřeby.", level=messages.SUCCESS)
+
+    def prepare_duplicate(self, copy, original):
+        """Vychozi chovani: nic dalsiho needit - cisty field-by-field klon."""
+
+    def after_duplicate(self, copy, original):
+        """Vychozi chovani: zadne souvisejici radky nekopirovat."""
+
+
 class UnitInline(TabularInline):
     model = Unit
     extra = 0
@@ -158,16 +192,33 @@ class UnitServiceOtherInline(UnitServiceInlineBase):
 
 
 @admin.register(Unit)
-class UnitAdmin(ModelAdmin):
+class UnitAdmin(DuplicateModelAdminMixin, ModelAdmin):
     list_display = ("code", "name", "site", "purpose", "area_m2", "unit_type")
     list_filter = ("site",)
     search_fields = ("name", "code")
+    actions = ["duplicate_selected"]
     inlines = [
         UnitServiceElectricityInline,
         UnitServiceWaterInline,
         UnitServiceHeatInline,
         UnitServiceOtherInline,
     ]
+
+    def prepare_duplicate(self, copy, original):
+        copy.name = f"{original.name} (kopie)"
+
+    def after_duplicate(self, copy, original):
+        """Zkopiruje i Vychozi sluzby plochy (UnitService) - jinak by
+        kopie plochy byla bez nich, i kdyz se na formulari Plochy edituji
+        primo jako inline (podobny princip jako ClientCard.create_exact_copy)."""
+        for unit_service in original.unit_services.all():
+            UnitService.objects.create(
+                unit=copy,
+                service_item=unit_service.service_item,
+                allocation_type=unit_service.allocation_type,
+                value=unit_service.value,
+                meter=unit_service.meter,
+            )
 
     def get_urls(self):
         from django.urls import path
@@ -541,13 +592,20 @@ class ContractAdminForm(forms.ModelForm):
 
 
 @admin.register(Contract)
-class ContractAdmin(ModelAdmin):
+class ContractAdmin(DuplicateModelAdminMixin, ModelAdmin):
     form = ContractAdminForm
     list_display = ("client", "number", "valid_from", "valid_to", "deposit_paid", "has_inflation_clause")
     list_filter = ("deposit_paid", "has_inflation_clause")
     search_fields = ("number", "client__name", "client__ico")
     autocomplete_fields = ("client", "site")
-    actions = ["generate_document", "generovat_karty_inflace"]
+    actions = ["generate_document", "generovat_karty_inflace", "duplicate_selected"]
+
+    def prepare_duplicate(self, copy, original):
+        """Vygenerovany dokument (PDF/DOCX) se NEKOPIRUJE - patri k
+        puvodni Smlouve, ne ke kopii (ta jeste zadny svuj dokument nema,
+        dokud se pro ni znovu nespusti akce "Vygenerovat dokument")."""
+        copy.number = f"{original.number} (kopie)" if original.number else ""
+        copy.document = None
 
     def get_changeform_initial_data(self, request):
         """Pri zalozeni nove Smlouvy (tlacitko "+ Pridat smlouvu" na Klientovi,
@@ -938,7 +996,7 @@ class MeterReadingInline(TabularInline):
 
 
 @admin.register(Meter)
-class MeterAdmin(ModelAdmin):
+class MeterAdmin(DuplicateModelAdminMixin, ModelAdmin):
     list_display = (
         "code", "name", "site", "meter_type", "parent_meter",
         "reading_mode", "is_virtual", "unit_of_measure", "weight_unit_label",
@@ -946,7 +1004,17 @@ class MeterAdmin(ModelAdmin):
     list_filter = ("site", "meter_type", "reading_mode", "is_virtual")
     search_fields = ("name", "code", "serial_number")
     autocomplete_fields = ("parent_meter",)
+    actions = ["duplicate_selected"]
     inlines = [MeterReadingInline]
+
+    def prepare_duplicate(self, copy, original):
+        """Kod se NEKOPIRUJE (necha se prazdny) - je to kratky kod pro
+        odkazovani ve vzorcich virtualnich meridel (Meter.formula), dve
+        meridla se stejnym kodem by byla nejednoznacna (viz
+        Meter._formula_tokens - Meter.objects.filter(site=..., code=...)
+        by mohlo vratit spatne meridlo)."""
+        copy.name = f"{original.name} (kopie)"
+        copy.code = ""
     # U virtualniho meridla se spotreba pocita ze vzorce (viz
     # Meter.consumption_for) - "Zpusob zadavani odectu" se pak vubec
     # nepouziva, takze pole schovame (Unfold Alpine.js x-show).
