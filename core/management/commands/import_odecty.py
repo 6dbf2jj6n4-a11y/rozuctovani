@@ -8,10 +8,26 @@ Pouziti:
   python manage.py import_odecty cesta/k/souboru.xlsx --site FM --year 2026
 """
 import re
+from pathlib import Path
+
 import openpyxl
 from datetime import date, datetime
-from django.core.management.base import BaseCommand
+from django.core.management.base import BaseCommand, CommandError
 from core.models import Site, Meter, Period, MeterReading
+
+
+def _resolve_xlsx_path(xlsx_path):
+    """Pokud zadana cesta neexistuje jak je (typicky holy nazev souboru
+    spusteny z jineho cwd nez core/management/commands/), zkusi ji najit
+    vedle tohoto command souboru - tam se zdrojove xlsx v tomhle repu
+    tradicne verzuji (viz import_odecty_stav.py)."""
+    path = Path(xlsx_path)
+    if path.exists():
+        return path
+    fallback = Path(__file__).resolve().parent / path.name
+    if fallback.exists():
+        return fallback
+    raise CommandError(f"Soubor {xlsx_path!r} nenalezen (ani vedle tohoto příkazu: {fallback}).")
 
 
 SHEETS = ["ELEKTRO", "VODA", "TEPLO"]
@@ -64,7 +80,8 @@ class Command(BaseCommand):
         months = [int(m) for m in options["months"].split(",")]
         year = options["year"]
 
-        wb = openpyxl.load_workbook(options["xlsx_path"], read_only=True, data_only=True)
+        xlsx_path = _resolve_xlsx_path(options["xlsx_path"])
+        wb = openpyxl.load_workbook(xlsx_path, read_only=True, data_only=True)
 
         created = 0
         updated = 0
