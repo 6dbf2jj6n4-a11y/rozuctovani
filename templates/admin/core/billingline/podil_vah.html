@@ -61,6 +61,7 @@
                         <th style="padding:6px 8px;">Měřidlo</th>
                         <th style="padding:6px 8px; text-align:right;">Spotřeba měřidla</th>
                         <th style="padding:6px 8px; text-align:right;">Hodnota (váha)</th>
+                        <th style="padding:6px 8px;">Co je váhou</th>
                         <th style="padding:6px 8px; text-align:right;">Lokální podíl</th>
                         <th style="padding:6px 8px; text-align:right;">Podíl na položce</th>
                     </tr>
@@ -76,6 +77,7 @@
                                 {% if row.meter_state %}{% if row.meter_state.consumption != None %}{{ row.meter_state.consumption|floatformat:3 }}{% else %}—{% endif %}{% else %}—{% endif %}
                             </td>
                             <td style="padding:6px 8px; text-align:right;">{{ row.value|default:"—" }}</td>
+                            <td style="padding:6px 8px;">{{ row.weight_unit_label|default:"—" }}</td>
                             <td style="padding:6px 8px; text-align:right;">{% if row.local_share != None %}{{ row.local_share|percent }}{% else %}—{% endif %}</td>
                             <td style="padding:6px 8px; text-align:right; font-weight:600;">
                                 {% if row.share != None %}{{ row.share|percent }}{% else %}—{% endif %}

@@ -63,6 +63,7 @@ def get_weight_share_data(item, period):
             "meter": key.meter,
             "meter_state": meter_state,
             "value": key.value,
+            "weight_unit_label": key.meter.weight_unit_label if key.meter else "",
             "share": share,
             "local_share": by_key_local_share.get(key.id),
             "is_billed": key.is_billed,
