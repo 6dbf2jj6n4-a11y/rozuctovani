@@ -54,7 +54,7 @@ from decimal import Decimal
 
 from django.db import transaction
 
-from core.models import AllocationKey, BillingLine, CostEntry, Period, PriceList, ServicePoolItem
+from core.models import AllocationKey, BillingLine, ClientCard, CostEntry, Period, PriceList, ServicePoolItem
 
 
 class BillingPeriodClosedError(Exception):
@@ -358,6 +358,63 @@ def _consumption_shares(service_item, period, warnings, by_key_out=None, by_key_
         )
 
     return shares, total_consumption
+
+
+def sync_card_activity(period, site=None):
+    """Pred vypoctem rozuctovani automaticky zkontroluje a opravi
+    ClientCard.is_active podle Platnost od/do vuci pocitanemu obdobi -
+    aby se pri prechodu na novou kartu (renovace najmu) nemuselo rucne
+    pamatovat na prepnuti Aktivni/Neaktivni presne v tu spravnou chvili
+    (viz konverzace s Danielem - is_active nema zadny casovy rozmer sam
+    o sobe, calculate_period ho bere jako plosne "tahle karta ted
+    plati", bez ohledu na to, jake obdobi se zrovna pocita).
+
+    Dve kategorie zmen, ruzne bezpecne:
+    - DEAKTIVACE (Platnost do uz pred timto obdobim, ale porad
+      Aktivni): vzdy jednoznacna a bezpecna, provede se automaticky.
+    - AKTIVACE (Platnost od uz zacala, ale karta je Neaktivni): provede
+      se automaticky JEN pokud tim nevznikne konflikt (jina aktivni
+      karta stejneho klienta ve stejnem arealu) - jinak zustane
+      needotcena a jen se nahlasi jako varovani, at si to Daniel
+      zkontroluje rucne (typicky rozpracovana/koncept karta, kterou
+      jeste nechce pustit do ostreho provozu).
+
+    Vraci list (level, text) zprav pro zobrazeni v adminu - level je
+    "success" (deaktivovano/aktivovano) nebo "warning" (konflikt)."""
+    period_start, period_end = period.date_range()
+
+    cards = ClientCard.objects.select_related("client").prefetch_related("card_units__unit__site")
+    if site is not None:
+        cards = cards.filter(card_units__unit__site=site).distinct()
+    else:
+        cards = cards.distinct()
+
+    results = []
+
+    to_deactivate = [c for c in cards if c.is_active and c.valid_to and c.valid_to < period_start]
+    for card in to_deactivate:
+        card.is_active = False
+        card.save(update_fields=["is_active"])
+        results.append(("success", f"{card.client} ({card}): automaticky DEAKTIVOVÁNO (platnost do {card.valid_to})"))
+
+    to_check = [
+        c for c in cards
+        if not c.is_active and c.valid_from <= period_end and (not c.valid_to or c.valid_to >= period_start)
+    ]
+    for card in to_check:
+        conflict = card.active_card_conflict()
+        if conflict is None:
+            card.is_active = True
+            card.save(update_fields=["is_active"])
+            results.append(("success", f"{card.client} ({card}): automaticky AKTIVOVÁNO (platnost od {card.valid_from})"))
+        else:
+            results.append((
+                "warning",
+                f"{card.client} ({card}): platnost od {card.valid_from} už začala, ale je Neaktivní - "
+                f"NEaktivováno automaticky, protože koliduje s aktivní kartou {conflict} - zkontroluj ručně."
+            ))
+
+    return results
 
 
 def calculate_period(period, site=None):

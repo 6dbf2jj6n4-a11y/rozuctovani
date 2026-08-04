@@ -1113,10 +1113,18 @@ class PeriodAdmin(ModelAdmin):
         self._spocitat_rozuctovani(request, queryset, site=None)
 
     def _spocitat_rozuctovani(self, request, queryset, site=None):
-        from billing.engine import BillingPeriodClosedError, calculate_period
+        from billing.engine import BillingPeriodClosedError, calculate_period, sync_card_activity
 
         for period in queryset:
             label = f"{period} / {site}" if site else str(period)
+
+            sync_results = sync_card_activity(period, site=site)
+            for level, text in sync_results:
+                self.message_user(
+                    request, f"{label}: {text}",
+                    level=messages.SUCCESS if level == "success" else messages.WARNING,
+                )
+
             try:
                 result = calculate_period(period, site=site)
             except BillingPeriodClosedError as e:
