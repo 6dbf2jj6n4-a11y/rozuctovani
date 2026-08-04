@@ -7,24 +7,38 @@ a ulozi jako MeterReading pro obdobi 05/2026 a 06/2026.
 Pouziti:
   python manage.py import_odecty cesta/k/souboru.xlsx --site FM --year 2026
 """
+import re
 import openpyxl
-from datetime import date
+from datetime import date, datetime
 from django.core.management.base import BaseCommand
 from core.models import Site, Meter, Period, MeterReading
 
 
 SHEETS = ["ELEKTRO", "VODA", "TEPLO"]
 
-# Mapovani nazvu sloupcu na mesice
-MONTH_MAP = {
-    "1. 1. 2026": (2026, 1),
-    "1. 2. 2026": (2026, 2),
-    "1. 3. 2026": (2026, 3),
-    "1. 4. 2026": (2026, 4),
-    "1. 5. 2026": (2026, 5),
-    "1. 6. 2026": (2026, 6),
-    "1. 7. 2026": (2026, 7),
-}
+# Hlavicky sloupcu se v ruznych listech tehoz souboru objevily v ruznem
+# formatu - ELEKTRO/VODA jako text "1. 8. 2026", TEPLO jako skutecny
+# datetime objekt (zavisi na formatovani bunky v Excelu) - misto pevneho
+# MONTH_MAP slovniku (musel by se rucne rozsirovat pro kazdy novy
+# mesic a datetime formu vubec nenachazel) se rok/mesic parsuje z
+# hlavicky dynamicky, oba formaty.
+_HEADER_RE = re.compile(r"^\s*1\.\s*(\d{1,2})\.\s*(\d{4})\s*$")
+
+
+def _parse_month_header(value):
+    """Vrati (rok, mesic) z hlavicky sloupce typu "1. 8. 2026" (stav k
+    1. dni mesice) - at uz je to text, nebo datetime/date objekt primo
+    z Excelu. Vrati None, pokud hlavicka neodpovida ocekavanemu tvaru
+    (napr. "Poznámka", "Jedn." apod.)."""
+    if isinstance(value, (datetime, date)):
+        if value.day == 1:
+            return (value.year, value.month)
+        return None
+    if isinstance(value, str):
+        m = _HEADER_RE.match(value)
+        if m:
+            return (int(m.group(2)), int(m.group(1)))
+    return None
 
 
 class Command(BaseCommand):
@@ -69,11 +83,12 @@ class Command(BaseCommand):
             # Najdeme indexy sloupcu pro pozadovane mesice
             col_indices = {}
             for i, h in enumerate(headers):
-                h_str = str(h).strip() if h else ""
-                if h_str in MONTH_MAP:
-                    y, m = MONTH_MAP[h_str]
-                    if y == year and m in months:
-                        col_indices[m] = i
+                parsed = _parse_month_header(h)
+                if parsed is None:
+                    continue
+                y, m = parsed
+                if y == year and m in months:
+                    col_indices[m] = i
 
             if not col_indices:
                 self.stdout.write(f"  {sheet_name}: nenalezeny sloupce pro rok {year}, měsíce {months}")
