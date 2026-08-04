@@ -453,7 +453,7 @@ class ActiveClientFilter(admin.SimpleListFilter):
 class ClientAdmin(ModelAdmin):
     list_display = ("name_display", "code", "ico", "contact_email", "contact_phone", "is_active")
     search_fields = ("name", "ico", "code")
-    list_filter = (ActiveClientFilter, "is_landlord", SiteFilter, "insolvency_status")
+    list_filter = (ActiveClientFilter, "is_landlord", SiteFilter, "insolvency_status", "vat_payer")
     fieldsets = (
         ("Základní údaje", {
             "fields": (("name", "code"), ("is_active", "is_landlord"))
