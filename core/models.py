@@ -560,6 +560,19 @@ class ServicePoolItem(models.Model):
             "zadaný, má vždy přednost před touto výchozí částkou."
         ),
     )
+    weight_unit_label = models.CharField(
+        "Co je váhou (u klíčů 'Podle váhy' bez vlastního měřidla)", max_length=100, blank=True,
+        help_text=(
+            "Krátký popis, co hodnota Klíče typu 'Podle váhy' na téhle "
+            "položce znamená - např. 'm2', 'počet osob'. Použije se jen "
+            "u klíčů BEZ vlastního napojeného měřidla (ty mají přednost "
+            "Meter.weight_unit_label - jedna položka může mít víc "
+            "různých vážených skupin s různým významem váhy, např. "
+            "'hlavní odběr elektro FM'). Jen informativní, na samotný "
+            "výpočet nemá vliv."
+        ),
+    )
+
     class Meta:
         verbose_name = "Položka zásobníku"
         verbose_name_plural = "Zásobník"
@@ -650,6 +663,16 @@ class AllocationKey(models.Model):
 
     def __str__(self):
         return ""
+
+    @property
+    def weight_unit_label(self):
+        """Popisek 'Co je váhou' pro typ 'Podle váhy' - meridlo (pokud je
+        napojene a ma vlastni popisek) ma prednost pred polozkou (viz
+        ServicePoolItem.weight_unit_label help_text - jedna polozka muze
+        mit vic ruznych vazenych skupin s ruznym vyznamem vahy)."""
+        if self.meter_id and self.meter.weight_unit_label:
+            return self.meter.weight_unit_label
+        return self.service_item.weight_unit_label
 
     def is_valid_for_period(self, period):
         if not self.client_card.is_active:

@@ -1311,7 +1311,7 @@ def _efektivni_cena_za_jednotku(cost_entry):
 class ServicePoolItemAdmin(ModelAdmin):
     list_display = (
         "name", "site", "invoice_class", "unit", "meter", "jednotka",
-        "default_allocation_type", "default_amount_czk_display",
+        "default_allocation_type", "default_amount_czk_display", "weight_unit_label",
     )
     list_filter = ("site", "invoice_class")
     search_fields = ("name",)
@@ -1394,8 +1394,8 @@ class AllocationKeyAdmin(ModelAdmin):
             return _format_kc(obj.value)
         if obj.allocation_type == AllocationKey.AllocationType.AREA_PRICE:
             return "-" if obj.value is None else f"{obj.value} m²"
-        if obj.allocation_type == AllocationKey.AllocationType.WEIGHTED_COUNT and obj.meter and obj.meter.weight_unit_label:
-            return f"{obj.value} ({obj.meter.weight_unit_label})"
+        if obj.allocation_type == AllocationKey.AllocationType.WEIGHTED_COUNT and obj.weight_unit_label:
+            return f"{obj.value} ({obj.weight_unit_label})"
         return obj.value
 
 
