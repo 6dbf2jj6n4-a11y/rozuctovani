@@ -11,15 +11,31 @@ MeterReading pro obdobi 07/2026.
 Sloupce se hledaji podle nazvu v hlavicce (ne pevne pozice), takze
 prezije mirne odlisne nazvy napr. "VODA_KodOM" misto "ELEKTRO_KodOM".
 
-Pouziti:
-  python manage.py import_odecty_stav cesta/k/souboru.xlsx --site NJ
+Pouziti (staci holy nazev souboru, pokud lezi vedle tohoto prikazu -
+viz _resolve_xlsx_path - Railway shell nemusi mit cwd v core/management/
+commands/, takze relativni cesta z aktualniho adresare casto neexistuje):
+  python manage.py import_odecty_stav Odecty_NJ_0108.xlsx --site NJ
 """
-from datetime import date
+from pathlib import Path
 
 import openpyxl
 from django.core.management.base import BaseCommand, CommandError
 
 from core.models import Meter, MeterReading, Period, Site
+
+
+def _resolve_xlsx_path(xlsx_path):
+    """Pokud zadana cesta neexistuje jak je (typicky holy nazev souboru
+    spusteny z jineho cwd nez core/management/commands/), zkusi ji najit
+    vedle tohoto command souboru - tam se zdrojove xlsx v tomhle repu
+    tradicne verzuji (viz klice_NJ.xlsx, Spotreby_2026_NJ.xlsx apod.)."""
+    path = Path(xlsx_path)
+    if path.exists():
+        return path
+    fallback = Path(__file__).resolve().parent / path.name
+    if fallback.exists():
+        return fallback
+    raise CommandError(f"Soubor {xlsx_path!r} nenalezen (ani vedle tohoto příkazu: {fallback}).")
 
 
 class Command(BaseCommand):
@@ -35,7 +51,8 @@ class Command(BaseCommand):
         if not site:
             raise CommandError(f"Areál obsahující {options['site']!r} nenalezen.")
 
-        wb = openpyxl.load_workbook(options["xlsx_path"], data_only=True)
+        xlsx_path = _resolve_xlsx_path(options["xlsx_path"])
+        wb = openpyxl.load_workbook(xlsx_path, data_only=True)
         ws = wb[options["sheet"]] if options["sheet"] else wb[wb.sheetnames[0]]
 
         rows = list(ws.iter_rows(values_only=True))
