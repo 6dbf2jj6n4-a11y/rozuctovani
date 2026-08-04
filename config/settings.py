@@ -248,6 +248,11 @@ UNFOLD = {
                         "icon": "speed",
                         "link": reverse_lazy("admin:core_billingline_prehled_meridla"),
                     },
+                    {
+                        "title": _("Podíl vah"),
+                        "icon": "pie_chart",
+                        "link": reverse_lazy("admin:core_billingline_podil_vah"),
+                    },
                 ],
             },
             {

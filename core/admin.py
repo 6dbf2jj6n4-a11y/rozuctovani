@@ -1537,8 +1537,52 @@ class BillingLineAdmin(DefaultToLatestPeriodMixin, ModelAdmin):
                 self.admin_site.admin_view(self.prehled_meridla_view),
                 name="core_billingline_prehled_meridla",
             ),
+            path(
+                "podil-vah/",
+                self.admin_site.admin_view(self.podil_vah_view),
+                name="core_billingline_podil_vah",
+            ),
         ]
         return custom + urls
+
+    def podil_vah_view(self, request):
+        """Pro vybranou Polozku zasobniku a Obdobi ukaze vahu/meridlo a
+        skutecny podil kazdeho jejiho klice - viz billing/weight_shares.py.
+        Vyber Polozky je pres <select> seskupeny podle Arealu a Tridy, aby
+        se v ~50+ polozkach dalo rychle najit."""
+        from django.shortcuts import render
+        from billing.weight_shares import get_weight_share_data
+
+        item_id = request.GET.get("item")
+        period_id = request.GET.get("period")
+
+        periods = Period.objects.all()
+        period = periods.filter(pk=period_id).first() if period_id else periods.first()
+
+        items = ServicePoolItem.objects.select_related("site").order_by("site__name", "invoice_class", "name")
+        item = items.filter(pk=item_id).first() if item_id else None
+
+        class_labels = dict(ServicePoolItem.InvoiceClass.choices)
+        item_groups = {}
+        for it in items:
+            key = (it.site.name, class_labels[it.invoice_class])
+            item_groups.setdefault(key, []).append(it)
+
+        data = get_weight_share_data(item, period) if (item and period) else None
+
+        context = {
+            **self.admin_site.each_context(request),
+            "title": "Podíl vah",
+            "periods": periods,
+            "selected_period": period,
+            "item_groups": [
+                {"label": f"{site} – {cls}", "items": its} for (site, cls), its in item_groups.items()
+            ],
+            "selected_item": item,
+            "data": data,
+            "opts": self.model._meta,
+        }
+        return render(request, "admin/core/billingline/podil_vah.html", context)
 
     def prehled_view(self, request):
         """Interni souhrn Naklad/Vynos PO POLOZKACH zasobniku za obdobi
