@@ -606,9 +606,12 @@ class AllocationKey(models.Model):
         Unit, null=True, blank=True, on_delete=models.SET_NULL,
         related_name="allocation_keys", verbose_name="Plocha",
         help_text=(
-            "Jen informativní - u pevné částky (fixed_amount) počítané z výměry (K_PLOSE) "
-            "označuje konkrétní plochu, ze které se paušál spočítal. Pokud se pevná částka "
-            "vztahuje na součet více ploch karty (napr. srážkové vody), zůstává prázdné."
+            "U klíčů založených automaticky přes CardUnit.create_default_keys() "
+            "(přidání Plochy na Kartu) označuje, ze které konkrétní Plochy klíč "
+            "vznikl - podle toho se smaže spolu s ní (viz CardUnit.delete()). "
+            "U ručně založených nebo importovaných klíčů (napr. součet více "
+            "ploch karty, srážkové vody) zůstává prázdné - jejich mazání se "
+            "s žádnou Plochou automaticky neváže."
         ),
     )
     deduct_from_pool = models.BooleanField(
@@ -867,7 +870,27 @@ class CardUnit(models.Model):
         if is_new:
             self.create_default_keys()
 
+    def delete(self, *args, **kwargs):
+        """Smaze i Klice vznikle z teto Plochy (viz create_default_keys -
+        pozna se podle AllocationKey.unit=tato Plocha). Pokud stejnou
+        polozku ma i jina Plocha karty, jeji vlastni klic zustava
+        needotceny (kazda Plocha ma od 2026-08 svuj VLASTNI klic, ne
+        sdileny/scitany - viz konverzace s Danielem, scitani resi az
+        samostatna funkce Konsolidace)."""
+        AllocationKey.objects.filter(client_card=self.card, unit=self.unit).delete()
+        super().delete(*args, **kwargs)
+
     def create_default_keys(self):
+        """Kazda Plocha si vytvori VLASTNI Klice (uz ne get_or_create
+        sdileny s jinou Plochou stejne karty pro stejnou polozku - to
+        drive znamenalo, ze druha Plocha se stejnou polozkou svou
+        hodnotu proste ztratila, nic se nesecetlo). Karta tak muze mit
+        vic klicu se stejnou polozkou/typem najednou - billing/engine.py
+        je pro vazene i pevne typy stejne SECTE pri vypoctu (kazdy klic
+        pricte svou hodnotu do stejneho client_card_id), takze na vysledek
+        to nema vliv, jen na prehlednost v adminu - tu resi Konsolidace.
+        `unit=self.unit` oznacuje, ze klic vznikl z TETO Plochy, aby ho
+        slo smazat spolu s ni (viz delete() vyse)."""
         for unit_service in self.unit.unit_services.all():
             if unit_service.allocation_type == AllocationKey.AllocationType.AREA_PRICE:
                 # Hodnota klice = skutecna vymera teto plochy na karte (vc.
@@ -876,14 +899,13 @@ class CardUnit(models.Model):
                 value = self.area_m2
             else:
                 value = unit_service.value
-            AllocationKey.objects.get_or_create(
+            AllocationKey.objects.create(
                 client_card=self.card,
                 service_item=unit_service.service_item,
                 meter=unit_service.meter,
-                defaults={
-                    "allocation_type": unit_service.allocation_type,
-                    "value": value,
-                },
+                unit=self.unit,
+                allocation_type=unit_service.allocation_type,
+                value=value,
             )
 
     @property
