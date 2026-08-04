@@ -1316,10 +1316,45 @@ class ServicePoolItemAdmin(ModelAdmin):
     list_filter = ("site", "invoice_class")
     search_fields = ("name",)
     autocomplete_fields = ("unit", "meter")
+    readonly_fields = ("meridla_prehled",)
 
     @admin.display(description="Jednotka")
     def jednotka(self, obj):
         return _jednotka_polozky(obj)
+
+    @admin.display(description="Měřidla u této položky")
+    def meridla_prehled(self, obj):
+        """Neni to skutecny Django inline (Meter nema primou FK na
+        ServicePoolItem, jen neprimo pres AllocationKey.meter) - misto
+        toho readonly pole na formulari s deduplikovanym seznamem vsech
+        meridel, ktera se u polozky pouzivaji (hlavni meridlo + vse
+        napojene pres klice), vc. jejich "Co je vahou" popisku."""
+        if obj is None or obj.pk is None:
+            return "(uloží se po prvním uložení záznamu)"
+        from django.utils.html import format_html, format_html_join
+
+        meters = {}
+        if obj.meter_id:
+            meters[obj.meter_id] = (obj.meter, "hlavní měřidlo položky")
+        for key in obj.allocation_keys.select_related("meter").filter(meter__isnull=False):
+            if key.meter_id not in meters:
+                meters[key.meter_id] = (key.meter, "napojené přes klíč")
+
+        if not meters:
+            return "—"
+
+        rows = format_html_join(
+            "", "<li>{} — {} ({}){}{}</li>",
+            (
+                (
+                    m.code or m.name, m.get_meter_type_display(), role,
+                    f", {m.unit_of_measure}" if m.unit_of_measure else "",
+                    f" · Co je váhou: {m.weight_unit_label}" if m.weight_unit_label else "",
+                )
+                for m, role in sorted(meters.values(), key=lambda t: (t[0].code or t[0].name))
+            ),
+        )
+        return format_html("<ul style='margin:0;padding-left:16px;'>{}</ul>", rows)
 
     @admin.display(description="Výchozí měsíční částka (Kč)", ordering="default_amount_czk")
     def default_amount_czk_display(self, obj):
