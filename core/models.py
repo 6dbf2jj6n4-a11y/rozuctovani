@@ -232,6 +232,20 @@ class ClientCard(models.Model):
     def __str__(self):
         return ""
 
+    def save(self, *args, **kwargs):
+        """Pokud Popis karty neni vyplneny, dopocita se ve formatu "Karta
+        {kod klienta} {rok platnosti} - {poradi karty klienta v tom
+        roce}" - stejna konvence, jakou uz maji stavajici karty z
+        importu (napr. "Karta ANDELE 2026 - 1"), aby ji Daniel nemusel
+        pri zakladani nove karty psat rucne."""
+        if not self.description and self.client_id and self.valid_from:
+            year = self.valid_from.year
+            order = ClientCard.objects.filter(
+                client_id=self.client_id, valid_from__year=year
+            ).exclude(pk=self.pk).count() + 1
+            self.description = f"Karta {self.client.code} {year} - {order}"
+        super().save(*args, **kwargs)
+
     def clean(self):
         if self.valid_to and self.valid_to < self.valid_from:
             raise ValidationError("Datum 'platnost do' nesmí být dříve než 'platnost od'.")
