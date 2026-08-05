@@ -14,7 +14,11 @@
         .wrap { max-width: 640px; margin: 0 auto; padding: 32px 20px; }
         .topbar { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 20px; }
         h1 { font-size: 20px; margin: 0; }
-        .logout { font-size: 13px; color: #6b7280; text-decoration: none; }
+        .logout-form { display: inline; }
+        .logout {
+            font-size: 13px; color: #6b7280; text-decoration: none; background: none;
+            border: none; padding: 0; cursor: pointer; font-family: inherit;
+        }
         .logout:hover { text-decoration: underline; }
         .card { background: #fff; border-radius: 10px; box-shadow: 0 1px 4px rgba(0,0,0,0.08); overflow: hidden; }
         .period-row {
@@ -40,7 +44,10 @@
 <div class="wrap">
     <div class="topbar">
         <h1>Moje vyúčtování</h1>
-        <a class="logout" href="{% url 'logout' %}">Odhlásit se</a>
+        <form method="post" action="{% url 'logout' %}" class="logout-form">
+            {% csrf_token %}
+            <button type="submit" class="logout">Odhlásit se</button>
+        </form>
     </div>
 
     {% if all_clients is not None %}
