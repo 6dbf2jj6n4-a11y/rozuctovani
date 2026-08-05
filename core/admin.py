@@ -1130,12 +1130,15 @@ class PeriodAdmin(ModelAdmin):
             except BillingPeriodClosedError as e:
                 self.message_user(request, str(e), level=messages.ERROR)
                 continue
-            text = f"{label}: vytvořeno {result['created']} vyúčtovaných položek."
-            if result["warnings"]:
-                text += " Varování: " + " | ".join(result["warnings"])
-                self.message_user(request, text, level=messages.WARNING)
-            else:
-                self.message_user(request, text, level=messages.SUCCESS)
+            self.message_user(
+                request, f"{label}: vytvořeno {result['created']} vyúčtovaných položek.",
+                level=messages.SUCCESS,
+            )
+            # Kazde varovani zvlast (ne spojene do jednoho dlouheho radku
+            # pres " | ") - v adminu se v jednom dlouhem bloku spatne
+            # hleda, co presne je problem (viz konverzace s Danielem).
+            for warning in result["warnings"]:
+                self.message_user(request, f"{label}: {warning}", level=messages.WARNING)
 
     @admin.action(description="Zkontrolovat, co je potřeba zadat (Náklady/Ceník)")
     def zkontrolovat_co_zadat(self, request, queryset):
