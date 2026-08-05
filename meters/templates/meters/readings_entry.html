@@ -86,21 +86,22 @@
         .nav-hint { font-size: 12px; color: #9ca3af; }
         .empty { padding: 24px 18px; color: #6b7280; font-size: 14px; background: #fff; border-radius: 12px; }
         .closed-warning { background: #fef3c7; color: #92400e; font-size: 13px; padding: 10px 12px; border-radius: 8px; margin-bottom: 14px; }
-        .layout { display: flex; gap: 24px; max-width: 900px; margin: 0 auto; align-items: flex-start; }
+        .layout { display: flex; gap: 24px; max-width: 1200px; margin: 0 auto; align-items: flex-start; }
         .sidebar {
-            display: none; flex: 1; min-width: 260px; background: #fff; border-radius: 12px;
+            display: none; flex: 1; min-width: 420px; background: #fff; border-radius: 12px;
             box-shadow: 0 1px 4px rgba(0,0,0,0.08); padding: 6px 0; margin-top: 20px;
             position: sticky; top: 20px;
         }
         .sidebar-title { font-size: 13px; font-weight: 600; color: #374151; padding: 10px 16px 8px; }
-        .sidebar table { width: 100%; border-collapse: collapse; font-size: 13px; }
-        .sidebar td { padding: 7px 16px; border-top: 1px solid #f3f4f6; cursor: pointer; }
+        .sidebar table { width: 100%; border-collapse: collapse; table-layout: fixed; font-size: 13px; }
+        .sidebar td { padding: 7px 16px; border-top: 1px solid #f3f4f6; cursor: pointer; overflow: hidden; text-overflow: ellipsis; }
+        .side-name { width: auto; }
         .sidebar tr:first-child td { border-top: none; }
         .sidebar tr:hover td { background: #f9fafb; }
         .sidebar tr.current td { background: #eff6ff; font-weight: 600; }
-        .side-val { text-align: right; color: #9ca3af; white-space: nowrap; }
+        .side-val { text-align: right; color: #9ca3af; white-space: nowrap; width: 110px; }
         .sidebar tr.filled .side-val { color: #111827; }
-        .side-move { white-space: nowrap; width: 1%; padding-left: 4px !important; padding-right: 10px !important; }
+        .side-move { white-space: nowrap; width: 46px; padding-left: 4px !important; padding-right: 10px !important; }
         .move-btn {
             font-size: 10px; width: 18px; height: 18px; line-height: 1; border: none; background: none;
             color: #9ca3af; cursor: pointer; padding: 0;
@@ -276,6 +277,7 @@
             tr.className = (i === idx ? "current" : "") + (mm.existing ? " filled" : "");
             tr.onclick = function () { switchTo(i); };
             var tdName = document.createElement("td");
+            tdName.className = "side-name";
             tdName.textContent = (mm.code ? mm.code + " – " : "") + mm.name;
             var tdVal = document.createElement("td");
             tdVal.className = "side-val";
