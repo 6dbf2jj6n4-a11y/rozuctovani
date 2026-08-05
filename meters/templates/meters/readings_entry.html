@@ -11,7 +11,7 @@
             margin: 0;
             color: #111827;
         }
-        .wrap { max-width: 440px; margin: 0 auto; padding: 20px 16px 40px; }
+        .wrap { max-width: 440px; width: 100%; margin: 0 auto; padding: 20px 16px 40px; flex-shrink: 0; }
         .topbar { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 16px; }
         h1 { font-size: 18px; margin: 0; }
         .logout-form { display: inline; }
@@ -40,19 +40,20 @@
         .m-type { font-size: 12px; color: #6b7280; }
         .m-name { font-weight: 600; font-size: 15px; margin: 2px 0 4px; }
         .badge { font-size: 12px; padding: 3px 9px; border-radius: 6px; white-space: nowrap; }
-        .b-green { background: #dcfce7; color: #15803d; }
-        .b-amber { background: #fef3c7; color: #92400e; }
-        .b-red { background: #fee2e2; color: #b91c1c; }
-        .b-blue { background: #dbeafe; color: #1e40af; }
+        .b-ok { background: #dcfce7; color: #15803d; }
+        .b-warn { background: #fef3c7; color: #92400e; }
+        .b-err { background: #fee2e2; color: #b91c1c; }
+        .b-info { background: #dbeafe; color: #1e40af; }
         .prev-line { font-size: 13px; color: #9ca3af; margin: 0 0 14px; }
         label.field-label { font-size: 13px; color: #374151; display: block; margin-bottom: 4px; }
         input[type=number], input[type=text] {
             width: 100%; box-sizing: border-box; font-size: 20px; height: 46px; padding: 0 12px;
             border-radius: 8px; border: 1px solid #d1d5db; margin-bottom: 8px;
         }
-        input.err { border-color: #dc2626; }
-        input.warn { border-color: #d97706; }
-        input.ok { border-color: #16a34a; }
+        input.err { border-color: #dc2626; background: #fef2f2; }
+        input.warn { border-color: #d97706; background: #fffbeb; }
+        input.ok { border-color: #16a34a; background: #f0fdf4; }
+        input.info { border-color: #2563eb; background: #eff6ff; }
         .reset-link {
             width: 100%; background: none; border: none; color: #b91c1c; font-size: 12px;
             text-align: left; padding: 4px 0 10px; cursor: pointer; display: none;
@@ -61,8 +62,12 @@
         .reset-cancel { font-size: 12px; padding: 4px 8px; border-radius: 6px; border: 1px solid #d1d5db; background: #fff; }
         .calc-row { display: flex; justify-content: space-between; font-size: 13px; color: #6b7280; margin-bottom: 12px; }
         .calc-row b { color: #111827; }
-        .hist { display: flex; align-items: flex-end; gap: 4px; height: 30px; margin-bottom: 14px; }
-        .hist div { flex: 1; background: #d1d5db; border-radius: 2px; }
+        .hist { display: flex; align-items: flex-end; gap: 6px; margin-bottom: 14px; }
+        .hist-col { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 3px; min-width: 0; }
+        .hist-val { font-size: 11px; color: #6b7280; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+        .hist-track { width: 100%; height: 44px; display: flex; align-items: flex-end; }
+        .hist-bar { width: 100%; background: #cbd5e1; border-radius: 2px 2px 0 0; }
+        .hist-label { font-size: 11px; color: #9ca3af; }
         textarea, input.note { width: 100%; box-sizing: border-box; font-size: 14px; padding: 8px 10px; border-radius: 8px; border: 1px solid #d1d5db; }
         .status { font-size: 12px; margin-top: 8px; min-height: 16px; }
         .status.saved { color: #16a34a; }
@@ -81,9 +86,34 @@
         .nav-hint { font-size: 12px; color: #9ca3af; }
         .empty { padding: 24px 18px; color: #6b7280; font-size: 14px; background: #fff; border-radius: 12px; }
         .closed-warning { background: #fef3c7; color: #92400e; font-size: 13px; padding: 10px 12px; border-radius: 8px; margin-bottom: 14px; }
+        .layout { display: flex; gap: 24px; max-width: 900px; margin: 0 auto; align-items: flex-start; }
+        .sidebar {
+            display: none; flex: 1; min-width: 260px; background: #fff; border-radius: 12px;
+            box-shadow: 0 1px 4px rgba(0,0,0,0.08); padding: 6px 0; margin-top: 20px;
+            position: sticky; top: 20px;
+        }
+        .sidebar-title { font-size: 13px; font-weight: 600; color: #374151; padding: 10px 16px 8px; }
+        .sidebar table { width: 100%; border-collapse: collapse; font-size: 13px; }
+        .sidebar td { padding: 7px 16px; border-top: 1px solid #f3f4f6; cursor: pointer; }
+        .sidebar tr:first-child td { border-top: none; }
+        .sidebar tr:hover td { background: #f9fafb; }
+        .sidebar tr.current td { background: #eff6ff; font-weight: 600; }
+        .side-val { text-align: right; color: #9ca3af; white-space: nowrap; }
+        .sidebar tr.filled .side-val { color: #111827; }
+        .side-move { white-space: nowrap; width: 1%; padding-left: 4px !important; padding-right: 10px !important; }
+        .move-btn {
+            font-size: 10px; width: 18px; height: 18px; line-height: 1; border: none; background: none;
+            color: #9ca3af; cursor: pointer; padding: 0;
+        }
+        .move-btn:hover { color: #111827; }
+        .move-btn:disabled { opacity: 0.25; cursor: default; }
+        @media (min-width: 860px) {
+            .sidebar { display: block; }
+        }
     </style>
 </head>
 <body>
+<div class="layout">
 <div class="wrap">
     <div class="topbar">
         <h1>Zadávání odečtů</h1>
@@ -159,6 +189,14 @@
     {% endif %}
 </div>
 
+{% if meters_data %}
+<aside class="sidebar" id="sidebar">
+    <div class="sidebar-title">Měřidla</div>
+    <table><tbody id="sidebar-body"></tbody></table>
+</aside>
+{% endif %}
+</div>
+
 {% csrf_token %}
 {{ meters_data|json_script:"meters-data" }}
 
@@ -169,8 +207,10 @@
 
     var periodId = {{ period.pk|default:"null" }};
     var periodClosed = {{ period_closed|yesno:"true,false" }};
+    var siteId = {{ site.pk|default:"null" }};
     var csrfToken = document.querySelector('input[name=csrfmiddlewaretoken]').value;
     var saveUrl = "{% url 'odecty-ulozit' %}";
+    var reorderUrl = "{% url 'odecty-preradit' %}";
 
     var idx = 0;
     var saveTimers = {};
@@ -185,6 +225,10 @@
 
     function findChildren(meterId) {
         return meters.filter(function (m) { return m.parent_id === meterId; });
+    }
+
+    function shortLabel(l) {
+        return l.length === 7 ? l.slice(0, 3) + l.slice(5) : l;
     }
 
     function render() {
@@ -225,15 +269,64 @@
             dots.appendChild(d);
         });
 
+        var sideBody = document.getElementById("sidebar-body");
+        sideBody.innerHTML = "";
+        meters.forEach(function (mm, i) {
+            var tr = document.createElement("tr");
+            tr.className = (i === idx ? "current" : "") + (mm.existing ? " filled" : "");
+            tr.onclick = function () { switchTo(i); };
+            var tdName = document.createElement("td");
+            tdName.textContent = (mm.code ? mm.code + " – " : "") + mm.name;
+            var tdVal = document.createElement("td");
+            tdVal.className = "side-val";
+            tdVal.textContent = mm.existing && mm.existing.value !== null ? fmt(mm.existing.value) + " " + mm.unit : "–";
+            var tdMove = document.createElement("td");
+            tdMove.className = "side-move";
+            var upBtn = document.createElement("button");
+            upBtn.type = "button";
+            upBtn.className = "move-btn";
+            upBtn.textContent = "▲";
+            upBtn.disabled = i === 0;
+            upBtn.setAttribute("aria-label", "Posunout nahoru");
+            upBtn.onclick = function (e) { e.stopPropagation(); moveMeter(i, -1); };
+            var downBtn = document.createElement("button");
+            downBtn.type = "button";
+            downBtn.className = "move-btn";
+            downBtn.textContent = "▼";
+            downBtn.disabled = i === meters.length - 1;
+            downBtn.setAttribute("aria-label", "Posunout dolů");
+            downBtn.onclick = function (e) { e.stopPropagation(); moveMeter(i, 1); };
+            tdMove.appendChild(upBtn);
+            tdMove.appendChild(downBtn);
+            tr.appendChild(tdName);
+            tr.appendChild(tdVal);
+            tr.appendChild(tdMove);
+            sideBody.appendChild(tr);
+        });
+
         var barsEl = document.getElementById("hist-bars");
         barsEl.innerHTML = "";
         var values = m.hist.map(function (h) { return h.value; });
         var maxH = Math.max.apply(null, values.concat([1]));
         m.hist.forEach(function (h) {
-            var b = document.createElement("div");
-            b.style.height = Math.max(3, (h.value / maxH) * 26) + "px";
-            b.title = h.label + ": " + h.value;
-            barsEl.appendChild(b);
+            var col = document.createElement("div");
+            col.className = "hist-col";
+            var valSpan = document.createElement("span");
+            valSpan.className = "hist-val";
+            valSpan.textContent = fmt(h.value);
+            var track = document.createElement("div");
+            track.className = "hist-track";
+            var bar = document.createElement("div");
+            bar.className = "hist-bar";
+            bar.style.height = Math.max(3, (h.value / maxH) * 40) + "px";
+            track.appendChild(bar);
+            var labelSpan = document.createElement("span");
+            labelSpan.className = "hist-label";
+            labelSpan.textContent = shortLabel(h.label);
+            col.appendChild(valSpan);
+            col.appendChild(track);
+            col.appendChild(labelSpan);
+            barsEl.appendChild(col);
         });
 
         document.getElementById("prev-btn").disabled = idx === 0;
@@ -294,21 +387,21 @@
         var reference = m.yoy_value !== null ? m.yoy_value : (histVals.length ? avg(histVals) : null);
         var diffPct = reference ? ((cons - reference) / reference) * 100 : null;
 
-        var cls, badgeCls, text, compareText;
+        var state, text, compareText;
         if (cons < 0) {
-            cls = "err"; badgeCls = "b-red"; text = "Nemůže klesnout, zkontroluj";
+            state = "err"; text = "Nemůže klesnout, zkontroluj";
         } else if (m._resetMode) {
-            cls = "ok"; badgeCls = "b-blue"; text = "Nové měřidlo od tohoto odečtu";
+            state = "info"; text = "Nové měřidlo od tohoto odečtu";
         } else if (seasonalZeroOk) {
-            cls = "ok"; badgeCls = "b-green"; text = "V normě (sezónní útlum)";
+            state = "ok"; text = "V normě (sezónní útlum)";
         } else if (diffPct !== null && Math.abs(diffPct) > 40) {
-            cls = "warn"; badgeCls = "b-amber"; text = "Neobvyklá odchylka";
+            state = "warn"; text = "Neobvyklá odchylka";
         } else {
-            cls = "ok"; badgeCls = "b-green"; text = "V normě";
+            state = "ok"; text = "V normě";
         }
-        valInput.className = cls;
+        valInput.className = state;
         badge.textContent = text;
-        badge.className = "badge " + badgeCls;
+        badge.className = "badge b-" + state;
 
         if (m.yoy_value !== null) {
             compareText = "loni (" + m.yoy_label + "): " + fmt(m.yoy_value) + " " + m.unit;
@@ -352,25 +445,25 @@
     function scheduleSave() {
         var m = meters[idx];
         clearTimeout(saveTimers[m.id]);
-        saveTimers[m.id] = setTimeout(function () { save(idx); }, 700);
+        saveTimers[m.id] = setTimeout(save, 700);
     }
 
-    function save(i) {
+    function save() {
         if (periodClosed) return;
+        var i = idx;
         var m = meters[i];
-        var valInput = i === idx ? document.getElementById("val-input") : null;
-        var val = valInput ? parseFloat(valInput.value) : (m.existing ? m.existing.value : NaN);
+        var val = parseFloat(document.getElementById("val-input").value);
         if (isNaN(val)) return;
 
         var resetFromValue = null;
         if (m._resetMode) {
-            var rv = i === idx ? parseFloat(document.getElementById("reset-input").value) : m.existing.reset_from_value;
+            var rv = parseFloat(document.getElementById("reset-input").value);
             resetFromValue = isNaN(rv) ? 0 : rv;
         }
-        var note = i === idx ? document.getElementById("note-input").value : ((m.existing && m.existing.note) || "");
+        var note = document.getElementById("note-input").value;
 
-        var statusEl = i === idx ? document.getElementById("save-status") : null;
-        if (statusEl) { statusEl.textContent = "Ukládám…"; statusEl.className = "status saving"; }
+        var statusEl = document.getElementById("save-status");
+        statusEl.textContent = "Ukládám…"; statusEl.className = "status saving";
 
         fetch(saveUrl, {
             method: "POST",
@@ -388,30 +481,63 @@
                 if (res.data.ok) {
                     m.existing = { value: val, note: note, reset_from_value: resetFromValue };
                     m._consumption = res.data.consumption;
-                    if (statusEl) { statusEl.textContent = "Uloženo"; statusEl.className = "status saved"; }
-                    updateDot(i);
-                    if (i === idx) updateSumBanner();
+                    if (i === idx) {
+                        statusEl.textContent = "Uloženo"; statusEl.className = "status saved";
+                        updateSumBanner();
+                    }
+                    refreshRowIndicators(i);
                     var parent = meters.find(function (p) { return p.id === m.parent_id; });
-                    if (parent && idx < meters.length) updateSumBanner();
-                } else {
-                    if (statusEl) { statusEl.textContent = res.data.error || "Chyba při ukládání."; statusEl.className = "status error"; }
+                    if (parent) updateSumBanner();
+                } else if (i === idx) {
+                    statusEl.textContent = res.data.error || "Chyba při ukládání."; statusEl.className = "status error";
                 }
             })
             .catch(function () {
-                if (statusEl) { statusEl.textContent = "Chyba spojení, zkus to znovu."; statusEl.className = "status error"; }
+                if (i === idx) {
+                    statusEl.textContent = "Chyba spojení, zkus to znovu."; statusEl.className = "status error";
+                }
             });
     }
 
-    function updateDot(i) {
-        var dots = document.getElementById("dots").children;
-        if (dots[i] && i !== idx) dots[i].className = "dot filled";
+    function refreshRowIndicators(i) {
+        var dot = document.getElementById("dots").children[i];
+        if (dot && i !== idx) dot.className = "dot filled";
+        var row = document.getElementById("sidebar-body").children[i];
+        if (row && i !== idx) row.className = "filled";
     }
 
     function switchTo(newIdx) {
         if (newIdx < 0 || newIdx >= meters.length || newIdx === idx) return;
-        save(idx);
+        save();
         idx = newIdx;
         render();
+    }
+
+    function moveMeter(i, dir) {
+        var j = i + dir;
+        if (j < 0 || j >= meters.length) return;
+        var tmp = meters[i];
+        meters[i] = meters[j];
+        meters[j] = tmp;
+        if (idx === i) idx = j;
+        else if (idx === j) idx = i;
+        render();
+        scheduleReorderSave();
+    }
+
+    var reorderTimer = null;
+    function scheduleReorderSave() {
+        clearTimeout(reorderTimer);
+        reorderTimer = setTimeout(function () {
+            fetch(reorderUrl, {
+                method: "POST",
+                headers: { "Content-Type": "application/json", "X-CSRFToken": csrfToken },
+                body: JSON.stringify({
+                    site_id: siteId,
+                    meter_ids: meters.map(function (m) { return m.id; }),
+                }),
+            });
+        }, 400);
     }
 
     document.getElementById("val-input").addEventListener("input", updateCalc);
@@ -452,7 +578,7 @@
         touchStartX = null;
     });
 
-    window.addEventListener("beforeunload", function () { save(idx); });
+    window.addEventListener("beforeunload", save);
 
     render();
 })();

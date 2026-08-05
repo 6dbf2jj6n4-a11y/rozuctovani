@@ -48,7 +48,7 @@ def readings_entry(request):
         earlier_periods = list(
             Period.objects.filter(
                 Q(year__lt=period.year) | Q(year=period.year, month__lt=period.month)
-            ).order_by("-year", "-month")[:6]
+            ).order_by("-year", "-month")[:8]
         )
 
         for m in meters:
@@ -162,3 +162,32 @@ def readings_save(request):
         "ok": True,
         "consumption": float(consumption) if consumption is not None else None,
     })
+
+
+@login_required
+@require_POST
+def readings_reorder(request):
+    user = request.user
+    _require_spravce(user)
+
+    try:
+        payload = json.loads(request.body)
+    except (json.JSONDecodeError, UnicodeDecodeError):
+        return JsonResponse({"ok": False, "error": "Neplatná data."}, status=400)
+
+    site_id = payload.get("site_id")
+    meter_ids = payload.get("meter_ids")
+    if not site_id or not isinstance(meter_ids, list):
+        return JsonResponse({"ok": False, "error": "Neplatná data."}, status=400)
+    if not user.get_accessible_sites().filter(pk=site_id).exists():
+        raise PermissionDenied("K tomuto areálu nemáš přístup.")
+
+    meters_by_id = {m.id: m for m in Meter.objects.filter(site_id=site_id, id__in=meter_ids)}
+    if len(meters_by_id) != len(meter_ids):
+        return JsonResponse({"ok": False, "error": "Neplatná data."}, status=400)
+
+    for position, meter_id in enumerate(meter_ids):
+        meters_by_id[meter_id].display_order = position
+    Meter.objects.bulk_update(meters_by_id.values(), ["display_order"])
+
+    return JsonResponse({"ok": True})
