@@ -1,8 +1,25 @@
 from django.conf import settings
 from django.contrib import admin
 from django.contrib.admin.views.decorators import staff_member_required
+from django.contrib.auth.decorators import login_required
+from django.shortcuts import redirect
 from django.urls import include, path
 from django.views.static import serve as static_serve
+
+
+@login_required
+def home(request):
+    """Jedina vstupni adresa (LOGIN_REDIRECT_URL sem posila po prihlaseni) -
+    dal rozhodne podle role, kam uzivatele poslat: klient na svoje
+    vyuctovani, spravce na zadavani odectu, admin do Django adminu."""
+    from accounts.models import User
+
+    role = request.user.role
+    if role == User.Role.KLIENT:
+        return redirect("moje-vyuctovani")
+    if role == User.Role.SPRAVCE:
+        return redirect("odecty")
+    return redirect("admin:index")
 
 
 @staff_member_required
@@ -13,6 +30,7 @@ def protected_media(request, path):
 
 
 urlpatterns = [
+    path("", home, name="home"),
     path("admin/", admin.site.urls),
     path("api/", include("billing.api_urls")),
     path("accounts/", include("django.contrib.auth.urls")),
