@@ -51,16 +51,24 @@ class Command(BaseCommand):
             ))
             return
 
-        without_meter = [k for k in valid_keys if k.meter_id is None]
+        # Stejna podminka jako "weight_keys" v billing/engine.py
+        # _consumption_shares - zahrnuje jak klice BEZ meridla, tak
+        # klice S meridlem, ktere ale nedodava zadna data (label-only
+        # meridlo bez odectu/vzorce, viz _meter_provides_consumption).
+        without_meter = [
+            k for k in valid_keys
+            if not (k.meter_id is not None and _meter_provides_consumption(k.meter))
+        ]
         if not without_meter:
-            self.stdout.write(self.style.SUCCESS(f"{item}: všechny platné klíče mají měřidlo."))
+            self.stdout.write(self.style.SUCCESS(f"{item}: všechny platné klíče mají funkční měřidlo."))
             return
 
         self.stdout.write(self.style.ERROR(
-            f"{item} / {period}: {len(without_meter)} klíč(ů) BEZ měřidla, budou vynechány:"
+            f"{item} / {period}: {len(without_meter)} klíč(ů) BEZ funkčního měřidla, budou vynechány:"
         ))
         for key in without_meter:
+            meter_info = f", měřidlo={key.meter} (bez dat)" if key.meter_id else ""
             self.stdout.write(
                 f"  {key.client_card.client.name} ({key.client_card}): "
-                f"{key.get_allocation_type_display()} hodnota={key.value}"
+                f"{key.get_allocation_type_display()} hodnota={key.value}{meter_info}"
             )
