@@ -12,7 +12,12 @@
             color: #111827;
         }
         .wrap { max-width: 440px; width: 100%; margin: 0 auto; padding: 20px 16px 40px; flex-shrink: 0; }
-        .topbar { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 16px; }
+        .topbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
+        .topbar-left { display: flex; align-items: center; gap: 10px; }
+        .user-icon {
+            width: 32px; height: 32px; border-radius: 50%; background: #e5e7eb; color: #6b7280;
+            display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+        }
         h1 { font-size: 18px; margin: 0; }
         .logout-form { display: inline; }
         .logout {
@@ -117,7 +122,15 @@
 <div class="layout">
 <div class="wrap">
     <div class="topbar">
-        <h1>Zadávání odečtů</h1>
+        <div class="topbar-left">
+            <span class="user-icon" title="{{ request.user.username }}">
+                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="8" r="4"></circle>
+                    <path d="M4 20c0-4.4 3.6-8 8-8s8 3.6 8 8"></path>
+                </svg>
+            </span>
+            <h1>Zadávání odečtů</h1>
+        </div>
         <form method="post" action="{% url 'logout' %}" class="logout-form">
             {% csrf_token %}
             <button type="submit" class="logout">Odhlásit se</button>
