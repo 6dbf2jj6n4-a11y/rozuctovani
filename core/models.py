@@ -437,6 +437,10 @@ class Meter(models.Model):
             "samotný výpočet nemá vliv."
         ),
     )
+    display_order = models.PositiveIntegerField(
+        "Pořadí při zadávání odečtů", default=0,
+        help_text="Určuje pořadí měřidel na obrazovce pro zadávání odečtů. Stejná hodnota (výchozí 0) řadí abecedně podle kódu.",
+    )
 
     class Meta:
         verbose_name = "Měřidlo"
@@ -458,6 +462,12 @@ class Meter(models.Model):
             # Dodavatel hlasi rovnou spotrebu za obdobi - zadana hodnota
             # se pouzije primo, neni potreba znat predchozi obdobi.
             return current.value
+
+        if current.reset_from_value is not None:
+            # Vymena meridla - stary a novy pristroj nejsou kontinualni,
+            # spotreba se pocita od pocatecniho stavu noveho meridla, ne
+            # od minuleho odectu (ktery patril jeste staremu pristroji).
+            return current.value - current.reset_from_value
 
         prev_period = period.previous_period()
         if prev_period is None:
@@ -528,6 +538,16 @@ class MeterReading(models.Model):
     )
     is_estimate = models.BooleanField("Odhad", default=False)
     note = models.CharField("Poznámka", max_length=300, blank=True)
+    photo = models.ImageField("Foto odečtu", upload_to="odecty/%Y/%m/", null=True, blank=True)
+    reset_from_value = models.DecimalField(
+        "Počáteční stav (výměna měřidla)", max_digits=14, decimal_places=3, null=True, blank=True,
+        help_text=(
+            "Vyplnit jen při výměně měřidla za nové - stav v poli 'Stav / "
+            "spotřeba' pak patří novému přístroji a spotřeba se počítá od "
+            "tohoto počátečního stavu (obvykle 0), ne od minulého odečtu "
+            "starého měřidla. Viz Meter.consumption_for."
+        ),
+    )
 
     class Meta:
         verbose_name = "Odečet měřidla"

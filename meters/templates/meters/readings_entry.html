@@ -1,0 +1,454 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Zadávání odečtů</title>
+    <style>
+        body {
+            font-family: -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+            background: #f3f4f6;
+            margin: 0;
+            color: #111827;
+        }
+        .wrap { max-width: 440px; margin: 0 auto; padding: 20px 16px 40px; }
+        .topbar { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 16px; }
+        h1 { font-size: 18px; margin: 0; }
+        .logout { font-size: 13px; color: #6b7280; text-decoration: none; }
+        .logout:hover { text-decoration: underline; }
+        .filters { display: flex; gap: 8px; margin-bottom: 14px; }
+        .filters select {
+            font-size: 14px; padding: 8px 10px; border-radius: 8px; border: 1px solid #d1d5db;
+            background: #fff;
+        }
+        .filters select:first-child { flex: 1; }
+        .progress-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+        .progress-label { font-size: 13px; color: #6b7280; }
+        .dots { display: flex; gap: 5px; flex-wrap: wrap; }
+        .dot { width: 8px; height: 8px; border-radius: 50%; cursor: pointer; background: #e5e7eb; border: none; padding: 0; }
+        .dot.filled { background: #9ca3af; }
+        .dot.current { background: #2563eb; }
+        .card {
+            background: #fff; border-radius: 12px; box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+            padding: 16px 18px;
+        }
+        .card-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 2px; }
+        .m-type { font-size: 12px; color: #6b7280; }
+        .m-name { font-weight: 600; font-size: 15px; margin: 2px 0 4px; }
+        .badge { font-size: 12px; padding: 3px 9px; border-radius: 6px; white-space: nowrap; }
+        .b-green { background: #dcfce7; color: #15803d; }
+        .b-amber { background: #fef3c7; color: #92400e; }
+        .b-red { background: #fee2e2; color: #b91c1c; }
+        .b-blue { background: #dbeafe; color: #1e40af; }
+        .prev-line { font-size: 13px; color: #9ca3af; margin: 0 0 14px; }
+        label.field-label { font-size: 13px; color: #374151; display: block; margin-bottom: 4px; }
+        input[type=number], input[type=text] {
+            width: 100%; box-sizing: border-box; font-size: 20px; height: 46px; padding: 0 12px;
+            border-radius: 8px; border: 1px solid #d1d5db; margin-bottom: 8px;
+        }
+        input.err { border-color: #dc2626; }
+        input.warn { border-color: #d97706; }
+        input.ok { border-color: #16a34a; }
+        .reset-link {
+            width: 100%; background: none; border: none; color: #b91c1c; font-size: 12px;
+            text-align: left; padding: 4px 0 10px; cursor: pointer; display: none;
+        }
+        .reset-row { display: none; margin-bottom: 8px; }
+        .reset-cancel { font-size: 12px; padding: 4px 8px; border-radius: 6px; border: 1px solid #d1d5db; background: #fff; }
+        .calc-row { display: flex; justify-content: space-between; font-size: 13px; color: #6b7280; margin-bottom: 12px; }
+        .calc-row b { color: #111827; }
+        .hist { display: flex; align-items: flex-end; gap: 4px; height: 30px; margin-bottom: 14px; }
+        .hist div { flex: 1; background: #d1d5db; border-radius: 2px; }
+        textarea, input.note { width: 100%; box-sizing: border-box; font-size: 14px; padding: 8px 10px; border-radius: 8px; border: 1px solid #d1d5db; }
+        .status { font-size: 12px; margin-top: 8px; min-height: 16px; }
+        .status.saved { color: #16a34a; }
+        .status.saving { color: #9ca3af; }
+        .status.error { color: #dc2626; }
+        .sum-banner { margin-top: 10px; border-radius: 8px; padding: 10px 12px; font-size: 13px; display: none; justify-content: space-between; gap: 8px; }
+        .sb-ok { background: #dcfce7; color: #15803d; }
+        .sb-warn { background: #fef3c7; color: #92400e; }
+        .sb-neutral { background: #f3f4f6; color: #6b7280; }
+        .nav-row { display: flex; justify-content: space-between; align-items: center; margin-top: 14px; }
+        .nav-btn {
+            width: 44px; height: 40px; border-radius: 8px; border: 1px solid #d1d5db; background: #fff;
+            font-size: 18px; cursor: pointer;
+        }
+        .nav-btn:disabled { opacity: 0.35; cursor: default; }
+        .nav-hint { font-size: 12px; color: #9ca3af; }
+        .empty { padding: 24px 18px; color: #6b7280; font-size: 14px; background: #fff; border-radius: 12px; }
+        .closed-warning { background: #fef3c7; color: #92400e; font-size: 13px; padding: 10px 12px; border-radius: 8px; margin-bottom: 14px; }
+    </style>
+</head>
+<body>
+<div class="wrap">
+    <div class="topbar">
+        <h1>Zadávání odečtů</h1>
+        <a class="logout" href="{% url 'logout' %}">Odhlásit se</a>
+    </div>
+
+    <form method="get" class="filters">
+        <select name="site" onchange="this.form.submit()">
+            {% for s in sites %}
+                <option value="{{ s.pk }}" {% if site and site.pk == s.pk %}selected{% endif %}>{{ s.name }}</option>
+            {% endfor %}
+        </select>
+        <select name="period" onchange="this.form.submit()">
+            {% for p in periods %}
+                <option value="{{ p.pk }}" {% if period and period.pk == p.pk %}selected{% endif %}>{{ p }}{% if p.status == 'closed' %} (uzavřeno){% endif %}</option>
+            {% endfor %}
+        </select>
+    </form>
+
+    {% if period_closed %}
+        <div class="closed-warning">Toto období je uzavřené - odečty se dají jen prohlížet, ne upravovat.</div>
+    {% endif %}
+
+    {% if not site %}
+        <div class="empty">Žádný areál není dostupný pro tvůj účet.</div>
+    {% elif not meters_data %}
+        <div class="empty">V areálu {{ site.name }} nejsou žádná měřidla k odečtu.</div>
+    {% else %}
+        <div class="progress-row">
+            <span class="progress-label" id="progress-label"></span>
+            <div class="dots" id="dots"></div>
+        </div>
+
+        <div class="card" id="card">
+            <div class="card-head">
+                <span class="m-type" id="m-type"></span>
+                <span class="badge" id="badge"></span>
+            </div>
+            <p class="m-name" id="m-name"></p>
+            <p class="prev-line" id="prev-line"></p>
+
+            <label class="field-label" id="val-label"></label>
+            <input id="val-input" type="number" step="any" inputmode="decimal" {% if period_closed %}disabled{% endif %}>
+
+            <button type="button" class="reset-link" id="reset-link">Měřidlo bylo vyměněno - zadat počáteční stav nového měřidla</button>
+            <div class="reset-row" id="reset-row">
+                <label class="field-label">Počáteční stav nového měřidla</label>
+                <input id="reset-input" type="number" step="any" inputmode="decimal">
+                <button type="button" class="reset-cancel" id="reset-cancel">Zrušit výměnu</button>
+            </div>
+
+            <div class="calc-row">
+                <span>Spotřeba: <b id="consumption">–</b></span>
+                <span id="hist-compare"></span>
+            </div>
+            <div class="hist" id="hist-bars"></div>
+
+            <input class="note" id="note-input" placeholder="Poznámka (nepovinné)" {% if period_closed %}disabled{% endif %}>
+
+            <div class="status" id="save-status"></div>
+        </div>
+
+        <div class="sum-banner" id="sum-banner"></div>
+
+        <div class="nav-row">
+            <button type="button" class="nav-btn" id="prev-btn" aria-label="Předchozí měřidlo">&larr;</button>
+            <span class="nav-hint">šipky vlevo/vpravo, na mobilu swipe</span>
+            <button type="button" class="nav-btn" id="next-btn" aria-label="Další měřidlo">&rarr;</button>
+        </div>
+    {% endif %}
+</div>
+
+{% csrf_token %}
+{{ meters_data|json_script:"meters-data" }}
+
+<script>
+(function () {
+    var meters = JSON.parse(document.getElementById("meters-data").textContent);
+    if (!meters.length) return;
+
+    var periodId = {{ period.pk|default:"null" }};
+    var periodClosed = {{ period_closed|yesno:"true,false" }};
+    var csrfToken = document.querySelector('input[name=csrfmiddlewaretoken]').value;
+    var saveUrl = "{% url 'odecty-ulozit' %}";
+
+    var idx = 0;
+    var saveTimers = {};
+
+    function fmt(n) {
+        return Math.round(n * 100) / 100;
+    }
+
+    function avg(arr) {
+        return arr.reduce(function (a, b) { return a + b; }, 0) / arr.length;
+    }
+
+    function findChildren(meterId) {
+        return meters.filter(function (m) { return m.parent_id === meterId; });
+    }
+
+    function render() {
+        var m = meters[idx];
+        document.getElementById("progress-label").textContent = "Měřidlo " + (idx + 1) + " / " + meters.length;
+        document.getElementById("m-type").textContent = m.meter_type_label;
+        document.getElementById("m-name").textContent = (m.code ? m.code + " – " : "") + m.name;
+
+        var isConsumptionMode = m.reading_mode === "consumption";
+        document.getElementById("val-label").textContent = isConsumptionMode
+            ? "Spotřeba za období (" + m.unit + ")"
+            : "Nový stav (" + m.unit + ")";
+        document.getElementById("prev-line").textContent = isConsumptionMode
+            ? "Zadává se přímo spotřeba za období, ne kumulativní stav."
+            : (m.prev_value !== null ? "Minulý odečet: " + m.prev_value + " " + m.unit + " (" + m.prev_date + ")" : "Zatím žádný minulý odečet.");
+
+        var valInput = document.getElementById("val-input");
+        valInput.value = m.existing && m.existing.value !== null ? m.existing.value : "";
+
+        var resetVal = m.existing && m.existing.reset_from_value !== null ? m.existing.reset_from_value : null;
+        m._resetMode = resetVal !== null;
+        document.getElementById("reset-input").value = resetVal !== null ? resetVal : "0";
+        document.getElementById("reset-row").style.display = m._resetMode ? "block" : "none";
+
+        document.getElementById("note-input").value = (m.existing && m.existing.note) || "";
+
+        document.getElementById("save-status").textContent = "";
+        document.getElementById("save-status").className = "status";
+
+        var dots = document.getElementById("dots");
+        dots.innerHTML = "";
+        meters.forEach(function (mm, i) {
+            var d = document.createElement("button");
+            d.type = "button";
+            d.className = "dot" + (i === idx ? " current" : (mm.existing ? " filled" : ""));
+            d.title = mm.name;
+            d.onclick = function () { switchTo(i); };
+            dots.appendChild(d);
+        });
+
+        var barsEl = document.getElementById("hist-bars");
+        barsEl.innerHTML = "";
+        var values = m.hist.map(function (h) { return h.value; });
+        var maxH = Math.max.apply(null, values.concat([1]));
+        m.hist.forEach(function (h) {
+            var b = document.createElement("div");
+            b.style.height = Math.max(3, (h.value / maxH) * 26) + "px";
+            b.title = h.label + ": " + h.value;
+            barsEl.appendChild(b);
+        });
+
+        document.getElementById("prev-btn").disabled = idx === 0;
+        document.getElementById("next-btn").disabled = idx === meters.length - 1;
+
+        updateCalc();
+        updateSumBanner();
+        if (!periodClosed) valInput.focus();
+    }
+
+    function updateCalc() {
+        var m = meters[idx];
+        var isConsumptionMode = m.reading_mode === "consumption";
+        var val = parseFloat(document.getElementById("val-input").value);
+        var consEl = document.getElementById("consumption");
+        var compareEl = document.getElementById("hist-compare");
+        var badge = document.getElementById("badge");
+        var valInput = document.getElementById("val-input");
+        var resetLink = document.getElementById("reset-link");
+        valInput.className = "";
+
+        if (isNaN(val)) {
+            consEl.textContent = "–";
+            compareEl.textContent = "";
+            badge.textContent = "";
+            badge.className = "badge";
+            resetLink.style.display = "none";
+            m._consumption = null;
+            return;
+        }
+
+        var cons;
+        if (isConsumptionMode) {
+            cons = val;
+        } else if (m._resetMode) {
+            var rv = parseFloat(document.getElementById("reset-input").value);
+            cons = val - (isNaN(rv) ? 0 : rv);
+        } else if (m.prev_value !== null) {
+            cons = val - m.prev_value;
+        } else {
+            cons = null;
+        }
+        m._consumption = cons;
+
+        if (cons === null) {
+            consEl.textContent = "–";
+            compareEl.textContent = "první odečet, není s čím srovnat";
+            badge.textContent = "";
+            badge.className = "badge";
+            resetLink.style.display = "none";
+            return;
+        }
+
+        consEl.textContent = fmt(cons) + " " + m.unit;
+
+        var histVals = m.hist.map(function (h) { return h.value; });
+        var seasonalZeroOk = cons === 0 && histVals.length && Math.min.apply(null, histVals) === 0;
+        var reference = m.yoy_value !== null ? m.yoy_value : (histVals.length ? avg(histVals) : null);
+        var diffPct = reference ? ((cons - reference) / reference) * 100 : null;
+
+        var cls, badgeCls, text, compareText;
+        if (cons < 0) {
+            cls = "err"; badgeCls = "b-red"; text = "Nemůže klesnout, zkontroluj";
+        } else if (m._resetMode) {
+            cls = "ok"; badgeCls = "b-blue"; text = "Nové měřidlo od tohoto odečtu";
+        } else if (seasonalZeroOk) {
+            cls = "ok"; badgeCls = "b-green"; text = "V normě (sezónní útlum)";
+        } else if (diffPct !== null && Math.abs(diffPct) > 40) {
+            cls = "warn"; badgeCls = "b-amber"; text = "Neobvyklá odchylka";
+        } else {
+            cls = "ok"; badgeCls = "b-green"; text = "V normě";
+        }
+        valInput.className = cls;
+        badge.textContent = text;
+        badge.className = "badge " + badgeCls;
+
+        if (m.yoy_value !== null) {
+            compareText = "loni (" + m.yoy_label + "): " + fmt(m.yoy_value) + " " + m.unit;
+        } else if (histVals.length) {
+            compareText = "Ø posl. období: " + fmt(avg(histVals)) + " " + m.unit;
+        } else {
+            compareText = "";
+        }
+        compareEl.textContent = compareText;
+
+        resetLink.style.display = (cons < 0 && !m._resetMode && !isConsumptionMode) ? "block" : "none";
+
+        scheduleSave();
+    }
+
+    function updateSumBanner() {
+        var m = meters[idx];
+        var banner = document.getElementById("sum-banner");
+        var children = findChildren(m.id);
+        if (!children.length) {
+            banner.style.display = "none";
+            return;
+        }
+        var mainCons = m._consumption;
+        var filled = children.filter(function (c) { return c._consumption !== null && c._consumption !== undefined; });
+        if (mainCons === null || mainCons === undefined || filled.length < children.length) {
+            banner.style.display = "flex";
+            banner.className = "sum-banner sb-neutral";
+            banner.textContent = "Součet podružných se dopočítá po zadání hlavního a všech podružných měřidel (" + filled.length + "/" + children.length + " zadáno).";
+            return;
+        }
+        var sub = filled.reduce(function (s, c) { return s + c._consumption; }, 0);
+        var diff = mainCons - sub;
+        var pct = mainCons ? (diff / mainCons * 100) : 0;
+        var bad = Math.abs(pct) > 15;
+        banner.style.display = "flex";
+        banner.className = "sum-banner " + (bad ? "sb-warn" : "sb-ok");
+        banner.innerHTML = "<span>Hlavní " + fmt(mainCons) + " vs. součet podružných " + fmt(sub) + "</span><b>" + (diff >= 0 ? "+" : "") + fmt(diff) + " " + m.unit + " (" + fmt(pct) + "%)</b>";
+    }
+
+    function scheduleSave() {
+        var m = meters[idx];
+        clearTimeout(saveTimers[m.id]);
+        saveTimers[m.id] = setTimeout(function () { save(idx); }, 700);
+    }
+
+    function save(i) {
+        if (periodClosed) return;
+        var m = meters[i];
+        var valInput = i === idx ? document.getElementById("val-input") : null;
+        var val = valInput ? parseFloat(valInput.value) : (m.existing ? m.existing.value : NaN);
+        if (isNaN(val)) return;
+
+        var resetFromValue = null;
+        if (m._resetMode) {
+            var rv = i === idx ? parseFloat(document.getElementById("reset-input").value) : m.existing.reset_from_value;
+            resetFromValue = isNaN(rv) ? 0 : rv;
+        }
+        var note = i === idx ? document.getElementById("note-input").value : ((m.existing && m.existing.note) || "");
+
+        var statusEl = i === idx ? document.getElementById("save-status") : null;
+        if (statusEl) { statusEl.textContent = "Ukládám…"; statusEl.className = "status saving"; }
+
+        fetch(saveUrl, {
+            method: "POST",
+            headers: { "Content-Type": "application/json", "X-CSRFToken": csrfToken },
+            body: JSON.stringify({
+                meter_id: m.id,
+                period_id: periodId,
+                value: val,
+                reset_from_value: resetFromValue,
+                note: note,
+            }),
+        })
+            .then(function (r) { return r.json().then(function (data) { return { status: r.status, data: data }; }); })
+            .then(function (res) {
+                if (res.data.ok) {
+                    m.existing = { value: val, note: note, reset_from_value: resetFromValue };
+                    m._consumption = res.data.consumption;
+                    if (statusEl) { statusEl.textContent = "Uloženo"; statusEl.className = "status saved"; }
+                    updateDot(i);
+                    if (i === idx) updateSumBanner();
+                    var parent = meters.find(function (p) { return p.id === m.parent_id; });
+                    if (parent && idx < meters.length) updateSumBanner();
+                } else {
+                    if (statusEl) { statusEl.textContent = res.data.error || "Chyba při ukládání."; statusEl.className = "status error"; }
+                }
+            })
+            .catch(function () {
+                if (statusEl) { statusEl.textContent = "Chyba spojení, zkus to znovu."; statusEl.className = "status error"; }
+            });
+    }
+
+    function updateDot(i) {
+        var dots = document.getElementById("dots").children;
+        if (dots[i] && i !== idx) dots[i].className = "dot filled";
+    }
+
+    function switchTo(newIdx) {
+        if (newIdx < 0 || newIdx >= meters.length || newIdx === idx) return;
+        save(idx);
+        idx = newIdx;
+        render();
+    }
+
+    document.getElementById("val-input").addEventListener("input", updateCalc);
+    document.getElementById("reset-input").addEventListener("input", function () {
+        updateCalc();
+    });
+    document.getElementById("reset-link").addEventListener("click", function () {
+        meters[idx]._resetMode = true;
+        document.getElementById("reset-row").style.display = "block";
+        updateCalc();
+    });
+    document.getElementById("reset-cancel").addEventListener("click", function () {
+        meters[idx]._resetMode = false;
+        document.getElementById("reset-row").style.display = "none";
+        updateCalc();
+    });
+    document.getElementById("note-input").addEventListener("input", scheduleSave);
+
+    document.getElementById("prev-btn").addEventListener("click", function () { switchTo(idx - 1); });
+    document.getElementById("next-btn").addEventListener("click", function () { switchTo(idx + 1); });
+
+    document.addEventListener("keydown", function (e) {
+        var active = document.activeElement;
+        var typing = active && (active.tagName === "INPUT" || active.tagName === "TEXTAREA");
+        if (typing && (e.key === "ArrowLeft" || e.key === "ArrowRight")) return;
+        if (e.key === "ArrowRight") switchTo(idx + 1);
+        if (e.key === "ArrowLeft") switchTo(idx - 1);
+    });
+
+    var touchStartX = null;
+    document.getElementById("card").addEventListener("touchstart", function (e) {
+        touchStartX = e.changedTouches[0].clientX;
+    });
+    document.getElementById("card").addEventListener("touchend", function (e) {
+        if (touchStartX === null) return;
+        var dx = e.changedTouches[0].clientX - touchStartX;
+        if (Math.abs(dx) > 60) switchTo(dx < 0 ? idx + 1 : idx - 1);
+        touchStartX = null;
+    });
+
+    window.addEventListener("beforeunload", function () { save(idx); });
+
+    render();
+})();
+</script>
+</body>
+</html>

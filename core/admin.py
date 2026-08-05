@@ -991,7 +991,7 @@ class ClientCardAdmin(ModelAdmin):
 class MeterReadingInline(TabularInline):
     model = MeterReading
     extra = 1
-    fields = ("period", "reading_date", "value", "is_estimate", "note")
+    fields = ("period", "reading_date", "value", "reset_from_value", "is_estimate", "note", "photo")
     ordering = ("-period",)
 
 
@@ -1021,7 +1021,11 @@ class MeterAdmin(DuplicateModelAdminMixin, ModelAdmin):
     conditional_fields = {"reading_mode": "!is_virtual"}
     fieldsets = (
         (None, {
-            "fields": (("site", "code", "name"), ("meter_type", "unit_of_measure", "serial_number"))
+            "fields": (
+                ("site", "code", "name"),
+                ("meter_type", "unit_of_measure", "serial_number"),
+                "display_order",
+            )
         }),
         ("Odečty", {
             "fields": ("reading_mode",),
@@ -1279,7 +1283,7 @@ class InflationRateAdmin(ModelAdmin):
 
 @admin.register(MeterReading)
 class MeterReadingAdmin(DefaultToLatestPeriodMixin, ModelAdmin):
-    list_display = ("meter", "period", "reading_date", "value", "is_estimate")
+    list_display = ("meter", "period", "reading_date", "value", "reset_from_value", "is_estimate")
     list_filter = ("meter__site", "meter__meter_type", "period", "is_estimate", _PeriodDefaultMarkerFilter)
     search_fields = ("meter__code", "meter__name")
     autocomplete_fields = ("meter",)
