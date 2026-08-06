@@ -1,0 +1,57 @@
+{% extends "admin/base_site.html" %}
+
+{% block content %}
+<div>
+    <form method="get" style="display:flex; gap:16px; align-items:flex-end; margin-bottom:20px; flex-wrap:wrap;">
+        <div>
+            <label for="id_site" style="display:block; font-weight:600; margin-bottom:6px;">Areál</label>
+            <select name="site" id="id_site" onchange="this.form.submit()" style="padding:8px; min-width:160px;">
+                <option value="">-- všechny --</option>
+                {% for s in sites %}
+                    <option value="{{ s.pk }}" {% if selected_site_id == s.pk %}selected{% endif %}>{{ s.name }}</option>
+                {% endfor %}
+            </select>
+        </div>
+    </form>
+
+    {% if not rows %}
+        <p>Žádné aktivní karty s plochami nenalezeny.</p>
+    {% else %}
+        <div style="overflow-x:auto;">
+        <table style="width:100%; border-collapse:collapse; font-size:13px;">
+            <thead>
+                <tr style="border-bottom:2px solid #666; text-align:left;">
+                    <th style="padding:6px 8px;">Klient</th>
+                    <th style="padding:6px 8px;">Karta</th>
+                    <th style="padding:6px 8px;">Areál</th>
+                    <th style="padding:6px 8px; text-align:right;">Výměra (m²)</th>
+                    <th style="padding:6px 8px; text-align:right;">Nájemné/měsíc</th>
+                    <th style="padding:6px 8px; text-align:right;">Nájemné/rok</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in rows %}
+                    <tr style="border-bottom:1px solid #333;">
+                        <td style="padding:6px 8px;">
+                            <a href="/admin/core/clientcard/{{ row.card.pk }}/change/">{{ row.client.name }}</a>
+                        </td>
+                        <td style="padding:6px 8px;">{{ row.card.description|default:"—" }}</td>
+                        <td style="padding:6px 8px;">
+                            {% for s in row.sites %}{{ s.name }}{% if not forloop.last %}, {% endif %}{% endfor %}
+                        </td>
+                        <td style="padding:6px 8px; text-align:right;">{{ row.area_m2|floatformat:2 }} m²</td>
+                        <td style="padding:6px 8px; text-align:right;">{{ row.monthly_rent|floatformat:2 }} Kč</td>
+                        <td style="padding:6px 8px; text-align:right; font-weight:600;">{{ row.yearly_rent|floatformat:2 }} Kč</td>
+                    </tr>
+                {% endfor %}
+                <tr style="border-top:2px solid #666; font-weight:700;">
+                    <td colspan="4" style="padding:8px; text-align:right;">Celkem</td>
+                    <td style="padding:8px; text-align:right;">{{ total_monthly|floatformat:2 }} Kč</td>
+                    <td style="padding:8px; text-align:right;">{{ total_yearly|floatformat:2 }} Kč</td>
+                </tr>
+            </tbody>
+        </table>
+        </div>
+    {% endif %}
+</div>
+{% endblock %}

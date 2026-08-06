@@ -1,0 +1,34 @@
+{% extends "admin/base_site.html" %}
+
+{% block content %}
+<div>
+    <div style="overflow-x:auto;">
+    <table style="width:100%; border-collapse:collapse; font-size:13px;">
+        <thead>
+            <tr style="border-bottom:2px solid #666; text-align:left;">
+                <th style="padding:6px 8px;">Klient</th>
+                <th style="padding:6px 8px;">IČO</th>
+                <th style="padding:6px 8px;">E-mail</th>
+                <th style="padding:6px 8px;">Telefon</th>
+                <th style="padding:6px 8px;">Zástupce</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for client in clients %}
+                <tr style="border-bottom:1px solid #333;">
+                    <td style="padding:6px 8px;">
+                        <a href="/admin/core/client/{{ client.pk }}/change/">{{ client.name }}</a>
+                    </td>
+                    <td style="padding:6px 8px;">{{ client.ico|default:"—" }}</td>
+                    <td style="padding:6px 8px;">
+                        {% if client.contact_email %}<a href="mailto:{{ client.contact_email }}">{{ client.contact_email }}</a>{% else %}—{% endif %}
+                    </td>
+                    <td style="padding:6px 8px;">{{ client.contact_phone|default:"—" }}</td>
+                    <td style="padding:6px 8px;">{{ client.representative_name|default:"—" }}</td>
+                </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    </div>
+</div>
+{% endblock %}

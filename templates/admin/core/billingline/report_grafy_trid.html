@@ -1,0 +1,82 @@
+{% extends "admin/base_site.html" %}
+
+{% block content %}
+<div>
+    <p style="color:#999; font-size:13px;">
+        Vývoj Nákladu (Kč) podle Třídy za posledních {{ n }} období. Interní přehled, čistě
+        CSS graf (žádná externí knihovna). Přesná čísla jsou v tabulce pod grafem.
+    </p>
+
+    <form method="get" style="display:flex; gap:16px; align-items:flex-end; margin-bottom:20px; flex-wrap:wrap;">
+        <div>
+            <label for="id_n" style="display:block; font-weight:600; margin-bottom:6px;">Počet období</label>
+            <select name="n" id="id_n" onchange="this.form.submit()" style="padding:8px; min-width:120px;">
+                <option value="3" {% if n == 3 %}selected{% endif %}>3</option>
+                <option value="6" {% if n == 6 %}selected{% endif %}>6</option>
+                <option value="12" {% if n == 12 %}selected{% endif %}>12</option>
+                <option value="24" {% if n == 24 %}selected{% endif %}>24</option>
+            </select>
+        </div>
+    </form>
+
+    {% if not per_period %}
+        <p>Žádná Období nenalezena.</p>
+    {% else %}
+        <div style="display:flex; gap:8px; margin-bottom:10px; font-size:12px;">
+            {% for cls in class_choices %}
+                <span style="display:flex; align-items:center; gap:4px;">
+                    <span style="width:12px; height:12px; border-radius:2px; display:inline-block; background:var(--chart-{{ cls.code }});"></span>
+                    {{ cls.label }}
+                </span>
+            {% endfor %}
+        </div>
+
+        <style>
+            :root {
+                --chart-rent: #6366f1;
+                --chart-electricity: #f59e0b;
+                --chart-water: #06b6d4;
+                --chart-heat: #ef4444;
+                --chart-other: #94a3b8;
+            }
+        </style>
+
+        <div style="display:flex; align-items:flex-end; gap:18px; height:260px; border-bottom:2px solid #666; padding:0 8px 0 8px; overflow-x:auto;">
+            {% for col in per_period %}
+                <div style="display:flex; flex-direction:column; align-items:center; min-width:70px;">
+                    <div style="display:flex; align-items:flex-end; gap:2px; height:220px;">
+                        {% for bar in col.bars %}
+                            <div title="{{ bar.label }}: {{ bar.value|floatformat:0 }} Kč"
+                                 style="width:10px; height:{{ bar.pct }}%; background:var(--chart-{{ bar.code }}); border-radius:2px 2px 0 0;"></div>
+                        {% endfor %}
+                    </div>
+                    <div style="font-size:11px; margin-top:6px; color:#999;">{{ col.period }}</div>
+                </div>
+            {% endfor %}
+        </div>
+
+        <div style="overflow-x:auto; margin-top:24px;">
+        <table style="width:100%; border-collapse:collapse; font-size:13px;">
+            <thead>
+                <tr style="border-bottom:2px solid #666; text-align:left;">
+                    <th style="padding:6px 8px;">Období</th>
+                    {% for cls in class_choices %}
+                        <th style="padding:6px 8px; text-align:right;">{{ cls.label }}</th>
+                    {% endfor %}
+                </tr>
+            </thead>
+            <tbody>
+                {% for col in per_period %}
+                    <tr style="border-bottom:1px solid #333;">
+                        <td style="padding:6px 8px;">{{ col.period }}</td>
+                        {% for bar in col.bars %}
+                            <td style="padding:6px 8px; text-align:right;">{{ bar.value|floatformat:0 }} Kč</td>
+                        {% endfor %}
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        </div>
+    {% endif %}
+</div>
+{% endblock %}

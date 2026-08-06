@@ -1,0 +1,42 @@
+{% extends "admin/base_site.html" %}
+
+{% block content %}
+<div>
+    <p style="color:#999; font-size:13px;">
+        Měřidla, která nejsou nikde použitá - ani jako hlavní měřidlo položky, ani napojené
+        na žádný klíč, ani jako nadřazené měřidlo jiného měřidla. Typicky pozůstatek po
+        zrušené/přejmenované struktuře - zvaž smazání.
+    </p>
+
+    {% if not meters %}
+        <p>Žádná nepřiřazená měřidla nenalezena.</p>
+    {% else %}
+        <div style="overflow-x:auto;">
+        <table style="width:100%; border-collapse:collapse; font-size:13px;">
+            <thead>
+                <tr style="border-bottom:2px solid #666; text-align:left;">
+                    <th style="padding:6px 8px;">Areál</th>
+                    <th style="padding:6px 8px;">Kód</th>
+                    <th style="padding:6px 8px;">Název</th>
+                    <th style="padding:6px 8px;">Typ</th>
+                    <th style="padding:6px 8px;">Virtuální</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for meter in meters %}
+                    <tr style="border-bottom:1px solid #333;">
+                        <td style="padding:6px 8px;">{{ meter.site }}</td>
+                        <td style="padding:6px 8px;">
+                            <a href="/admin/core/meter/{{ meter.pk }}/change/">{{ meter.code|default:"—" }}</a>
+                        </td>
+                        <td style="padding:6px 8px;">{{ meter.name }}</td>
+                        <td style="padding:6px 8px;">{{ meter.get_meter_type_display }}</td>
+                        <td style="padding:6px 8px;">{% if meter.is_virtual %}ano{% else %}ne{% endif %}</td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        </div>
+    {% endif %}
+</div>
+{% endblock %}

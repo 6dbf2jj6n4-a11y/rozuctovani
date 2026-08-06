@@ -256,6 +256,37 @@ UNFOLD = {
                 ],
             },
             {
+                "title": _("Reporty"),
+                "separator": True,
+                "items": [
+                    {
+                        "title": _("Plochy s více klienty"),
+                        "icon": "warning",
+                        "link": reverse_lazy("admin:core_clientcard_report_plochy_konflikt"),
+                    },
+                    {
+                        "title": _("Přehled nájemného"),
+                        "icon": "payments",
+                        "link": reverse_lazy("admin:core_clientcard_report_najemne"),
+                    },
+                    {
+                        "title": _("Nepřiřazená měřidla"),
+                        "icon": "speed",
+                        "link": reverse_lazy("admin:core_meter_report_neprirazena"),
+                    },
+                    {
+                        "title": _("Grafy nákladů dle tříd"),
+                        "icon": "bar_chart",
+                        "link": reverse_lazy("admin:core_billingline_report_grafy_trid"),
+                    },
+                    {
+                        "title": _("Seznam klientů s kontakty"),
+                        "icon": "contacts",
+                        "link": reverse_lazy("admin:core_client_report_kontakty"),
+                    },
+                ],
+            },
+            {
                 "title": _("Správa uživatelů"),
                 "separator": True,
                 "items": [

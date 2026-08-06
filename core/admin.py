@@ -464,6 +464,7 @@ class ClientAdmin(ModelAdmin):
         ("Identifikace", {
             "fields": (
                 ("ico", "dic", "ares_button"), "vat_payer",
+                ("entity_type", "registry_source"),
                 ("registry_court", "registry_section", "registry_insert"),
                 ("representative_name", "representative_role"),
                 "insolvency_status",
@@ -549,8 +550,27 @@ class ClientAdmin(ModelAdmin):
         custom = [
             path("ico-lookup/", self.admin_site.admin_view(ico_lookup), name="core_client_ico_lookup"),
             path("dph-lookup/", self.admin_site.admin_view(dph_lookup), name="core_client_dph_lookup"),
+            path(
+                "report/kontakty/",
+                self.admin_site.admin_view(self.report_kontakty_view),
+                name="core_client_report_kontakty",
+            ),
         ]
         return custom + urls
+
+    def report_kontakty_view(self, request):
+        """Report (Reporty v menu): jednoduchy seznam aktivnich klientu
+        s kontaktnimi udaji, pro rychly prehled/export."""
+        from django.shortcuts import render
+
+        clients = Client.objects.filter(is_active=True).order_by("name")
+        context = {
+            **self.admin_site.each_context(request),
+            "title": "Seznam klientů s kontakty",
+            "clients": clients,
+            "opts": self.model._meta,
+        }
+        return render(request, "admin/core/client/report_kontakty.html", context)
 
     @admin.action(description="Zobrazit e-maily vybraných klientů (pro BCC)")
     def export_emaily(self, request, queryset):
@@ -909,8 +929,99 @@ class ClientCardAdmin(ModelAdmin):
                 "generovat-kartu/<int:card_id>/", self.admin_site.admin_view(self.generate_card_and_download),
                 name="core_clientcard_generovat",
             ),
+            path(
+                "report/plochy-konflikt/",
+                self.admin_site.admin_view(self.report_plochy_konflikt_view),
+                name="core_clientcard_report_plochy_konflikt",
+            ),
+            path(
+                "report/najemne/",
+                self.admin_site.admin_view(self.report_najemne_view),
+                name="core_clientcard_report_najemne",
+            ),
         ]
         return custom + urls
+
+    def report_plochy_konflikt_view(self, request):
+        """Report (Reporty v menu): najde Plochy (Unit), ktere jsou
+        soucasne pres CardUnit napojene na aktivni Karty VICE RUZNYCH
+        klientu najednou - typicky omylem dvakrat pronajata plocha.
+        Existujici active_card_conflict() hlida jen "stejny klient, 2x
+        aktivni karta ve stejnem arealu", ne tohle (ruzni klienti,
+        stejna konkretni plocha) - viz konverzace s Danielem."""
+        from django.shortcuts import render
+
+        conflicts = []
+        units = Unit.objects.select_related("site").prefetch_related(
+            "card_units__card__client"
+        )
+        for unit in units:
+            active_cards = {
+                cu.card for cu in unit.card_units.all() if cu.card.is_active
+            }
+            clients = {card.client for card in active_cards}
+            if len(clients) > 1:
+                conflicts.append({
+                    "unit": unit,
+                    "cards": sorted(active_cards, key=lambda c: c.client.name),
+                })
+
+        context = {
+            **self.admin_site.each_context(request),
+            "title": "Plochy přiřazené více klientům najednou",
+            "conflicts": conflicts,
+            "opts": self.model._meta,
+        }
+        return render(request, "admin/core/clientcard/report_plochy_konflikt.html", context)
+
+    def report_najemne_view(self, request):
+        """Report (Reporty v menu): prehled najemneho po aktivnich Kartach -
+        vyuziva jiz existujici CardUnit.monthly_rent (plocha x sazba/12)."""
+        from django.shortcuts import render
+
+        site_id = request.GET.get("site")
+        sites = Site.objects.order_by("name")
+
+        cards = (
+            ClientCard.objects.filter(is_active=True)
+            .select_related("client")
+            .prefetch_related("card_units__unit__site")
+            .order_by("client__name")
+        )
+        if site_id:
+            cards = cards.filter(card_units__unit__site_id=site_id).distinct()
+
+        rows = []
+        for card in cards:
+            card_units = list(card.card_units.all())
+            if not card_units:
+                continue
+            total_area = sum((cu.area_m2 or Decimal("0")) for cu in card_units)
+            total_monthly = sum((cu.monthly_rent or Decimal("0") for cu in card_units), Decimal("0"))
+            sites_of_card = {cu.unit.site for cu in card_units}
+            rows.append({
+                "client": card.client,
+                "card": card,
+                "sites": sites_of_card,
+                "area_m2": total_area,
+                "monthly_rent": total_monthly,
+                "yearly_rent": total_monthly * 12,
+            })
+
+        rows.sort(key=lambda r: r["client"].name)
+        total_monthly = sum((r["monthly_rent"] for r in rows), Decimal("0"))
+
+        context = {
+            **self.admin_site.each_context(request),
+            "title": "Přehled nájemného",
+            "sites": sites,
+            "selected_site_id": int(site_id) if site_id else None,
+            "rows": rows,
+            "total_monthly": total_monthly,
+            "total_yearly": total_monthly * 12,
+            "opts": self.model._meta,
+        }
+        return render(request, "admin/core/clientcard/report_najemne.html", context)
 
     def generate_card_and_download(self, request, card_id):
         from io import BytesIO
@@ -1082,8 +1193,41 @@ class MeterAdmin(DuplicateModelAdminMixin, ModelAdmin):
                 self.admin_site.admin_view(meter_search),
                 name="core_meter_search",
             ),
+            path(
+                "report/neprirazena/",
+                self.admin_site.admin_view(self.report_neprirazena_view),
+                name="core_meter_report_neprirazena",
+            ),
         ]
         return custom + urls
+
+    def report_neprirazena_view(self, request):
+        """Report (Reporty v menu): meridla, ktera nejsou pouzita VUBEC -
+        ani jako hlavni meridlo polozky (ServicePoolItem.meter), ani
+        napojene na zadny Klic (AllocationKey.meter). Typicky pozustatek
+        po smazane/prejmenovane strukture (viz konverzace s Danielem -
+        E_VLASTNI/W_VLASTNI/T_SPOLECNA cistka)."""
+        from django.shortcuts import render
+
+        used_as_item_meter = ServicePoolItem.objects.exclude(meter__isnull=True).values_list("meter_id", flat=True)
+        used_as_key_meter = AllocationKey.objects.exclude(meter__isnull=True).values_list("meter_id", flat=True)
+        used_as_parent = Meter.objects.exclude(parent_meter__isnull=True).values_list("parent_meter_id", flat=True)
+
+        unused = (
+            Meter.objects.select_related("site")
+            .exclude(pk__in=used_as_item_meter)
+            .exclude(pk__in=used_as_key_meter)
+            .exclude(pk__in=used_as_parent)
+            .order_by("site__name", "code")
+        )
+
+        context = {
+            **self.admin_site.each_context(request),
+            "title": "Nepřiřazená měřidla",
+            "meters": unused,
+            "opts": self.model._meta,
+        }
+        return render(request, "admin/core/meter/report_neprirazena.html", context)
 
 
 @admin.register(Period)
@@ -1605,8 +1749,73 @@ class BillingLineAdmin(DefaultToLatestPeriodMixin, ModelAdmin):
                 self.admin_site.admin_view(self.podil_vah_view),
                 name="core_billingline_podil_vah",
             ),
+            path(
+                "report/grafy-trid/",
+                self.admin_site.admin_view(self.report_grafy_trid_view),
+                name="core_billingline_report_grafy_trid",
+            ),
         ]
         return custom + urls
+
+    def report_grafy_trid_view(self, request):
+        """Report (Reporty v menu): jednoduchy graf (cistym CSS, bez JS
+        knihovny) vyvoje Nakladu (Kc) po Tridach za poslednich N obdobi -
+        znovupouziva billing/item_summary.py get_item_summary_rows,
+        stejna data jako Prehled Naklad/Vynos, jen agregovana po tride
+        a obdobi misto po polozkach."""
+        from django.shortcuts import render
+        from billing.item_summary import get_item_summary_rows
+
+        try:
+            n = int(request.GET.get("n", 6))
+        except ValueError:
+            n = 6
+
+        periods = list(Period.objects.order_by("-year", "-month")[:n])
+        periods.reverse()  # chronologicky pro graf
+
+        class_labels = dict(ServicePoolItem.InvoiceClass.choices)
+        class_order = [code for code, _ in ServicePoolItem.InvoiceClass.choices]
+
+        raw_totals = []
+        max_value = Decimal("0")
+        for period in periods:
+            totals = {code: Decimal("0") for code in class_order}
+            for row in get_item_summary_rows(period):
+                if row["naklad"] is not None:
+                    totals[row["invoice_class_key"]] += row["naklad"]
+            raw_totals.append((period, totals))
+            period_max = max(totals.values()) if totals else Decimal("0")
+            max_value = max(max_value, period_max)
+
+        max_value = max_value or Decimal("1")
+        # Vyska sloupcu (%) se dopocitava tady v Pythonu, ne v sablone -
+        # Django template jazyk nema vestaveny operator deleni.
+        per_period = [
+            {
+                "period": period,
+                "bars": [
+                    {
+                        "code": code,
+                        "label": class_labels[code],
+                        "value": totals[code],
+                        "pct": float(totals[code] / max_value * 100),
+                    }
+                    for code in class_order
+                ],
+            }
+            for period, totals in raw_totals
+        ]
+
+        context = {
+            **self.admin_site.each_context(request),
+            "title": "Grafy nákladů podle tříd",
+            "class_choices": [{"code": code, "label": class_labels[code]} for code in class_order],
+            "per_period": per_period,
+            "n": n,
+            "opts": self.model._meta,
+        }
+        return render(request, "admin/core/billingline/report_grafy_trid.html", context)
 
     def podil_vah_view(self, request):
         """Pro vybranou Polozku zasobniku a Obdobi ukaze vahu/meridlo a
