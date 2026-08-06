@@ -12,7 +12,7 @@ try:
 except admin.sites.NotRegistered:
     pass
 from django import forms
-from unfold.admin import ModelAdmin, TabularInline
+from .admin_mixins import ModelAdmin, TabularInline
 
 from .models import (
     Client, ClientCard, Contract, Site, Unit, CardUnit,
