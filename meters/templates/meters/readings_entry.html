@@ -223,6 +223,7 @@
     var periodId = {{ period.pk|default:"null" }};
     var periodClosed = {{ period_closed|yesno:"true,false" }};
     var siteId = {{ site.pk|default:"null" }};
+    var isCoarsePointer = window.matchMedia && window.matchMedia("(pointer: coarse)").matches;
     var csrfToken = document.querySelector('input[name=csrfmiddlewaretoken]').value;
     var saveUrl = "{% url 'odecty-ulozit' %}";
     var reorderUrl = "{% url 'odecty-preradit' %}";
@@ -359,7 +360,7 @@
 
         updateCalc();
         updateSumBanner();
-        if (!periodClosed) valInput.focus();
+        if (!periodClosed && !isCoarsePointer) valInput.focus();
     }
 
     function updateCalc() {
