@@ -9,6 +9,8 @@ from datetime import date
 from django.core.exceptions import ValidationError
 from django.db import models
 
+from core.storage import R2MediaStorage
+
 
 # Typy rozpoctu - sdileno mezi ServicePoolItem (vychozi typ) a AllocationKey
 # (skutecny typ pouzity na konkretni karte klienta).
@@ -86,6 +88,23 @@ class Client(models.Model):
     ico = models.CharField("IČO", max_length=20, blank=True)
     dic = models.CharField("DIČ", max_length=20, blank=True)
     vat_payer = models.BooleanField("Plátce DPH", default=False)
+
+    class EntityType(models.TextChoices):
+        LEGAL = "pravnicka", "Právnická osoba"
+        NATURAL = "fyzicka", "Fyzická osoba"
+
+    entity_type = models.CharField(
+        "Typ osoby", max_length=20, blank=True, choices=EntityType.choices,
+    )
+
+    class RegistrySource(models.TextChoices):
+        COMMERCIAL = "obchodni", "Obchodní rejstřík"
+        TRADE = "zivnostensky", "Živnostenský rejstřík"
+
+    registry_source = models.CharField(
+        "Zdroj údajů", max_length=20, blank=True, choices=RegistrySource.choices,
+        help_text="Ze kterého rejstříku pochází identifikační údaje klienta (IČO, sídlo...).",
+    )
 
     class InsolvencyStatus(models.TextChoices):
         NONE = "", "—"
@@ -538,7 +557,10 @@ class MeterReading(models.Model):
     )
     is_estimate = models.BooleanField("Odhad", default=False)
     note = models.CharField("Poznámka", max_length=300, blank=True)
-    photo = models.ImageField("Foto odečtu", upload_to="odecty/%Y/%m/", null=True, blank=True)
+    photo = models.ImageField(
+        "Foto odečtu", upload_to="odecty/%Y/%m/", null=True, blank=True,
+        storage=R2MediaStorage(),
+    )
     reset_from_value = models.DecimalField(
         "Počáteční stav (výměna měřidla)", max_digits=14, decimal_places=3, null=True, blank=True,
         help_text=(

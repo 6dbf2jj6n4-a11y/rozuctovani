@@ -84,6 +84,7 @@ def readings_entry(request):
                         float(existing.reset_from_value)
                         if existing and existing.reset_from_value is not None else None
                     ),
+                    "photo_url": existing.photo.url if existing and existing.photo else None,
                 } if existing else None,
             })
 
@@ -162,6 +163,37 @@ def readings_save(request):
         "ok": True,
         "consumption": float(consumption) if consumption is not None else None,
     })
+
+
+@login_required
+@require_POST
+def readings_photo(request):
+    user = request.user
+    _require_spravce(user)
+
+    meter = get_object_or_404(Meter, pk=request.POST.get("meter_id"))
+    if not user.get_accessible_sites().filter(pk=meter.site_id).exists():
+        raise PermissionDenied("K tomuto areálu nemáš přístup.")
+
+    period = get_object_or_404(Period, pk=request.POST.get("period_id"))
+    if period.status == Period.Status.CLOSED:
+        return JsonResponse(
+            {"ok": False, "error": "Období je uzavřené, foto nejde přidat."}, status=400
+        )
+
+    reading = MeterReading.objects.filter(meter=meter, period=period).first()
+    if reading is None:
+        return JsonResponse(
+            {"ok": False, "error": "Nejdřív ulož odečet, pak přidej foto."}, status=400
+        )
+
+    photo = request.FILES.get("photo")
+    if not photo:
+        return JsonResponse({"ok": False, "error": "Nebyl vybrán žádný soubor."}, status=400)
+
+    reading.photo = photo
+    reading.save()
+    return JsonResponse({"ok": True, "photo_url": reading.photo.url})
 
 
 @login_required

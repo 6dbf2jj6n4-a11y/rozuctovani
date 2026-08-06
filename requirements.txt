@@ -10,3 +10,4 @@ python-docx
 requests
 reportlab
 Pillow
+django-storages[s3]
