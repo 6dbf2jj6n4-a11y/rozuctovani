@@ -35,7 +35,7 @@ class Command(BaseCommand):
                 continue
 
             card = ClientCard.objects.filter(external_id=idk).first()
-            unit = Unit.objects.filter(code=code).first()
+            unit = Unit.objects.filter(name=code).first()
 
             if not card or not unit:
                 self.stdout.write(f"  Nenalezeno: karta IDK={idk} nebo plocha {code}")

@@ -193,9 +193,9 @@ class UnitServiceOtherInline(UnitServiceInlineBase):
 
 @admin.register(Unit)
 class UnitAdmin(DuplicateModelAdminMixin, ModelAdmin):
-    list_display = ("code", "name", "site", "purpose", "area_m2", "unit_type")
+    list_display = ("name", "site", "purpose", "area_m2", "unit_type")
     list_filter = ("site",)
-    search_fields = ("name", "code")
+    search_fields = ("name",)
     actions = ["duplicate_selected"]
     inlines = [
         UnitServiceElectricityInline,

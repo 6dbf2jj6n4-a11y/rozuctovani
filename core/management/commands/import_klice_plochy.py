@@ -68,14 +68,13 @@ class Command(BaseCommand):
                 skipped += 1
                 continue
 
-            unit = Unit.objects.filter(code=unit_code, site=site).first()
+            unit = Unit.objects.filter(name=unit_code, site=site).first()
             if not unit:
                 # Zkusime hledat bez arealu (pro plochy bez site)
-                unit = Unit.objects.filter(code=unit_code).first()
+                unit = Unit.objects.filter(name=unit_code).first()
             if not unit and options["create_units"]:
                 unit = Unit.objects.create(
                     site=site,
-                    code=unit_code,
                     name=unit_code,
                     purpose=ucel,
                     area_m2=Decimal(str(pronajato)) if pronajato else None,

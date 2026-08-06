@@ -102,10 +102,9 @@ class Command(BaseCommand):
             rate = data.get("SazbaKcMRok")
 
             unit, created = Unit.objects.get_or_create(
-                code=code,
+                name=code,
                 site=site,
                 defaults={
-                    "name": code,
                     "purpose": str(data.get("Ucel") or "").strip(),
                     "area_m2": float(m2) if m2 else None,
                     "rate_per_m2_year": float(rate) if rate else None,
