@@ -141,7 +141,10 @@ class Client(models.Model):
     bank_code = models.CharField("Kód banky", max_length=10, blank=True)
 
     contact_email = models.EmailField("E-mail", blank=True)
-    contact_phone = models.CharField("Telefon", max_length=50, blank=True)
+    contact_phone = models.CharField(
+        "Telefon", max_length=50, blank=True, default="+420 ",
+        help_text="Formát: +420 777123456.",
+    )
     note = models.CharField("Poznámka", max_length=500, blank=True)
 
     class Meta:
@@ -159,6 +162,17 @@ class Client(models.Model):
                 "Pronajímatel může být v aplikaci nastaven jen jeden - odškrtni "
                 "tento příznak u druhého klienta, který ho má aktuálně nastavený."
             )
+
+    def save(self, *args, **kwargs):
+        """Kdyz se klient prepne na neaktivniho, deaktivuji se i vsechny jeho
+        (dosud aktivni) Karty - neaktivni klient nemuze mit aktivni kartu."""
+        deactivate_cards = False
+        if self.pk and not self.is_active:
+            was_active = Client.objects.filter(pk=self.pk, is_active=True).exists()
+            deactivate_cards = was_active
+        super().save(*args, **kwargs)
+        if deactivate_cards:
+            self.cards.filter(is_active=True).update(is_active=False)
 
 
 class Contract(models.Model):
