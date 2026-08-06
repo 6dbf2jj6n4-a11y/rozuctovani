@@ -594,9 +594,24 @@ class MeterReading(models.Model):
     def __str__(self):
         return f"{self.meter} – {self.period}: {self.value}"
 
+    _tracked_fields = ("period_id", "reading_date", "value", "is_estimate", "note", "reset_from_value")
+
     def clean(self):
-        if self.period_id and self.period.status == Period.Status.CLOSED:
+        if self.period_id and self.period.status == Period.Status.CLOSED and self._reading_data_changed():
             raise ValidationError("Období je uzavřené, odečet nejde přidat ani upravit.")
+
+    def _reading_data_changed(self):
+        """True pro novy odecet nebo pokud se u existujiciho zmenil nektery
+        z udaju o odectu samotnem. Bez tohohle by se saved formulare s
+        MeterReadingInline (napr. jen oprava nazvu Meridla) nesly ulozit,
+        jakmile ma mericlo aspon jeden odecet ve zminulem uzavrenem obdobi -
+        Django validuje pri ukladani vsechny radky inline, i nezmenene."""
+        if not self.pk:
+            return True
+        original = MeterReading.objects.filter(pk=self.pk).values(*self._tracked_fields).first()
+        if original is None:
+            return True
+        return any(original[field] != getattr(self, field) for field in self._tracked_fields)
 
     def save(self, *args, **kwargs):
         self.clean()
