@@ -8,7 +8,6 @@ from decimal import Decimal, InvalidOperation
 
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import PermissionDenied
-from django.db.models import Q
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, render
 from django.utils import timezone
@@ -39,30 +38,69 @@ def readings_entry(request):
 
     meters_data = []
     if site and period:
-        meters = (
+        meters = list(
             Meter.objects.filter(site=site, is_virtual=False)
             .order_by("display_order", "meter_type", "code")
         )
-        prev_period = period.previous_period()
-        yoy_period = Period.objects.filter(year=period.year - 1, month=period.month).first()
-        earlier_periods = list(
-            Period.objects.filter(
-                Q(year__lt=period.year) | Q(year=period.year, month__lt=period.month)
-            ).order_by("-year", "-month")[:8]
-        )
+
+        # Vsechna obdobi a odecty nactena hromadne dopredu (misto dotazu
+        # na kazde meridlo/obdobi zvlast) - u arealu s vic meridly to
+        # driv delalo stovky az tisice DB dotazu na jedno nacteni
+        # stranky a gunicorn worker to po 30s zabil (viz konverzace s
+        # Danielem 2026-08-06, NJ/FM vs. male DV).
+        all_periods = list(Period.objects.all())
+        periods_by_ym = {(p.year, p.month): p for p in all_periods}
+
+        def prev_of(p):
+            if p is None:
+                return None
+            y, mo = (p.year - 1, 12) if p.month == 1 else (p.year, p.month - 1)
+            return periods_by_ym.get((y, mo))
+
+        prev_period = prev_of(period)
+        yoy_period = periods_by_ym.get((period.year - 1, period.month))
+        earlier_periods = sorted(
+            (p for p in all_periods if (p.year, p.month) < (period.year, period.month)),
+            key=lambda p: (p.year, p.month),
+            reverse=True,
+        )[:8]
+
+        needed_periods = {period, prev_period, yoy_period, prev_of(yoy_period)}
+        for hp in earlier_periods:
+            needed_periods.add(hp)
+            needed_periods.add(prev_of(hp))
+        needed_periods.discard(None)
+
+        readings_map = {
+            (r.meter_id, r.period_id): r
+            for r in MeterReading.objects.filter(meter__in=meters, period__in=needed_periods)
+        }
+
+        def consumption_of(m, p):
+            if p is None:
+                return None
+            current = readings_map.get((m.id, p.id))
+            if current is None:
+                return None
+            if m.reading_mode == Meter.ReadingMode.CONSUMPTION:
+                return current.value
+            if current.reset_from_value is not None:
+                return current.value - current.reset_from_value
+            previous = readings_map.get((m.id, prev_of(p).id)) if prev_of(p) else None
+            return (current.value - previous.value) if previous else None
 
         for m in meters:
-            existing = m.readings.filter(period=period).first()
-            previous = m.readings.filter(period=prev_period).first() if prev_period else None
+            existing = readings_map.get((m.id, period.id))
+            previous = readings_map.get((m.id, prev_period.id)) if prev_period else None
 
             hist = []
             for p in earlier_periods:
-                c = m.consumption_for(p)
+                c = consumption_of(m, p)
                 if c is not None:
                     hist.append({"label": str(p), "value": float(c)})
             hist.reverse()
 
-            yoy_value = m.consumption_for(yoy_period) if yoy_period else None
+            yoy_value = consumption_of(m, yoy_period) if yoy_period else None
 
             meters_data.append({
                 "id": m.id,
