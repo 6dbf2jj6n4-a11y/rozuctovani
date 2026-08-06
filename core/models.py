@@ -255,6 +255,14 @@ class ClientCard(models.Model):
     document = models.FileField(
         "Vygenerovaný dokument (Karta nájemce)", upload_to="karty/", null=True, blank=True
     )
+    po_number_rent = models.CharField(
+        "Číslo objednávky - nájemné", max_length=100, blank=True,
+        help_text="Někteří klienti vyžadují uvést na faktuře za nájemné - vázané na tuto Kartu.",
+    )
+    po_number_services = models.CharField(
+        "Číslo objednávky - energie a služby", max_length=100, blank=True,
+        help_text="Někteří klienti vyžadují uvést na faktuře/vyúčtování za energie a služby - vázané na tuto Kartu.",
+    )
 
     class Meta:
         verbose_name = "Karta klienta"

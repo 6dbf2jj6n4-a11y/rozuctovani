@@ -888,6 +888,9 @@ class ClientCardAdmin(ModelAdmin):
         ("Základní údaje", {
             "fields": (("client", "description"), ("valid_from", "valid_to"), "is_active", "note")
         }),
+        ("Čísla objednávek (na faktury)", {
+            "fields": (("po_number_rent", "po_number_services"),)
+        }),
         ("Karta nájemce (Příloha č. 1)", {
             "fields": ("generate_card_button", "document")
         }),
