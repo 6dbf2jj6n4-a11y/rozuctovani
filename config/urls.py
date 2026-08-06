@@ -17,9 +17,12 @@ def home(request):
     role = request.user.role
     if role == User.Role.KLIENT:
         return redirect("moje-vyuctovani")
-    if role == User.Role.SPRAVCE:
-        return redirect("odecty")
-    return redirect("admin:index")
+    if role == User.Role.ADMIN and request.user.is_staff:
+        return redirect("admin:index")
+    # Spravce, nebo Admin bez zaskrtnuteho Staff statusu (jinak by ho
+    # Django admin odrazil zpet na /admin/login/, kde nekdy pada sablona
+    # - viz konverzace s Danielem 2026-08-06) - odecty fungujou pro obe role.
+    return redirect("odecty")
 
 
 @staff_member_required
