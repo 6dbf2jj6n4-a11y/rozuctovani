@@ -987,7 +987,13 @@ class ClientCardAdmin(ModelAdmin):
 
     def report_najemne_view(self, request):
         """Report (Reporty v menu): prehled najemneho po aktivnich Kartach -
-        vyuziva jiz existujici CardUnit.monthly_rent (plocha x sazba/12)."""
+        vyuziva jiz existujici CardUnit.monthly_rent (plocha x sazba/12).
+        Mesicni castka za kartu se zaokrouhluje NAHORU na cele koruny
+        (ROUND_CEILING, ne bezne zaokrouhleni) - takhle se najemne
+        skutecne fakturuje, viz konverzace s Danielem. Rocni castka je
+        odvozena z JIZ zaokrouhlene mesicni (x12), aby souhlasila se
+        souctem 12 skutecne fakturovanych mesicu."""
+        from decimal import ROUND_CEILING
         from django.shortcuts import render
 
         site_id = request.GET.get("site")
@@ -1008,7 +1014,8 @@ class ClientCardAdmin(ModelAdmin):
             if not card_units:
                 continue
             total_area = sum((cu.area_m2 or Decimal("0")) for cu in card_units)
-            total_monthly = sum((cu.monthly_rent or Decimal("0") for cu in card_units), Decimal("0"))
+            raw_monthly = sum((cu.monthly_rent or Decimal("0") for cu in card_units), Decimal("0"))
+            total_monthly = raw_monthly.quantize(Decimal("1"), rounding=ROUND_CEILING)
             sites_of_card = {cu.unit.site for cu in card_units}
             rows.append({
                 "client": card.client,
