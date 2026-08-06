@@ -1088,13 +1088,26 @@ class MeterAdmin(DuplicateModelAdminMixin, ModelAdmin):
 
 @admin.register(Period)
 class PeriodAdmin(ModelAdmin):
-    list_display = ("__str__", "status", "days_in_period")
+    list_display = ("__str__", "status", "days_in_period", "odecty_button")
     list_filter = ("status",)
     ordering = ("-year", "-month")
     actions = [
         "spocitat_rozuctovani", "zkontrolovat_co_zadat", "vygenerovat_chybejici_naklady",
         "uzavrit_obdobi", "znovu_otevrit_obdobi",
     ]
+
+    def odecty_button(self, obj):
+        from django.urls import reverse
+        from django.utils.html import format_html
+        url = f"{reverse('odecty')}?period={obj.pk}"
+        return format_html(
+            '<a href="{}" target="_blank" '
+            'style="padding:4px 12px; border-radius:6px; background:#2563eb; '
+            'color:white; font-weight:600; text-decoration:none; display:inline-block; font-size:12px;">'
+            'Zadat odečty</a>',
+            url,
+        )
+    odecty_button.short_description = "Odečty"
 
     def get_actions(self, request):
         actions = super().get_actions(request)
