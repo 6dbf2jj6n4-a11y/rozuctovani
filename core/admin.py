@@ -948,28 +948,39 @@ class ClientCardAdmin(ModelAdmin):
         klientu najednou - typicky omylem dvakrat pronajata plocha.
         Existujici active_card_conflict() hlida jen "stejny klient, 2x
         aktivni karta ve stejnem arealu", ne tohle (ruzni klienti,
-        stejna konkretni plocha) - viz konverzace s Danielem."""
+        stejna konkretni plocha) - viz konverzace s Danielem.
+
+        Vysledky jsou SESKUPENE podle Arealu (ne jen sloupec v ploche
+        tabulce) - dve ruzne Plochy se stejnym Nazvem v ruznych Arealech
+        jsou u sebe v tabulce snadno k nerozeznani, Daniel si to
+        spletl."""
         from django.shortcuts import render
 
-        conflicts = []
         units = Unit.objects.select_related("site").prefetch_related(
             "card_units__card__client"
-        )
+        ).order_by("site__name", "name")
+
+        conflicts_by_site = {}
         for unit in units:
             active_cards = {
                 cu.card for cu in unit.card_units.all() if cu.card.is_active
             }
             clients = {card.client for card in active_cards}
             if len(clients) > 1:
-                conflicts.append({
+                conflicts_by_site.setdefault(unit.site, []).append({
                     "unit": unit,
                     "cards": sorted(active_cards, key=lambda c: c.client.name),
                 })
 
+        groups = [
+            {"site": site, "conflicts": conflicts}
+            for site, conflicts in sorted(conflicts_by_site.items(), key=lambda kv: kv[0].name)
+        ]
+
         context = {
             **self.admin_site.each_context(request),
             "title": "Plochy přiřazené více klientům najednou",
-            "conflicts": conflicts,
+            "groups": groups,
             "opts": self.model._meta,
         }
         return render(request, "admin/core/clientcard/report_plochy_konflikt.html", context)
@@ -1758,11 +1769,14 @@ class BillingLineAdmin(DefaultToLatestPeriodMixin, ModelAdmin):
         return custom + urls
 
     def report_grafy_trid_view(self, request):
-        """Report (Reporty v menu): jednoduchy graf (cistym CSS, bez JS
-        knihovny) vyvoje Nakladu (Kc) po Tridach za poslednich N obdobi -
-        znovupouziva billing/item_summary.py get_item_summary_rows,
-        stejna data jako Prehled Naklad/Vynos, jen agregovana po tride
-        a obdobi misto po polozkach."""
+        """Report (Reporty v menu): SVG sloupcovy graf (seskupene sloupce,
+        ne CSS procentualni vysky - ty se v praxi ukazaly nespolehlive,
+        viz konverzace s Danielem) vyvoje Nakladu (Kc) po Tridach za
+        poslednich N obdobi. Geometrie se pocita tady v Pythonu (presne
+        souradnice do <rect>), aby sablona byla jen tupe vykresleni bez
+        vypoctu. Barvy podle dataviz skillu (categorical palette,
+        pevne poradi slotu, viz core/static/... zadne externi zavislosti)."""
+        import math
         from django.shortcuts import render
         from billing.item_summary import get_item_summary_rows
 
@@ -1776,42 +1790,114 @@ class BillingLineAdmin(DefaultToLatestPeriodMixin, ModelAdmin):
 
         class_labels = dict(ServicePoolItem.InvoiceClass.choices)
         class_order = [code for code, _ in ServicePoolItem.InvoiceClass.choices]
+        # Pevne poradi barevnych slotu (nikdy necyklovat) - viz dataviz
+        # skill references/palette.md, kategoriala paleta sloty 1-5.
+        class_colors = {
+            "rent": "#2a78d6",
+            "electricity": "#eb6834",
+            "water": "#1baf7a",
+            "heat": "#eda100",
+            "other": "#e87ba4",
+        }
 
         raw_totals = []
-        max_value = Decimal("0")
         for period in periods:
             totals = {code: Decimal("0") for code in class_order}
             for row in get_item_summary_rows(period):
                 if row["naklad"] is not None:
                     totals[row["invoice_class_key"]] += row["naklad"]
             raw_totals.append((period, totals))
+
+        max_value = Decimal("0")
+        for _, totals in raw_totals:
             period_max = max(totals.values()) if totals else Decimal("0")
             max_value = max(max_value, period_max)
 
-        max_value = max_value or Decimal("1")
-        # Vyska sloupcu (%) se dopocitava tady v Pythonu, ne v sablone -
-        # Django template jazyk nema vestaveny operator deleni.
-        per_period = [
-            {
+        def _nice_ceiling(value):
+            """Zaokrouhli nahoru na "hezke" cislo (1/2/5 x 10^n) pro osu Y."""
+            value = float(value)
+            if value <= 0:
+                return Decimal("100")
+            exp = math.floor(math.log10(value))
+            base = value / (10 ** exp)
+            nice = 1 if base <= 1 else 2 if base <= 2 else 5 if base <= 5 else 10
+            return Decimal(str(nice)) * (Decimal("10") ** exp)
+
+        y_max = _nice_ceiling(max_value)
+
+        # --- SVG geometrie (vse v px, pocitano tady, sablona uz jen kresli) ---
+        plot_h = 240
+        bar_w = 14
+        bar_gap = 2
+        cluster_gap = 22
+        left_margin = 64
+        top_margin = 30
+        bottom_margin = 34
+        cluster_w = len(class_order) * bar_w + (len(class_order) - 1) * bar_gap
+        chart_w = left_margin + len(periods) * (cluster_w + cluster_gap) + cluster_gap
+        chart_h = top_margin + plot_h + bottom_margin
+        baseline_y = top_margin + plot_h
+
+        def _y(value):
+            if y_max == 0:
+                return baseline_y
+            return float(baseline_y - (value / y_max) * plot_h)
+
+        gridlines = []
+        for i in range(5):
+            frac = Decimal(i) / Decimal(4)
+            value = y_max * frac
+            gy = _y(value)
+            gridlines.append({
+                "y": gy,
+                "label_x": left_margin - 8,
+                "label_y": gy + 4,
+                "label": f"{value:,.0f}".replace(",", " "),
+            })
+
+        clusters = []
+        x = left_margin + cluster_gap
+        for period, totals in raw_totals:
+            bars = []
+            bx = x
+            total = Decimal("0")
+            for code in class_order:
+                value = totals[code]
+                total += value
+                bar_top = _y(value)
+                bars.append({
+                    "x": bx,
+                    "y": bar_top,
+                    "w": bar_w,
+                    "h": max(baseline_y - bar_top, 0),
+                    "color": class_colors[code],
+                    "label": class_labels[code],
+                    "value": value,
+                })
+                bx += bar_w + bar_gap
+            clusters.append({
                 "period": period,
-                "bars": [
-                    {
-                        "code": code,
-                        "label": class_labels[code],
-                        "value": totals[code],
-                        "pct": float(totals[code] / max_value * 100),
-                    }
-                    for code in class_order
-                ],
-            }
-            for period, totals in raw_totals
-        ]
+                "bars": bars,
+                "label_x": x + cluster_w / 2,
+                "total": total,
+                "total_label_y": top_margin - 6,
+                "period_label_y": baseline_y + 18,
+            })
+            x += cluster_w + cluster_gap
 
         context = {
             **self.admin_site.each_context(request),
             "title": "Grafy nákladů podle tříd",
-            "class_choices": [{"code": code, "label": class_labels[code]} for code in class_order],
-            "per_period": per_period,
+            "class_choices": [
+                {"code": code, "label": class_labels[code], "color": class_colors[code]}
+                for code in class_order
+            ],
+            "clusters": clusters,
+            "gridlines": gridlines,
+            "chart_w": chart_w,
+            "chart_h": chart_h,
+            "baseline_y": baseline_y,
+            "left_margin": left_margin,
             "n": n,
             "opts": self.model._meta,
         }

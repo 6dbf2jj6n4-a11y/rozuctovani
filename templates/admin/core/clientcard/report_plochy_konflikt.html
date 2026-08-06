@@ -4,38 +4,40 @@
 <div>
     <p style="color:#999; font-size:13px;">
         Plochy, které jsou přes uložené Plochy karty (CardUnit) napojené na Aktivní kartu více
-        různých klientů najednou - typicky omylem dvakrat pronajatá plocha.
+        různých klientů najednou - typicky omylem dvakrat pronajatá plocha. Seskupeno podle
+        Areálu - stejně pojmenovaná Plocha ve dvou různých Areálech je vždy v jiné skupině.
     </p>
 
-    {% if not conflicts %}
+    {% if not groups %}
         <p>Žádný konflikt nenalezen - žádná plocha není aktivně přiřazená více klientům najednou.</p>
     {% else %}
-        <div style="overflow-x:auto;">
-        <table style="width:100%; border-collapse:collapse; font-size:13px;">
-            <thead>
-                <tr style="border-bottom:2px solid #666; text-align:left;">
-                    <th style="padding:6px 8px;">Areál</th>
-                    <th style="padding:6px 8px;">Plocha</th>
-                    <th style="padding:6px 8px;">Klienti s aktivní kartou na této ploše</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for row in conflicts %}
-                    <tr style="border-bottom:1px solid #333;">
-                        <td style="padding:6px 8px;">{{ row.unit.site }}</td>
-                        <td style="padding:6px 8px;">{{ row.unit.name }}</td>
-                        <td style="padding:6px 8px;">
-                            {% for card in row.cards %}
-                                <a href="/admin/core/clientcard/{{ card.pk }}/change/">
-                                    {{ card.client.name }} ({{ card.description|default:"bez popisu" }})
-                                </a>{% if not forloop.last %}, {% endif %}
-                            {% endfor %}
-                        </td>
+        {% for group in groups %}
+            <h2 style="margin-top:28px;">{{ group.site.name }}</h2>
+            <div style="overflow-x:auto;">
+            <table style="width:100%; border-collapse:collapse; font-size:13px;">
+                <thead>
+                    <tr style="border-bottom:2px solid #666; text-align:left;">
+                        <th style="padding:6px 8px;">Plocha</th>
+                        <th style="padding:6px 8px;">Klienti s aktivní kartou na této ploše</th>
                     </tr>
-                {% endfor %}
-            </tbody>
-        </table>
-        </div>
+                </thead>
+                <tbody>
+                    {% for row in group.conflicts %}
+                        <tr style="border-bottom:1px solid #333;">
+                            <td style="padding:6px 8px;">{{ row.unit.name }}</td>
+                            <td style="padding:6px 8px;">
+                                {% for card in row.cards %}
+                                    <a href="/admin/core/clientcard/{{ card.pk }}/change/">
+                                        {{ card.client.name }} ({{ card.description|default:"bez popisu" }})
+                                    </a>{% if not forloop.last %}, {% endif %}
+                                {% endfor %}
+                            </td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            </div>
+        {% endfor %}
     {% endif %}
 </div>
 {% endblock %}
