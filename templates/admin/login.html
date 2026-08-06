@@ -1,0 +1,75 @@
+{% extends 'unfold/layouts/unauthenticated.html' %}
+
+{% load i18n static unfold %}
+
+{% comment %}
+Prepsana verze unfold/templates/admin/login.html - originál pouziva
+{% component "unfold/components/button.html" %} pro tlacitka, coz v
+teto kombinaci django-unfold 0.67.0 + Django 5.0 pada s
+VariableDoesNotExist/KeyError na 'attrs'/'href'/'name'/'opts' (znamy
+bug, viz github.com/unfoldadmin/django-unfold issues #1018/#1514) -
+stranka /admin/login/ tak spadla pro uplne kazdeho, prihlaseneho i
+neprihlaseneho. Tlacitka tu jsou napsana rovnou jako obycejne HTML se
+stejnymi Tailwind tridami, misto pres ten rozbity tag. Viz konverzace
+s Danielem 2026-08-06.
+{% endcomment %}
+
+{% block extrastyle %}
+    {{ block.super }}
+    {{ form.media }}
+{% endblock %}
+
+{% block title %}
+    {{ title }} | {{ site_title }}
+{% endblock %}
+
+{% block content %}
+    {% include "unfold/helpers/unauthenticated_title.html" with title=site_title|default:_('Django site admin') subtitle=_('Welcome back to') %}
+
+    {% include "unfold/helpers/messages.html" %}
+
+    {% if form.errors or form.non_field_errors %}
+        <div class="flex flex-col gap-4 mb-8 *:mb-0">
+            {% include "unfold/helpers/messages/errornote.html" with errors=form.errors %}
+
+            {% include "unfold/helpers/messages/error.html" with errors=form.non_field_errors %}
+
+            {% if user.is_authenticated %}
+                {% blocktranslate trimmed asvar message %}
+                    You are authenticated as {{ username }}, but are not authorized to
+                    access this page. Would you like to login to a different account?
+                {% endblocktranslate %}
+
+                {% include "unfold/helpers/messages/error.html" with error=message %}
+            {% endif %}
+        </div>
+    {% endif %}
+
+    {% block login_before %}{% endblock %}
+
+    <form action="{{ app_path }}" method="post" id="login-form">
+        {% csrf_token %}
+
+        {% include "unfold/helpers/field.html" with field=form.username %}
+
+        {% include "unfold/helpers/field.html" with field=form.password %}
+
+        <div class="flex flex-col gap-3 mt-6">
+            <button type="submit" class="font-medium flex group items-center gap-2 px-3 py-2 rounded-default justify-center whitespace-nowrap cursor-pointer border border-base-200 bg-primary-600 border-transparent text-white submit-row w-full">
+                {% translate 'Log in' %} <span class="material-symbols-outlined relative right-0 transition-all group-hover:-right-1 text-sm">arrow_forward</span>
+            </button>
+
+            {% url 'admin_password_reset' as password_reset_url %}
+            {% url 'admin:admin_password_reset' as unfold_password_reset_url %}
+            {% firstof password_reset_url unfold_password_reset_url as reset_url %}
+
+            {% if reset_url %}
+                <a href="{{ reset_url }}" class="font-medium flex group items-center gap-2 px-3 py-2 rounded-default justify-center whitespace-nowrap cursor-pointer bg-base-100 border border-transparent dark:bg-base-800 password-reset-link w-full">
+                    {% translate 'Forgotten your password or username?' %}
+                </a>
+            {% endif %}
+        </div>
+    </form>
+
+    {% block login_after %}{% endblock %}
+{% endblock %}
