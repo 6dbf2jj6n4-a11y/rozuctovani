@@ -73,11 +73,13 @@
         .hist-track { width: 100%; height: 44px; display: flex; align-items: flex-end; }
         .hist-bar { width: 100%; background: #cbd5e1; border-radius: 2px 2px 0 0; }
         .hist-label { font-size: 11px; color: #9ca3af; }
-        .photo-btn {
-            width: 100%; height: 40px; border-radius: 8px; border: 1px solid #d1d5db; background: #fff;
-            font-size: 14px; cursor: pointer; margin-bottom: 6px;
+        .photo-row { display: flex; gap: 8px; margin-bottom: 6px; }
+        .photo-btn, .photo-delete-btn {
+            flex: 1; height: 40px; border-radius: 8px; border: 1px solid #d1d5db; background: #fff;
+            font-size: 14px; cursor: pointer;
         }
-        .photo-btn:disabled { opacity: 0.5; cursor: default; }
+        .photo-delete-btn { color: #dc2626; border-color: #fecaca; }
+        .photo-btn:disabled, .photo-delete-btn:disabled { opacity: 0.5; cursor: default; }
         .photo-preview { max-width: 100%; max-height: 160px; border-radius: 8px; display: block; margin-bottom: 6px; }
         textarea, input.note { width: 100%; box-sizing: border-box; font-size: 14px; padding: 8px 10px; border-radius: 8px; border: 1px solid #d1d5db; }
         .status { font-size: 12px; margin-top: 8px; min-height: 16px; }
@@ -195,7 +197,10 @@
             </div>
             <div class="hist" id="hist-bars"></div>
 
-            <button type="button" class="photo-btn" id="photo-btn" {% if period_closed %}disabled{% endif %}>Foto odečtu</button>
+            <div class="photo-row">
+                <button type="button" class="photo-btn" id="photo-btn" {% if period_closed %}disabled{% endif %}>Foto odečtu</button>
+                <button type="button" class="photo-delete-btn" id="photo-delete-btn" style="display:none" {% if period_closed %}disabled{% endif %}>Smazat foto</button>
+            </div>
             <input type="file" id="photo-input" accept="image/*" capture="environment" style="display:none">
             <img id="photo-preview" class="photo-preview" style="display:none">
             <div class="status" id="photo-status"></div>
@@ -239,6 +244,7 @@
     var saveUrl = "{% url 'odecty-ulozit' %}";
     var reorderUrl = "{% url 'odecty-preradit' %}";
     var photoUrl = "{% url 'odecty-foto' %}";
+    var photoDeleteUrl = "{% url 'odecty-foto-smazat' %}";
 
     var idx = 0;
     var saveTimers = {};
@@ -292,10 +298,13 @@
         document.getElementById("note-input").value = (m.existing && m.existing.note) || "";
 
         var photoBtn = document.getElementById("photo-btn");
+        var photoDeleteBtn = document.getElementById("photo-delete-btn");
         var photoPreview = document.getElementById("photo-preview");
         var photoUrlExisting = m.existing && m.existing.photo_url;
         photoBtn.disabled = periodClosed || !m.existing;
         photoBtn.textContent = photoUrlExisting ? "Změnit foto" : (m.existing ? "Foto odečtu" : "Nejdřív ulož odečet");
+        photoDeleteBtn.style.display = photoUrlExisting ? "block" : "none";
+        photoDeleteBtn.disabled = periodClosed;
         if (photoUrlExisting) {
             photoPreview.src = photoUrlExisting;
             photoPreview.style.display = "block";
@@ -651,6 +660,7 @@
                     m.existing.photo_url = data.photo_url;
                     statusEl.textContent = "Uloženo"; statusEl.className = "status saved";
                     document.getElementById("photo-btn").textContent = "Změnit foto";
+                    document.getElementById("photo-delete-btn").style.display = "block";
                     var preview = document.getElementById("photo-preview");
                     preview.src = data.photo_url;
                     preview.style.display = "block";
@@ -662,6 +672,33 @@
                 statusEl.textContent = "Chyba spojení, zkus to znovu."; statusEl.className = "status error";
             });
         e.target.value = "";
+    });
+    document.getElementById("photo-delete-btn").addEventListener("click", function () {
+        var m = meters[idx];
+        if (!confirm("Smazat foto odečtu?")) return;
+        var statusEl = document.getElementById("photo-status");
+        statusEl.textContent = "Mažu…"; statusEl.className = "status saving";
+
+        fetch(photoDeleteUrl, {
+            method: "POST",
+            headers: { "Content-Type": "application/json", "X-CSRFToken": csrfToken },
+            body: JSON.stringify({ meter_id: m.id, period_id: periodId }),
+        })
+            .then(function (r) { return r.json(); })
+            .then(function (data) {
+                if (data.ok) {
+                    m.existing.photo_url = null;
+                    statusEl.textContent = "Smazáno"; statusEl.className = "status saved";
+                    document.getElementById("photo-btn").textContent = "Foto odečtu";
+                    document.getElementById("photo-delete-btn").style.display = "none";
+                    document.getElementById("photo-preview").style.display = "none";
+                } else {
+                    statusEl.textContent = data.error || "Chyba při mazání."; statusEl.className = "status error";
+                }
+            })
+            .catch(function () {
+                statusEl.textContent = "Chyba spojení, zkus to znovu."; statusEl.className = "status error";
+            });
     });
 
     document.getElementById("prev-btn").addEventListener("click", function () { switchTo(idx - 1); });

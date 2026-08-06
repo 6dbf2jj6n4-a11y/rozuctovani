@@ -236,6 +236,35 @@ def readings_photo(request):
 
 @login_required
 @require_POST
+def readings_photo_delete(request):
+    user = request.user
+    _require_spravce(user)
+
+    try:
+        payload = json.loads(request.body)
+    except (json.JSONDecodeError, UnicodeDecodeError):
+        return JsonResponse({"ok": False, "error": "Neplatná data."}, status=400)
+
+    meter = get_object_or_404(Meter, pk=payload.get("meter_id"))
+    if not user.get_accessible_sites().filter(pk=meter.site_id).exists():
+        raise PermissionDenied("K tomuto areálu nemáš přístup.")
+
+    period = get_object_or_404(Period, pk=payload.get("period_id"))
+    if period.status == Period.Status.CLOSED:
+        return JsonResponse(
+            {"ok": False, "error": "Období je uzavřené, foto nejde smazat."}, status=400
+        )
+
+    reading = MeterReading.objects.filter(meter=meter, period=period).first()
+    if reading is None or not reading.photo:
+        return JsonResponse({"ok": False, "error": "Foto neexistuje."}, status=400)
+
+    reading.photo.delete()
+    return JsonResponse({"ok": True})
+
+
+@login_required
+@require_POST
 def readings_reorder(request):
     user = request.user
     _require_spravce(user)
