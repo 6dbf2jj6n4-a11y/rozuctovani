@@ -558,6 +558,14 @@ class MeterReading(models.Model):
     def __str__(self):
         return f"{self.meter} – {self.period}: {self.value}"
 
+    def clean(self):
+        if self.period_id and self.period.status == Period.Status.CLOSED:
+            raise ValidationError("Období je uzavřené, odečet nejde přidat ani upravit.")
+
+    def save(self, *args, **kwargs):
+        self.clean()
+        super().save(*args, **kwargs)
+
 
 class ServicePoolItem(models.Model):
     class InvoiceClass(models.TextChoices):

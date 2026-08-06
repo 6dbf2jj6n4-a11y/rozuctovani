@@ -33,7 +33,7 @@ def readings_entry(request):
 
     periods = Period.objects.order_by("-year", "-month")[:24]
     period_id = request.GET.get("period")
-    period = periods.filter(pk=period_id).first() if period_id else None
+    period = Period.objects.filter(pk=period_id).first() if period_id else None
     if period is None:
         period = Period.objects.filter(status=Period.Status.OPEN).first() or Period.objects.first()
 
