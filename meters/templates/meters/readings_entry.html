@@ -102,8 +102,9 @@
         .sidebar td { padding: 7px 16px; border-top: 1px solid #f3f4f6; cursor: pointer; overflow: hidden; text-overflow: ellipsis; }
         .side-name { width: auto; }
         .sidebar tr:first-child td { border-top: none; }
-        .sidebar tr:hover td { background: #f9fafb; }
-        .sidebar tr.current td { background: #eff6ff; font-weight: 600; }
+        .sidebar tr:hover td { box-shadow: inset 0 0 0 999px rgba(0,0,0,0.05); }
+        .sidebar tr.current td { border-top: 1px solid #2563eb; border-bottom: 1px solid #2563eb; font-weight: 600; }
+        .sidebar tr.current td:first-child { border-left: 3px solid #2563eb; }
         .side-val { text-align: right; color: #9ca3af; white-space: nowrap; width: 110px; }
         .sidebar tr.filled .side-val { color: #111827; }
         .side-move { white-space: nowrap; width: 46px; padding-left: 4px !important; padding-right: 10px !important; }
@@ -230,11 +231,11 @@
     var saveTimers = {};
 
     var typeColors = {
-        "Elektřina": "#f59e0b",
-        "Voda": "#3b82f6",
-        "Plyn": "#8b5cf6",
-        "Teplo": "#ef4444",
-        "Jiné": "#9ca3af"
+        "Elektřina": "#fef3c7",
+        "Voda": "#dbeafe",
+        "Plyn": "#ede9fe",
+        "Teplo": "#fee2e2",
+        "Jiné": "#f3f4f6"
     };
 
     function fmt(n) {
@@ -296,10 +297,10 @@
         meters.forEach(function (mm, i) {
             var tr = document.createElement("tr");
             tr.className = (i === idx ? "current" : "") + (mm.existing ? " filled" : "");
+            tr.style.background = typeColors[mm.meter_type_label] || "#f3f4f6";
             tr.onclick = function () { switchTo(i); };
             var tdName = document.createElement("td");
             tdName.className = "side-name";
-            tdName.style.borderLeft = "3px solid " + (typeColors[mm.meter_type_label] || "#e5e7eb");
             tdName.textContent = (mm.code ? mm.code + " – " : "") + mm.name;
             var tdVal = document.createElement("td");
             tdVal.className = "side-val";
