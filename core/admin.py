@@ -1778,7 +1778,7 @@ class BillingLineAdmin(DefaultToLatestPeriodMixin, ModelAdmin):
         pevne poradi slotu, viz core/static/... zadne externi zavislosti)."""
         import math
         from django.shortcuts import render
-        from billing.item_summary import get_item_summary_rows
+        from billing.item_summary import get_naklad_by_class
 
         try:
             n = int(request.GET.get("n", 6))
@@ -1800,13 +1800,13 @@ class BillingLineAdmin(DefaultToLatestPeriodMixin, ModelAdmin):
             "other": "#e87ba4",
         }
 
-        raw_totals = []
-        for period in periods:
-            totals = {code: Decimal("0") for code in class_order}
-            for row in get_item_summary_rows(period):
-                if row["naklad"] is not None:
-                    totals[row["invoice_class_key"]] += row["naklad"]
-            raw_totals.append((period, totals))
+        # get_naklad_by_class dela jen par dotazu CELKEM (bez ohledu na
+        # pocet obdobi) - puvodne se tu volala get_item_summary_rows
+        # jednou na kazde obdobi, coz pri 6 obdobich dohromady snadno
+        # prekrocilo gunicorn WORKER TIMEOUT (30s), viz konverzace
+        # s Danielem.
+        naklad_by_period = get_naklad_by_class(periods)
+        raw_totals = [(period, naklad_by_period[period.id]) for period in periods]
 
         max_value = Decimal("0")
         for _, totals in raw_totals:

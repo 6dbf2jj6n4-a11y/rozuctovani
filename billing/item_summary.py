@@ -14,7 +14,7 @@ jinde) - Daniel chtel videt obe najednou, ne prepinat.
 """
 from decimal import Decimal
 
-from core.models import BillingLine, CostEntry, ServicePoolItem
+from core.models import BillingLine, CostEntry, PriceList, ServicePoolItem
 
 from .engine import ABSOLUTE_AMOUNT_TYPES, _consumption_shares, _meter_provides_consumption
 
@@ -103,3 +103,68 @@ def get_item_summary_rows(period, site=None, with_meters=False):
             "meter_breakdown": meter_breakdown,
         })
     return rows
+
+
+def get_naklad_by_class(periods, site=None):
+    """Rychla agregace Nakladu (Kc) po Tride pro SEZNAM obdobi najednou -
+    pro grafy/prehledy, kde staci soucet, ne rozpad po jednotlivych
+    polozkach/mericich (na rozdil od get_item_summary_rows, ktera pro
+    KAZDOU polozku dela nekolik dotazu, vc. _consumption_shares u
+    merenych polozek). Pri volani jednou na obdobi x vic obdobi najednou
+    (napr. graf za poslednich 6 mesicu) to snadno prekroci gunicorn
+    WORKER TIMEOUT (30s) - viz konverzace s Danielem, /report/grafy-trid/
+    spadlo presne na tohle. Tahle verze dela jen 3 dotazy CELKEM, bez
+    ohledu na pocet obdobi/polozek.
+
+    Vraci dict {period.id: {invoice_class_code: Decimal}}.
+    """
+    items = list(ServicePoolItem.objects.all())
+    if site is not None:
+        items = [i for i in items if i.site_id == site.id]
+
+    period_ids = [p.id for p in periods]
+    cost_entries = {
+        (ce.service_item_id, ce.period_id): ce
+        for ce in CostEntry.objects.filter(period_id__in=period_ids)
+    }
+
+    # Cenikove zaznamy relevantnich polozek nactene JEDNOU - "posledni
+    # platny k datu" se pak resolvuje rucne v Pythonu (bez dalsich
+    # dotazu), misto volani PriceList.get_price_for_period per (item,
+    # period), coz by bylo zase N+1.
+    price_lists_by_item = {}
+    for pl in (
+        PriceList.objects.filter(service_item__in=items)
+        .select_related("period")
+        .order_by("service_item_id", "-period__year", "-period__month")
+    ):
+        price_lists_by_item.setdefault(pl.service_item_id, []).append(pl)
+
+    def _price_for(item_id, period):
+        for pl in price_lists_by_item.get(item_id, []):
+            if (pl.period.year, pl.period.month) <= (period.year, period.month):
+                return pl.price_per_unit
+        return None
+
+    class_codes = [code for code, _ in ServicePoolItem.InvoiceClass.choices]
+    result = {}
+    for period in periods:
+        totals = {code: Decimal("0") for code in class_codes}
+        for item in items:
+            cost_entry = cost_entries.get((item.id, period.id))
+            if cost_entry is not None:
+                if cost_entry.amount_czk is not None:
+                    naklad = cost_entry.amount_czk
+                elif cost_entry.amount_units is not None:
+                    price = _price_for(item.id, period)
+                    naklad = cost_entry.amount_units * price if price else None
+                else:
+                    naklad = None
+            elif item.default_amount_czk is not None:
+                naklad = item.default_amount_czk
+            else:
+                naklad = None
+            if naklad is not None:
+                totals[item.invoice_class] += naklad
+        result[period.id] = totals
+    return result
