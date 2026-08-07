@@ -825,10 +825,21 @@ class PriceList(models.Model):
         return f"{self.service_item} – {self.period}: {self.price_per_unit} Kč/j"
 
     @classmethod
-    def get_price_for_period(cls, service_item, period):
+    def get_price_for_period(cls, service_item, period, price_cache=None):
         """
         Vrátí cenu za jednotku pro dané nebo nejbližší předchozí období.
-        """
+
+        `price_cache`: volitelny dict {service_item_id: [PriceList
+        serazene sestupne dle obdobi]} pro hromadne predem nactene
+        ceniky (viz billing/engine.py calculate_period) - misto
+        samostatneho DB dotazu na KAZDE volani se "posledni platna
+        cena k datu" dohleda v pameti. Bez cache (vychozi) se chova
+        uplne stejne jako drive."""
+        if price_cache is not None:
+            for pl in price_cache.get(service_item.id, []):
+                if (pl.period.year, pl.period.month) <= (period.year, period.month):
+                    return pl.price_per_unit
+            return None
         entry = cls.objects.filter(
             service_item=service_item,
         ).filter(
@@ -916,13 +927,16 @@ class CostEntry(models.Model):
             self.note = ""
         super().save(*args, **kwargs)
 
-    def get_amount_czk(self, period=None):
-        """Vrátí částku v Kč - buď přímo, nebo přes ceník."""
+    def get_amount_czk(self, period=None, price_cache=None):
+        """Vrátí částku v Kč - buď přímo, nebo přes ceník.
+
+        `price_cache`: viz PriceList.get_price_for_period - predano dal
+        beze zmeny."""
         if self.amount_czk is not None:
             return self.amount_czk
         if self.amount_units is not None:
             p = period or self.period
-            price = PriceList.get_price_for_period(self.service_item, p)
+            price = PriceList.get_price_for_period(self.service_item, p, price_cache=price_cache)
             if price:
                 return self.amount_units * price
         return None

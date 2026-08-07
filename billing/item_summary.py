@@ -14,7 +14,7 @@ jinde) - Daniel chtel videt obe najednou, ne prepinat.
 """
 from decimal import Decimal
 
-from core.models import BillingLine, CostEntry, PriceList, ServicePoolItem
+from core.models import BillingLine, CostEntry, MeterReading, PriceList, ServicePoolItem
 
 from .engine import ABSOLUTE_AMOUNT_TYPES, _consumption_shares, _meter_provides_consumption
 
@@ -32,12 +32,40 @@ def get_item_summary_rows(period, site=None, with_meters=False):
     )
     if site is not None:
         items = items.filter(site=site)
+    items = list(items)
+
+    # Hromadne predem nactene CostEntry/BillingLine/Cenik/odecty pro
+    # VSECHNY polozky najednou - stejny vzor jako billing/engine.py
+    # calculate_period (readings_cache/price_cache/meter_provides_cache),
+    # ktery resil presne tenhle N+1 problem u samotneho vypoctu. Tenhle
+    # prehled ale volal CostEntry/BillingLine/_consumption_shares
+    # samostatne PRO KAZDOU POLOZKU zvlast - u vetsiho poctu polozek to
+    # delalo desitky az stovky dotazu navic a stranka se nacitala i
+    # kolem minuty. Viz konverzace s Danielem.
+    cost_entries_by_item = {ce.service_item_id: ce for ce in CostEntry.objects.filter(period=period)}
+    lines_by_item = {}
+    for line in BillingLine.objects.filter(period=period):
+        lines_by_item.setdefault(line.service_item_id, []).append(line)
+    price_cache = {}
+    for pl in (
+        PriceList.objects.filter(service_item__in=items)
+        .select_related("period")
+        .order_by("service_item_id", "-period__year", "-period__month")
+    ):
+        price_cache.setdefault(pl.service_item_id, []).append(pl)
+    meter_provides_cache = {}
+    prev_period = period.previous_period()
+    relevant_periods = [period] + ([prev_period] if prev_period else [])
+    readings_cache = {
+        (r.meter_id, r.period_id): r
+        for r in MeterReading.objects.filter(period__in=relevant_periods)
+    }
 
     rows = []
     for item in items:
-        cost_entry = CostEntry.objects.filter(service_item=item, period=period).first()
+        cost_entry = cost_entries_by_item.get(item.id)
         if cost_entry is not None:
-            naklad = cost_entry.get_amount_czk(period)
+            naklad = cost_entry.get_amount_czk(period, price_cache=price_cache)
             naklad_zdroj = "naklad_za_obdobi" if naklad is not None else "chybi_cenik"
         elif item.default_amount_czk is not None:
             naklad = item.default_amount_czk
@@ -46,7 +74,7 @@ def get_item_summary_rows(period, site=None, with_meters=False):
             naklad = None
             naklad_zdroj = None
 
-        lines = list(BillingLine.objects.filter(service_item=item, period=period))
+        lines = lines_by_item.get(item.id, [])
         vynos_fakturovano = sum((line.amount for line in lines if line.is_billed), Decimal("0"))
         vynos_vcetne_pausalu = sum((line.amount for line in lines), Decimal("0"))
 
@@ -68,11 +96,15 @@ def get_item_summary_rows(period, site=None, with_meters=False):
                 if k.is_valid_for_period(period) and k.allocation_type not in ABSOLUTE_AMOUNT_TYPES
             ]
             has_meter_keys = any(
-                k.meter_id is not None and _meter_provides_consumption(k.meter) for k in valid_keys
+                k.meter_id is not None and _meter_provides_consumption(k.meter, cache=meter_provides_cache)
+                for k in valid_keys
             )
             if has_meter_keys:
                 by_meter = {} if with_meters else None
-                _, measured_units = _consumption_shares(item, period, [], by_meter_out=by_meter)
+                _, measured_units = _consumption_shares(
+                    item, period, [], by_meter_out=by_meter,
+                    meter_provides_cache=meter_provides_cache, readings_cache=readings_cache,
+                )
                 key_with_meter = next((k for k in valid_keys if k.meter_id), None)
                 if key_with_meter:
                     unit_of_measure = key_with_meter.meter.unit_of_measure

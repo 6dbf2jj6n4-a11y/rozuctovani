@@ -106,10 +106,12 @@ def _meter_provides_consumption(meter, cache=None):
     return result
 
 
-def _fixed_amount_for(key, service_item, period, warnings):
-    """Vrati absolutni mesicni Kc castku pro klic typu FIXED_AMOUNT/AREA_PRICE."""
+def _fixed_amount_for(key, service_item, period, warnings, price_cache=None):
+    """Vrati absolutni mesicni Kc castku pro klic typu FIXED_AMOUNT/AREA_PRICE.
+
+    `price_cache`: viz PriceList.get_price_for_period - predano dal beze zmeny."""
     if key.allocation_type == AllocationKey.AllocationType.AREA_PRICE:
-        price = PriceList.get_price_for_period(service_item, period)
+        price = PriceList.get_price_for_period(service_item, period, price_cache=price_cache)
         if price is None:
             warnings.append(
                 f"{service_item}: klíč 'Plocha × cena/m²' pro kartu {key.client_card} "
@@ -515,11 +517,24 @@ def calculate_period(period, site=None):
             for r in MeterReading.objects.filter(period__in=relevant_periods)
         }
 
+        # Hromadne predem nactene ceniky vsech polozek (jedinym dotazem) -
+        # "posledni platna cena k datu" se pak dohleda v pameti (viz
+        # PriceList.get_price_for_period) misto samostatneho dotazu na
+        # KAZDOU polozku s merenym nakladem a KAZDY klic typu
+        # "Plocha × cena/m²". Stejny vzor jako u readings_cache vyse.
+        price_cache = {}
+        for pl in (
+            PriceList.objects.filter(service_item__in=service_items)
+            .select_related("period")
+            .order_by("service_item_id", "-period__year", "-period__month")
+        ):
+            price_cache.setdefault(pl.service_item_id, []).append(pl)
+
         for service_item in service_items:
             cost_entry = cost_entries_by_item.get(service_item.id)
             cost_source = None
             if cost_entry is not None:
-                total_cost = cost_entry.get_amount_czk(period)
+                total_cost = cost_entry.get_amount_czk(period, price_cache=price_cache)
                 if total_cost is None:
                     warnings.append(
                         f"{service_item} / {period}: náklad je zadaný v jednotkách, ale chybí "
@@ -565,12 +580,12 @@ def calculate_period(period, site=None):
             for key in fixed_keys:
                 if key.client_card.active_days_in_period(period_start, period_end) <= 0:
                     continue
-                amount = _fixed_amount_for(key, service_item, period, warnings)
+                amount = _fixed_amount_for(key, service_item, period, warnings, price_cache=price_cache)
                 if amount is None:
                     continue
                 fixed_amounts[key.client_card_id] = fixed_amounts.get(key.client_card_id, Decimal("0")) + amount
                 if key.allocation_type == AllocationKey.AllocationType.AREA_PRICE:
-                    price = PriceList.get_price_for_period(service_item, period)
+                    price = PriceList.get_price_for_period(service_item, period, price_cache=price_cache)
                     if price is not None:
                         fixed_units[key.client_card_id] = (
                             fixed_units.get(key.client_card_id, Decimal("0")) + (key.value or Decimal("0"))
