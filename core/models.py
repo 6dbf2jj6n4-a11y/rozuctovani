@@ -489,11 +489,21 @@ class Meter(models.Model):
     def __str__(self):
         return self.code or self.name
 
-    def consumption_for(self, period):
+    def consumption_for(self, period, readings_cache=None):
+        """`readings_cache`: volitelny dict {(meter_id, period_id):
+        MeterReading} pro hromadne predem nactene odecty (viz
+        billing/engine.py calculate_period) - misto dvou samostatnych
+        DB dotazu (aktualni + predchozi obdobi) na KAZDE meridlo se
+        pouzije uz nacteny objekt z pameti. Bez cache (vychozi, vsechny
+        ostatni volajici - admin, reporty, diagnosticke prikazy) se
+        chova uplne stejne jako drive."""
         if self.is_virtual:
-            return self._formula_consumption_for(period)
+            return self._formula_consumption_for(period, readings_cache=readings_cache)
 
-        current = self.readings.filter(period=period).first()
+        if readings_cache is not None:
+            current = readings_cache.get((self.id, period.id))
+        else:
+            current = self.readings.filter(period=period).first()
         if current is None:
             return None
 
@@ -511,7 +521,10 @@ class Meter(models.Model):
         prev_period = period.previous_period()
         if prev_period is None:
             return None
-        previous = self.readings.filter(period=prev_period).first()
+        if readings_cache is not None:
+            previous = readings_cache.get((self.id, prev_period.id))
+        else:
+            previous = self.readings.filter(period=prev_period).first()
         if previous is None:
             return None
         return current.value - previous.value
@@ -541,12 +554,12 @@ class Meter(models.Model):
             result.append((meter, sign))
         return result
 
-    def _formula_consumption_for(self, period):
+    def _formula_consumption_for(self, period, readings_cache=None):
         """Vyhodnoti pole Vzorec, napr. '668NT+668VT' - secte/odecte
         spotrebu jinych mericí stejneho arealu podle jejich kodu."""
         total = None
         for meter, sign in self._formula_tokens():
-            value = meter.consumption_for(period)
+            value = meter.consumption_for(period, readings_cache=readings_cache)
             if value is None:
                 continue
             signed_value = sign * value
@@ -575,7 +588,6 @@ class MeterReading(models.Model):
         "Stav / spotřeba", max_digits=14, decimal_places=3,
         help_text="Podle nastavení měřidla: buď kumulativní stav, nebo rovnou spotřeba za období.",
     )
-    is_estimate = models.BooleanField("Odhad", default=False)
     note = models.CharField("Poznámka", max_length=300, blank=True)
     photo = models.ImageField(
         "Foto odečtu", upload_to="odecty/%Y/%m/", null=True, blank=True,
@@ -600,7 +612,7 @@ class MeterReading(models.Model):
     def __str__(self):
         return f"{self.meter} – {self.period}: {self.value}"
 
-    _tracked_fields = ("period_id", "reading_date", "value", "is_estimate", "note", "reset_from_value")
+    _tracked_fields = ("period_id", "reading_date", "value", "note", "reset_from_value")
 
     def clean(self):
         if self.period_id and self.period.status == Period.Status.CLOSED and self._reading_data_changed():
