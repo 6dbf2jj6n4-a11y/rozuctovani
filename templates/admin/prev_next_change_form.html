@@ -3,19 +3,21 @@
 {% block object-tools-items %}
     {{ block.super }}
     {% if change and not is_popup %}
-    {% if nav_previous_url or nav_next_url %}
-    <li style="display: flex; align-items: center; gap: 8px;">
         {% if nav_previous_url %}
-            <a href="{{ nav_previous_url }}" class="button" title="Předchozí záznam" style="background-color: #fff; color: #374151; font-weight: 600; padding: 8px 16px; border-radius: 6px; border: 1px solid #d1d5db; display: inline-flex; align-items: center;">
-                &larr; Předchozí
-            </a>
+            <li class="border border-base-200 max-md:-mt-px max-md:first:rounded-t-default max-md:last:rounded-b-default md:-ml-px md:first:rounded-l-default md:last:rounded-r-default hover:text-primary-600 dark:hover:text-primary-500 dark:border-base-700">
+                <a href="{{ nav_previous_url }}" title="Předchozí záznam" class="cursor-pointer flex grow items-center gap-2 px-3 py-2 text-left whitespace-nowrap">
+                    <span class="material-symbols-outlined">chevron_left</span>
+                    Předchozí
+                </a>
+            </li>
         {% endif %}
         {% if nav_next_url %}
-            <a href="{{ nav_next_url }}" class="button" title="Další záznam" style="background-color: #fff; color: #374151; font-weight: 600; padding: 8px 16px; border-radius: 6px; border: 1px solid #d1d5db; display: inline-flex; align-items: center;">
-                Další &rarr;
-            </a>
+            <li class="border border-base-200 max-md:-mt-px max-md:first:rounded-t-default max-md:last:rounded-b-default md:-ml-px md:first:rounded-l-default md:last:rounded-r-default hover:text-primary-600 dark:hover:text-primary-500 dark:border-base-700">
+                <a href="{{ nav_next_url }}" title="Další záznam" class="cursor-pointer flex grow items-center gap-2 px-3 py-2 text-left whitespace-nowrap">
+                    Další
+                    <span class="material-symbols-outlined">chevron_right</span>
+                </a>
+            </li>
         {% endif %}
-    </li>
-    {% endif %}
     {% endif %}
 {% endblock %}
