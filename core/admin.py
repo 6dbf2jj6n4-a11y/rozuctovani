@@ -1226,28 +1226,62 @@ class MeterAdmin(DuplicateModelAdminMixin, ModelAdmin):
                 self.admin_site.admin_view(self.report_neprirazena_view),
                 name="core_meter_report_neprirazena",
             ),
+            path(
+                "report/neprirazena/smazat/",
+                self.admin_site.admin_view(self.report_neprirazena_smazat_view),
+                name="core_meter_report_neprirazena_smazat",
+            ),
         ]
         return custom + urls
 
-    def report_neprirazena_view(self, request):
-        """Report (Reporty v menu): meridla, ktera nejsou pouzita VUBEC -
-        ani jako hlavni meridlo polozky (ServicePoolItem.meter), ani
-        napojene na zadny Klic (AllocationKey.meter). Typicky pozustatek
-        po smazane/prejmenovane strukture (viz konverzace s Danielem -
-        E_VLASTNI/W_VLASTNI/T_SPOLECNA cistka)."""
-        from django.shortcuts import render
+    def _unassigned_meters_queryset(self):
+        """Meridla, ktera nejsou pouzita VUBEC - ani jako hlavni meridlo
+        polozky (ServicePoolItem.meter), ani napojene na zadny Klic
+        (AllocationKey.meter), ani jako nadrazene meridlo jineho meridla,
+        ani jako vychozi sluzba plochy (UnitService.meter). Typicky
+        pozustatek po smazane/prejmenovane strukture (viz konverzace s
+        Danielem - E_VLASTNI/W_VLASTNI/T_SPOLECNA cistka).
 
+        Sdileno mezi report_neprirazena_view (zobrazeni) a
+        report_neprirazena_smazat_view (mazani) - mazaci view si tohle
+        pocita znovu samo, aby nedoverovalo tomu, co prislo z formulare
+        (mezitim se meridlo mohlo stat pouzitym)."""
         used_as_item_meter = ServicePoolItem.objects.exclude(meter__isnull=True).values_list("meter_id", flat=True)
         used_as_key_meter = AllocationKey.objects.exclude(meter__isnull=True).values_list("meter_id", flat=True)
         used_as_parent = Meter.objects.exclude(parent_meter__isnull=True).values_list("parent_meter_id", flat=True)
+        used_as_unit_service_meter = UnitService.objects.exclude(meter__isnull=True).values_list("meter_id", flat=True)
 
-        unused = (
+        return (
             Meter.objects.select_related("site")
             .exclude(pk__in=used_as_item_meter)
             .exclude(pk__in=used_as_key_meter)
             .exclude(pk__in=used_as_parent)
+            .exclude(pk__in=used_as_unit_service_meter)
             .order_by("site__name", "code")
         )
+
+    def _formula_protected_meter_ids(self):
+        """{meter_id: [nazvy virtualnich meridel, ktera na nej odkazuji ve
+        Vzorci]} - tato meridla se NESMI smazat, i kdyz jinak vypadaji
+        jako nepouzita: Vzorec odkazuje na meridlo podle KODU (viz
+        Meter._formula_tokens), ne pres FK/on_delete, takze zadna DB
+        vazba by smazani samo o sobe nezabranila."""
+        protected = {}
+        virtual_meters = Meter.objects.filter(is_virtual=True).exclude(formula="")
+        for vm in virtual_meters:
+            for referenced_meter, _sign in vm._formula_tokens():
+                protected.setdefault(referenced_meter.id, []).append(str(vm))
+        return protected
+
+    def report_neprirazena_view(self, request):
+        """Report (Reporty v menu) s moznosti hromadne smazat vybrana
+        nepouzita meridla (viz report_neprirazena_smazat_view)."""
+        from django.shortcuts import render
+
+        unused = list(self._unassigned_meters_queryset())
+        protected = self._formula_protected_meter_ids()
+        for m in unused:
+            m.formula_used_by = protected.get(m.id)
 
         context = {
             **self.admin_site.each_context(request),
@@ -1256,6 +1290,42 @@ class MeterAdmin(DuplicateModelAdminMixin, ModelAdmin):
             "opts": self.model._meta,
         }
         return render(request, "admin/core/meter/report_neprirazena.html", context)
+
+    def report_neprirazena_smazat_view(self, request):
+        """Hromadne smazani vybranych nepouzitych meridel z reportu.
+        Pred smazanim si sam znovu spocita, ktera meridla jsou skutecne
+        nepouzita a nejsou chranena Vzorcem (nedoveruje checkboxum z
+        formulare) - cokoliv vybraneho mimo tuhle bezpecnou mnozinu se
+        jen preskoci a nahlasi, misto aby to spadlo nebo se smazalo
+        neco, co nema."""
+        from django.contrib import messages
+        from django.shortcuts import redirect
+
+        if request.method != "POST":
+            return redirect("admin:core_meter_report_neprirazena")
+
+        requested_ids = {int(pk) for pk in request.POST.getlist("meter_ids") if pk.isdigit()}
+        if not requested_ids:
+            messages.warning(request, "Nebylo vybráno žádné měřidlo.")
+            return redirect("admin:core_meter_report_neprirazena")
+
+        safe_ids = set(self._unassigned_meters_queryset().values_list("pk", flat=True))
+        safe_ids -= set(self._formula_protected_meter_ids().keys())
+
+        to_delete = requested_ids & safe_ids
+        skipped = requested_ids - safe_ids
+
+        if to_delete:
+            deleted_names = list(Meter.objects.filter(pk__in=to_delete).values_list("name", flat=True))
+            Meter.objects.filter(pk__in=to_delete).delete()
+            messages.success(request, f"Smazáno {len(to_delete)} měřidel: {', '.join(deleted_names)}.")
+        if skipped:
+            messages.error(
+                request,
+                f"{len(skipped)} měřidel se nepodařilo smazat (mezitím se stala použitá, nebo jsou "
+                "součástí Vzorce jiného měřidla) - stránka se obnovila, zkontroluj a zkus to znovu.",
+            )
+        return redirect("admin:core_meter_report_neprirazena")
 
 
 @admin.register(Period)
