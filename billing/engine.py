@@ -440,7 +440,7 @@ def calculate_period(period, site=None):
         )
 
     warnings = []
-    created = 0
+    to_create = []
 
     with transaction.atomic():
         billing_lines = BillingLine.objects.filter(period=period)
@@ -450,8 +450,17 @@ def calculate_period(period, site=None):
             service_items = service_items.filter(site=site)
         billing_lines.delete()
 
+        # Vsechny Naklady za tohle obdobi nactene JEDNOU dopredu (misto
+        # dotazu na CostEntry pro kazdou polozku zvlast, ~90 dotazu jen
+        # na tohle) - viz konverzace s Danielem, vypocet za obdobi byl
+        # strasne pomaly.
+        cost_entries_by_item = {
+            ce.service_item_id: ce
+            for ce in CostEntry.objects.filter(period=period)
+        }
+
         for service_item in service_items:
-            cost_entry = CostEntry.objects.filter(service_item=service_item, period=period).first()
+            cost_entry = cost_entries_by_item.get(service_item.id)
             cost_source = None
             if cost_entry is not None:
                 total_cost = cost_entry.get_amount_czk(period)
@@ -581,7 +590,7 @@ def calculate_period(period, site=None):
                         key_with_meter = next((k for k in valid_keys if k.meter_id), None)
                         unit_of_measure = key_with_meter.meter.unit_of_measure if key_with_meter else ""
 
-                BillingLine.objects.create(
+                to_create.append(BillingLine(
                     client_card_id=card_id,
                     period=period,
                     service_item=service_item,
@@ -598,7 +607,12 @@ def calculate_period(period, site=None):
                         "price_per_unit": str(price_per_unit) if price_per_unit is not None else None,
                         "unit_of_measure": unit_of_measure,
                     },
-                )
-                created += 1
+                ))
 
-    return {"created": created, "warnings": warnings}
+        # Jeden hromadny INSERT na konci mista jednoho radku po druhem -
+        # u vypoctu s desitkami polozek x desitkami klientu to drive
+        # znamenalo stovky samostatnych DB zapisu. Viz konverzace
+        # s Danielem - "vypocet za obdobi strasne dlouho trva".
+        BillingLine.objects.bulk_create(to_create)
+
+    return {"created": len(to_create), "warnings": warnings}
