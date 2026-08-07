@@ -1,6 +1,7 @@
 """Sdilene uzpravy admin.ModelAdmin/TabularInline pouzivane napric
 core/admin.py a accounts/admin.py."""
 from django.contrib.admin.widgets import RelatedFieldWidgetWrapper
+from django.urls import reverse
 from unfold.admin import ModelAdmin as UnfoldModelAdmin, TabularInline as UnfoldTabularInline
 
 
@@ -30,7 +31,55 @@ class NoRelatedWidgetIconsMixin:
         return _strip_related_widget_icons(formfield)
 
 
-class ModelAdmin(NoRelatedWidgetIconsMixin, UnfoldModelAdmin):
+class PrevNextNavigationMixin:
+    """Prida sipky Předchozí/Další na formular zaznamu, pro pohyb mezi
+    zaznamy bez navratu na seznam - poradi stejne jako v seznamu (podle
+    get_ordering/Meta.ordering). Sablona: admin/prev_next_change_form.html
+    (rozsiruje admin/change_form.html a doplnuje sipky do
+    object-tools-items - clientcard/change_form.html na ni napojuje
+    svoje tlacitka Kopie stejnym zpusobem).
+
+    change_form_template je tu SEZNAM (ne jeden pevny nazev) - kopiruje
+    poradi, ktere by si Django vygeneroval samo (nejdriv model-specificka
+    sablona, pak app-specificka), jen s poslednim clankem prohozenym za
+    nasi verzi s sipkami misto holeho "admin/change_form.html". Kdyby to
+    byl pevny string, Django by uz vubec nehledal
+    admin/core/clientcard/change_form.html (viz jeho vlastni Kopie
+    tlacitka) - se seznamem se pouzije prvni existujici soubor, presne
+    jako v puvodnim chovani."""
+
+    @property
+    def change_form_template(self):
+        opts = self.model._meta
+        return [
+            f"admin/{opts.app_label}/{opts.model_name}/change_form.html",
+            f"admin/{opts.app_label}/change_form.html",
+            "admin/prev_next_change_form.html",
+        ]
+
+    def change_view(self, request, object_id, form_url="", extra_context=None):
+        extra_context = extra_context or {}
+        try:
+            current_pk = self.model._meta.pk.to_python(object_id)
+            pks = list(self.get_queryset(request).values_list("pk", flat=True))
+            idx = pks.index(current_pk)
+        except (ValueError, TypeError):
+            idx = None
+        if idx is not None:
+            # Absolutni URL pres reverse() - relativni "../{pk}/change/"
+            # se spatne rozresi, kdyz uz je v URL cesty za ID jeste neco
+            # navic (napr. popup s ?_to_field=...), Django sam pro
+            # podobne odkazy (Historie apod.) taky pouziva absolutni cesty.
+            opts = self.model._meta
+            url_name = f"admin:{opts.app_label}_{opts.model_name}_change"
+            if idx > 0:
+                extra_context["nav_previous_url"] = reverse(url_name, args=[pks[idx - 1]])
+            if idx < len(pks) - 1:
+                extra_context["nav_next_url"] = reverse(url_name, args=[pks[idx + 1]])
+        return super().change_view(request, object_id, form_url, extra_context)
+
+
+class ModelAdmin(PrevNextNavigationMixin, NoRelatedWidgetIconsMixin, UnfoldModelAdmin):
     pass
 
 

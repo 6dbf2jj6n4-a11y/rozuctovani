@@ -1,0 +1,21 @@
+{% extends "admin/change_form.html" %}
+
+{% block object-tools-items %}
+    {{ block.super }}
+    {% if change and not is_popup %}
+    {% if nav_previous_url or nav_next_url %}
+    <li style="display: flex; align-items: center; gap: 8px;">
+        {% if nav_previous_url %}
+            <a href="{{ nav_previous_url }}" class="button" title="Předchozí záznam" style="background-color: #fff; color: #374151; font-weight: 600; padding: 8px 16px; border-radius: 6px; border: 1px solid #d1d5db; display: inline-flex; align-items: center;">
+                &larr; Předchozí
+            </a>
+        {% endif %}
+        {% if nav_next_url %}
+            <a href="{{ nav_next_url }}" class="button" title="Další záznam" style="background-color: #fff; color: #374151; font-weight: 600; padding: 8px 16px; border-radius: 6px; border: 1px solid #d1d5db; display: inline-flex; align-items: center;">
+                Další &rarr;
+            </a>
+        {% endif %}
+    </li>
+    {% endif %}
+    {% endif %}
+{% endblock %}

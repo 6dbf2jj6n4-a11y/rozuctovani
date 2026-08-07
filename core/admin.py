@@ -453,7 +453,7 @@ class ActiveClientFilter(admin.SimpleListFilter):
 class ClientAdmin(ModelAdmin):
     list_display = ("name_display", "code", "ico", "contact_email", "contact_phone", "is_active")
     search_fields = ("name", "ico", "code")
-    list_filter = (ActiveClientFilter, "is_landlord", SiteFilter, "insolvency_status", "vat_payer")
+    list_filter = (ActiveClientFilter, "entity_type", "is_landlord", SiteFilter, "insolvency_status", "vat_payer")
     fieldsets = (
         ("Základní údaje", {
             "fields": (("name", "code"), ("is_active", "is_landlord"))
@@ -476,11 +476,14 @@ class ClientAdmin(ModelAdmin):
         ("Kontakt", {
             "fields": (("contact_email", "contact_phone"),)
         }),
-        ("Poznámka", {
-            "fields": ("note",)
-        }),
     )
     readonly_fields = ("ares_button", "insolvency_status")
+    # Zastupce/funkce davaji smysl jen u pravnicke osoby (za fyzickou
+    # osobu jedna vzdy ona sama) - u fyzicke osoby se skryji.
+    conditional_fields = {
+        "representative_name": "entity_type != 'fyzicka'",
+        "representative_role": "entity_type != 'fyzicka'",
+    }
     inlines = [ClientCardInline, ContractInline]
     actions = ["export_emaily"]
 

@@ -144,7 +144,6 @@ class Client(models.Model):
         "Telefon", max_length=50, blank=True, default="+420 ",
         help_text="Formát: +420 777123456.",
     )
-    note = models.CharField("Poznámka", max_length=500, blank=True)
 
     class Meta:
         verbose_name = "Klient"
