@@ -54,7 +54,9 @@ from decimal import Decimal
 
 from django.db import transaction
 
-from core.models import AllocationKey, BillingLine, ClientCard, CostEntry, Period, PriceList, ServicePoolItem
+from core.models import (
+    AllocationKey, BillingLine, ClientCard, CostEntry, MeterReading, Period, PriceList, ServicePoolItem,
+)
 
 
 class BillingPeriodClosedError(Exception):
@@ -163,7 +165,7 @@ def _weighted_shares(keys, period, by_key_out=None):
     return {card_id: weight / total for card_id, weight in raw_weights.items()}
 
 
-def _owned_consumption(meter, period, billed_meter_ids, cache):
+def _owned_consumption(meter, period, billed_meter_ids, cache, readings_cache=None):
     """Vrati "vlastni" spotrebu meridla za obdobi - jeho surovy odecet minus
     spotreba prime podrizenych meridel (Meter.parent_meter/children), ktera
     jsou SAMA O SOBE take samostatne uctovana (meter.id je v
@@ -172,17 +174,21 @@ def _owned_consumption(meter, period, billed_meter_ids, cache):
     tohoto odectu by se spotreba podrizenych meridel zapocitala dvakrat -
     jednou pod sebou, jednou uz zahrnuta v surovem odectu nadrazeneho
     meridla. Podrizena meridla BEZ vlastniho klice na teto polozce se
-    neodecitaji - jejich spotreba spravne zustava soucasti nadrazeneho."""
+    neodecitaji - jejich spotreba spravne zustava soucasti nadrazeneho.
+
+    `readings_cache`: viz Meter.consumption_for - predano dal beze zmeny."""
     if meter.id in cache:
         return cache[meter.id]
-    raw = meter.consumption_for(period)
+    raw = meter.consumption_for(period, readings_cache=readings_cache)
     if raw is None:
         cache[meter.id] = None
         return None
     deduction = Decimal("0")
     for child in meter.children.all():
         if child.id in billed_meter_ids:
-            child_consumption = _owned_consumption(child, period, billed_meter_ids, cache)
+            child_consumption = _owned_consumption(
+                child, period, billed_meter_ids, cache, readings_cache=readings_cache
+            )
             if child_consumption is not None:
                 deduction += child_consumption
     result = raw - deduction
@@ -192,7 +198,7 @@ def _owned_consumption(meter, period, billed_meter_ids, cache):
 
 def _consumption_shares(
     service_item, period, warnings, by_key_out=None, by_key_local_out=None, by_meter_out=None,
-    meter_provides_cache=None,
+    meter_provides_cache=None, readings_cache=None,
 ):
     """
     Spocita podily pro polozku, kde se aspon cast klicu opira o skutecnou
@@ -252,6 +258,11 @@ def _consumption_shares(
     cache pro cely vypocet obdobi), aby se meter.readings.exists() pro
     stejne meridlo nevolalo znovu a znovu. Bez vlivu na vysledek, jen
     na pocet DB dotazu.
+
+    `readings_cache`: viz Meter.consumption_for - volitelny dict
+    hromadne predem nactenych odectu, predava se dal do
+    main_meter.consumption_for a _owned_consumption. Bez vlivu na
+    vysledek, jen na pocet DB dotazu.
     """
     keys = [
         k for k in service_item.allocation_keys.select_related("client_card", "client_card__unit", "meter")
@@ -271,7 +282,7 @@ def _consumption_shares(
 
     main_meter = service_item.meter
     if main_meter is not None:
-        total_consumption = main_meter.consumption_for(period)
+        total_consumption = main_meter.consumption_for(period, readings_cache=readings_cache)
         if total_consumption is None:
             warnings.append(
                 f"{service_item}: chybí odečet měřidla {main_meter} pro období {period} "
@@ -294,7 +305,8 @@ def _consumption_shares(
     for meter_id, group_keys in keys_by_meter.items():
         group_meter = group_keys[0].meter
         group_consumption = _owned_consumption(
-            group_meter, period, keys_by_meter.keys(), owned_consumption_cache
+            group_meter, period, keys_by_meter.keys(), owned_consumption_cache,
+            readings_cache=readings_cache,
         )
         if group_consumption is None:
             cards = ", ".join(str(k.client_card) for k in group_keys)
@@ -488,6 +500,21 @@ def calculate_period(period, site=None):
         # vypoctem obdobi (vsechny polozky) - viz docstring te funkce.
         meter_provides_cache = {}
 
+        # Hromadne predem nactene odecty pro AKTUALNI a PREDCHOZI obdobi
+        # (jedinym dotazem) - misto toho, aby si kazde meridlo (a u
+        # formulovych/virtualnich meridel kazda jeho slozka) tahalo svuj
+        # odecet samostatnym dotazem znovu a znovu. U arealu s velkym
+        # poctem meridel (napr. tisice prostoru) je tohle klicove pro
+        # skalovatelnost - bez toho roste pocet DB dotazu linearne s
+        # poctem meridel, misto aby zustal konstantni (2 dotazy celkem).
+        # Viz Meter.consumption_for.
+        prev_period = period.previous_period()
+        relevant_periods = [period] + ([prev_period] if prev_period else [])
+        readings_cache = {
+            (r.meter_id, r.period_id): r
+            for r in MeterReading.objects.filter(period__in=relevant_periods)
+        }
+
         for service_item in service_items:
             cost_entry = cost_entries_by_item.get(service_item.id)
             cost_source = None
@@ -574,7 +601,8 @@ def calculate_period(period, site=None):
             )
             if service_item.meter or has_meter_keys:
                 shares, total_consumption = _consumption_shares(
-                    service_item, period, warnings, meter_provides_cache=meter_provides_cache
+                    service_item, period, warnings,
+                    meter_provides_cache=meter_provides_cache, readings_cache=readings_cache,
                 )
             else:
                 weight_keys = [
