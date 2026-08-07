@@ -69,7 +69,7 @@ ABSOLUTE_AMOUNT_TYPES = (
 )
 
 
-def _meter_provides_consumption(meter):
+def _meter_provides_consumption(meter, cache=None):
     """Rozliší meridlo skutecne pouzivane pro rozpocet spotreby (realne s
     odecty, nebo virtualni se vzorcem) od meridla napojeneho na klic typu
     "Podle váhy" JEN kvuli Meter.weight_unit_label (napr. "pocet
@@ -83,10 +83,25 @@ def _meter_provides_consumption(meter):
     zaskrtnute jen aby v adminu zmizelo nepotrebne pole Odečty, ne proto,
     ze by melo skutecny vzorec) nikdy nevrati zadnou hodnotu
     (_formula_consumption_for na prazdnem vzorci vzdy da None) - takove
-    meridlo se tedy pocita stejne jako nevirtualni bez odectu."""
+    meridlo se tedy pocita stejne jako nevirtualni bez odectu.
+
+    `cache`: volitelny dict {meter_id: bool} pro memoizaci napric
+    volanimi v ramci jednoho vypoctu (calculate_period) - bez neho by
+    se meter.readings.exists() (skutecny DB dotaz) volalo znovu pro
+    KAZDY klic napojeny na tohle meridlo, i vickrat pro tentyz meridlo
+    (jednou v has_meter_keys, znovu uvnitr _consumption_shares) - u
+    polozky s desitkami klicu to delalo desitky zbytecnych dotazu
+    navic. Viz konverzace s Danielem - vypocet za obdobi se z ~3s
+    zpomalil na 1-2 min presne od chvile, co tahle funkce pribyla."""
+    if cache is not None and meter.id in cache:
+        return cache[meter.id]
     if meter.is_virtual:
-        return bool(meter.formula.strip())
-    return meter.readings.exists()
+        result = bool(meter.formula.strip())
+    else:
+        result = meter.readings.exists()
+    if cache is not None:
+        cache[meter.id] = result
+    return result
 
 
 def _fixed_amount_for(key, service_item, period, warnings):
@@ -175,7 +190,10 @@ def _owned_consumption(meter, period, billed_meter_ids, cache):
     return result
 
 
-def _consumption_shares(service_item, period, warnings, by_key_out=None, by_key_local_out=None, by_meter_out=None):
+def _consumption_shares(
+    service_item, period, warnings, by_key_out=None, by_key_local_out=None, by_meter_out=None,
+    meter_provides_cache=None,
+):
     """
     Spocita podily pro polozku, kde se aspon cast klicu opira o skutecnou
     namerenou spotrebu meridla - bud primo pres service_item.meter (hlavni
@@ -227,6 +245,13 @@ def _consumption_shares(service_item, period, warnings, by_key_out=None, by_key_
     (ne po klicich/kartach) - viz billing/item_summary.py, prehled
     Naklad/Vynos s rozpadem na meridla. Bez vlivu na vysledek ani
     chovani, pokud zustane None.
+
+    `meter_provides_cache`: volitelny dict predany do
+    _meter_provides_consumption - memoizuje "ma tohle meridlo skutecna
+    data" napric VICE volanimi (calculate_period predava jeden sdileny
+    cache pro cely vypocet obdobi), aby se meter.readings.exists() pro
+    stejne meridlo nevolalo znovu a znovu. Bez vlivu na vysledek, jen
+    na pocet DB dotazu.
     """
     keys = [
         k for k in service_item.allocation_keys.select_related("client_card", "client_card__unit", "meter")
@@ -239,7 +264,7 @@ def _consumption_shares(service_item, period, warnings, by_key_out=None, by_key_
     keys_by_meter = {}
     weight_keys = []
     for key in keys:
-        if key.meter_id is not None and _meter_provides_consumption(key.meter):
+        if key.meter_id is not None and _meter_provides_consumption(key.meter, cache=meter_provides_cache):
             keys_by_meter.setdefault(key.meter_id, []).append(key)
         else:
             weight_keys.append(key)
@@ -459,6 +484,10 @@ def calculate_period(period, site=None):
             for ce in CostEntry.objects.filter(period=period)
         }
 
+        # Sdileny cache pro _meter_provides_consumption napric CELYM
+        # vypoctem obdobi (vsechny polozky) - viz docstring te funkce.
+        meter_provides_cache = {}
+
         for service_item in service_items:
             cost_entry = cost_entries_by_item.get(service_item.id)
             cost_source = None
@@ -540,11 +569,13 @@ def calculate_period(period, site=None):
             # "Podružné měřidlo", viz _consumption_shares) - v tom pripade
             # se "celek" dopocita jako soucet spotreby takovych meridel.
             has_meter_keys = any(
-                k.meter_id is not None and _meter_provides_consumption(k.meter)
+                k.meter_id is not None and _meter_provides_consumption(k.meter, cache=meter_provides_cache)
                 for k in valid_keys if k.allocation_type not in ABSOLUTE_AMOUNT_TYPES
             )
             if service_item.meter or has_meter_keys:
-                shares, total_consumption = _consumption_shares(service_item, period, warnings)
+                shares, total_consumption = _consumption_shares(
+                    service_item, period, warnings, meter_provides_cache=meter_provides_cache
+                )
             else:
                 weight_keys = [
                     k for k in valid_keys if k.allocation_type not in ABSOLUTE_AMOUNT_TYPES
