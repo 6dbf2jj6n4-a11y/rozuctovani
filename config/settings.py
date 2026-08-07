@@ -88,6 +88,12 @@ else:
             "PASSWORD": os.environ.get("PGPASSWORD") or os.environ.get("POSTGRES_PASSWORD", ""),
             "HOST": os.environ.get("PGHOST") or os.environ.get("POSTGRES_HOST") or "postgres.railway.internal",
             "PORT": os.environ.get("PGPORT") or os.environ.get("POSTGRES_PORT", "5432"),
+            # Bez tohohle se pro KAZDY request otevira nove DB spojeni od
+            # nuly (Django CONN_MAX_AGE defaultne 0) - na Railway to
+            # pridava plnou rezii TCP+Postgres handshake na uplne kazdou,
+            # i tu nejjednodussi stranku v adminu. Viz konverzace
+            # s Danielem - "kliknu na Obdobi a stranka najede za 5s".
+            "CONN_MAX_AGE": 600,
         }
     }
 
