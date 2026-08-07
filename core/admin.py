@@ -194,6 +194,7 @@ class UnitServiceOtherInline(UnitServiceInlineBase):
 @admin.register(Unit)
 class UnitAdmin(DuplicateModelAdminMixin, ModelAdmin):
     list_display = ("name", "site", "purpose", "area_m2", "unit_type")
+    list_select_related = ("site",)
     list_filter = ("site",)
     search_fields = ("name",)
     actions = ["duplicate_selected"]
@@ -618,6 +619,7 @@ class ContractAdminForm(forms.ModelForm):
 class ContractAdmin(DuplicateModelAdminMixin, ModelAdmin):
     form = ContractAdminForm
     list_display = ("client", "number", "valid_from", "valid_to", "deposit_paid", "has_inflation_clause")
+    list_select_related = ("client",)
     list_filter = ("deposit_paid", "has_inflation_clause")
     search_fields = ("number", "client__name", "client__ico")
     autocomplete_fields = ("client", "site")
@@ -884,6 +886,7 @@ class ContractAdmin(DuplicateModelAdminMixin, ModelAdmin):
 @admin.register(ClientCard)
 class ClientCardAdmin(ModelAdmin):
     list_display = ("client", "description", "valid_from", "valid_to", "is_active")
+    list_select_related = ("client",)
     list_filter = ("client__is_active", "is_active")
     autocomplete_fields = ("client",)
     search_fields = ("client__name", "description")
@@ -1136,6 +1139,7 @@ class MeterAdmin(DuplicateModelAdminMixin, ModelAdmin):
         "code", "name", "site", "meter_type", "parent_meter",
         "reading_mode", "is_virtual", "unit_of_measure", "weight_unit_label",
     )
+    list_select_related = ("site", "parent_meter")
     list_filter = ("site", "meter_type", "reading_mode", "is_virtual")
     search_fields = ("name", "code", "serial_number")
     autocomplete_fields = ("parent_meter",)
@@ -1465,6 +1469,7 @@ class InflationRateAdmin(ModelAdmin):
 @admin.register(MeterReading)
 class MeterReadingAdmin(DefaultToLatestPeriodMixin, ModelAdmin):
     list_display = ("meter", "period", "reading_date", "value", "reset_from_value", "is_estimate")
+    list_select_related = ("meter", "period")
     list_filter = ("meter__site", "meter__meter_type", "period", "is_estimate", _PeriodDefaultMarkerFilter)
     search_fields = ("meter__code", "meter__name")
     autocomplete_fields = ("meter",)
@@ -1509,6 +1514,7 @@ class ServicePoolItemAdmin(ModelAdmin):
         "name", "site", "invoice_class", "unit", "meter", "jednotka",
         "default_allocation_type", "default_amount_czk_display", "weight_unit_label",
     )
+    list_select_related = ("site", "unit", "meter")
     list_filter = ("site", "invoice_class")
     search_fields = ("name",)
     autocomplete_fields = ("unit", "meter")
@@ -1609,6 +1615,7 @@ class AllocationKeyAdmin(ModelAdmin):
         "client_card_display", "service_item", "allocation_type", "value_display",
         "meter", "unit", "deduct_from_pool", "is_billed", "valid_from", "valid_to",
     )
+    list_select_related = ("client_card", "client_card__client", "service_item", "meter", "unit")
     list_filter = ("allocation_type", "deduct_from_pool", "is_billed")
     search_fields = ("meter__code", "meter__name", "client_card__client__name", "service_item__name")
     autocomplete_fields = ("client_card", "service_item", "meter", "unit")
@@ -1633,6 +1640,7 @@ class AllocationKeyAdmin(ModelAdmin):
 @admin.register(PriceList)
 class PriceListAdmin(DefaultToLatestPeriodMixin, ModelAdmin):
     list_display = ("service_item", "period", "price_per_unit_display", "note")
+    list_select_related = ("service_item", "period")
     list_filter = ("period", "service_item__site", _PeriodDefaultMarkerFilter)
     autocomplete_fields = ("service_item",)
     search_fields = ("service_item__name",)
@@ -1675,6 +1683,7 @@ class CostEntryAdmin(DefaultToLatestPeriodMixin, ModelAdmin):
         "trida", "service_item", "period", "amount_units", "amount_czk", "jednotka", "kc_za_jednotku",
         "amount_czk_display", "note",
     )
+    list_select_related = ("service_item", "service_item__meter", "period")
     list_display_links = ("service_item",)
     list_editable = ("amount_units", "amount_czk", "note")
     list_filter = (
@@ -1739,6 +1748,7 @@ class CostEntryAdmin(DefaultToLatestPeriodMixin, ModelAdmin):
 @admin.register(BillingLine)
 class BillingLineAdmin(DefaultToLatestPeriodMixin, ModelAdmin):
     list_display = ("client_card_display", "service_item", "period", "amount_display", "share_display")
+    list_select_related = ("client_card", "client_card__client", "service_item", "period")
     list_filter = ("period", _PeriodDefaultMarkerFilter)
     search_fields = ("client_card__client__name",)
     readonly_fields = ("client_card_display", "period", "service_item", "amount", "share_display", "calc_detail")
