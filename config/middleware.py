@@ -1,5 +1,7 @@
 import logging
+import re
 import time
+from collections import Counter
 
 from django.db import connection
 from django.shortcuts import redirect
@@ -7,16 +9,28 @@ from django.test.utils import CaptureQueriesContext
 
 logger = logging.getLogger("perf")
 
+# Nahradi cisla a retezcove literaly v SQL placeholderem, aby se stejny
+# "tvar" dotazu (jen s jinym ID/hodnotou) sloucil do jedne skupiny -
+# stejny princip jako "N similar queries" v Django Debug Toolbar.
+_SQL_LITERAL_RE = re.compile(r"'[^']*'|\b\d+\b")
+
+
+def _sql_shape(sql):
+    return _SQL_LITERAL_RE.sub("?", sql)[:200]
+
 
 class SlowRequestLoggingMiddleware:
-    """Docasna diagnostika: zaloguje cestu, dobu trvani a POCET DB dotazu
-    (ne jejich SQL text) pro kazdy pomaly (>1s) request od prihlaseneho
-    uzivatele - bez zapnuti plneho SQL logovani, ktere uz bylo vypnuto
-    kvuli zahlcovani produkcnich logu (viz DEBUG=0, commit 83fe24c).
-    CaptureQueriesContext funguje nezavisle na DEBUG (docasne zapne
-    force_debug_cursor jen pro tenhle request). Pouzito k dohledani,
-    KTERA stranka dela kolik dotazu - viz konverzace s Danielem,
-    stranka "Položky" se nacita >6s bez zjevne pricinny v kodu."""
+    """Docasna diagnostika: zaloguje cestu, dobu trvani, POCET DB dotazu
+    a NEJCASTEJI OPAKOVANY tvar dotazu (bez konkretnich hodnot, jen
+    "kolikrat + jaka tabulka") pro kazdy pomaly (>1s) request od
+    prihlaseneho uzivatele - bez zapnuti plneho SQL logovani, ktere uz
+    bylo vypnuto kvuli zahlcovani produkcnich logu (viz DEBUG=0, commit
+    83fe24c). CaptureQueriesContext funguje nezavisle na DEBUG (docasne
+    zapne force_debug_cursor jen pro tenhle request). Pouzito k
+    dohledani, KTERY konkretni dotaz se v ramci jednoho requestu
+    opakuje N+1 krat - viz konverzace s Danielem, stranka "Položky" dela
+    107 dotazu bez zjevne pricinny v kodu (list_select_related uz je
+    nastaveny)."""
 
     def __init__(self, get_response):
         self.get_response = get_response
@@ -27,9 +41,13 @@ class SlowRequestLoggingMiddleware:
             response = self.get_response(request)
         duration = time.monotonic() - start
         if duration > 1 and getattr(request, "user", None) and request.user.is_authenticated:
+            queries = ctx.captured_queries
+            shapes = Counter(_sql_shape(q["sql"]) for q in queries)
+            top = shapes.most_common(3)
+            top_text = " | ".join(f"{count}x {shape}" for shape, count in top)
             logger.warning(
-                "POMALY REQUEST: %s %s - %.2fs, %d DB dotazu",
-                request.method, request.path, duration, len(ctx.captured_queries),
+                "POMALY REQUEST: %s %s - %.2fs, %d DB dotazu. NEJCASTEJSI: %s",
+                request.method, request.path, duration, len(queries), top_text,
             )
         return response
 
