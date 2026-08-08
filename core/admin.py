@@ -1685,7 +1685,7 @@ class AllocationKeyAdmin(ModelAdmin):
         "client_card_display", "service_item", "allocation_type", "value_display",
         "meter", "unit", "deduct_from_pool", "is_billed", "valid_from", "valid_to",
     )
-    list_select_related = ("client_card", "client_card__client", "service_item", "meter", "unit")
+    list_select_related = ("client_card", "client_card__client", "service_item", "service_item__site", "meter", "unit")
     list_filter = ("allocation_type", "deduct_from_pool", "is_billed")
     search_fields = ("meter__code", "meter__name", "client_card__client__name", "service_item__name")
     autocomplete_fields = ("client_card", "service_item", "meter", "unit")
@@ -1710,7 +1710,7 @@ class AllocationKeyAdmin(ModelAdmin):
 @admin.register(PriceList)
 class PriceListAdmin(DefaultToLatestPeriodMixin, ModelAdmin):
     list_display = ("service_item", "period", "price_per_unit_display", "note")
-    list_select_related = ("service_item", "period")
+    list_select_related = ("service_item", "service_item__site", "period")
     list_filter = ("period", "service_item__site", _PeriodDefaultMarkerFilter)
     autocomplete_fields = ("service_item",)
     search_fields = ("service_item__name",)
@@ -1753,7 +1753,7 @@ class CostEntryAdmin(DefaultToLatestPeriodMixin, ModelAdmin):
         "trida", "service_item", "period", "amount_units", "amount_czk", "jednotka", "kc_za_jednotku",
         "amount_czk_display", "note",
     )
-    list_select_related = ("service_item", "service_item__meter", "period")
+    list_select_related = ("service_item", "service_item__meter", "service_item__site", "period")
     list_display_links = ("service_item",)
     list_editable = ("amount_units", "amount_czk", "note")
     list_filter = (
@@ -1818,7 +1818,7 @@ class CostEntryAdmin(DefaultToLatestPeriodMixin, ModelAdmin):
 @admin.register(BillingLine)
 class BillingLineAdmin(DefaultToLatestPeriodMixin, ModelAdmin):
     list_display = ("client_card_display", "service_item", "period", "amount_display", "share_display")
-    list_select_related = ("client_card", "client_card__client", "service_item", "period")
+    list_select_related = ("client_card", "client_card__client", "service_item", "service_item__site", "period")
     list_filter = ("period", _PeriodDefaultMarkerFilter)
     search_fields = ("client_card__client__name",)
     readonly_fields = ("client_card_display", "period", "service_item", "amount", "share_display", "calc_detail")
