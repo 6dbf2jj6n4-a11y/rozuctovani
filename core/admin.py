@@ -1193,6 +1193,24 @@ class MeterAdmin(DuplicateModelAdminMixin, ModelAdmin):
         }),
     )
 
+    def change_view(self, request, object_id, form_url="", extra_context=None):
+        """Doplni odkaz "Podíl vah" (viz change_form.html) primo na Podil
+        vah teto Meridlo, pokud se nekde skutecne pouziva pro vypocet
+        podilu - viz billing/weight_shares.find_items_for_meter."""
+        from django.urls import reverse
+        from billing.weight_shares import find_items_for_meter
+
+        extra_context = extra_context or {}
+        meter = self.get_queryset(request).filter(pk=object_id).first()
+        if meter is not None:
+            matching_items = find_items_for_meter(meter)
+            base_url = reverse("admin:core_billingline_podil_vah")
+            if len(matching_items) == 1:
+                extra_context["podil_vah_url"] = f"{base_url}?item={matching_items[0].pk}&meter={meter.pk}"
+            elif len(matching_items) > 1:
+                extra_context["podil_vah_url"] = f"{base_url}?meter={meter.pk}"
+        return super().change_view(request, object_id, form_url, extra_context)
+
     def get_urls(self):
         from django.urls import path
         from django.http import JsonResponse
@@ -2000,11 +2018,21 @@ class BillingLineAdmin(DefaultToLatestPeriodMixin, ModelAdmin):
         """Pro vybranou Polozku zasobniku a Obdobi ukaze vahu/meridlo a
         skutecny podil kazdeho jejiho klice - viz billing/weight_shares.py.
         Vyber Polozky je pres <select> seskupeny podle Arealu a Tridy, aby
-        se v ~50+ polozkach dalo rychle najit."""
+        se v ~50+ polozkach dalo rychle najit.
+
+        Jde vybrat i primo Meridlem (napr. "chci videt podily na E_SPOL")
+        misto Polozky - to se dopredu nevi, protoze jedno Meridlo muze byt
+        napojene na klice ve VICE Polozkach (viz find_items_for_meter). Pri
+        jedne shode se rovnou preskoci na jeji Podil vah (s zvyraznenim
+        radku patricich tomuto Meridlu - jinak by v tabulce vsech klicu
+        polozky zapadlo mezi ostatni). Pri vic shodach se nabidne vyber,
+        pri nule hlaska, ze se nikde nepouziva."""
+        from django.db.models import Q
         from django.shortcuts import render
-        from billing.weight_shares import get_weight_share_data
+        from billing.weight_shares import find_items_for_meter, get_weight_share_data
 
         item_id = request.GET.get("item")
+        meter_id = request.GET.get("meter")
         period_id = request.GET.get("period")
 
         periods = Period.objects.all()
@@ -2013,11 +2041,31 @@ class BillingLineAdmin(DefaultToLatestPeriodMixin, ModelAdmin):
         items = ServicePoolItem.objects.select_related("site").order_by("site__name", "invoice_class", "name")
         item = items.filter(pk=item_id).first() if item_id else None
 
+        selected_meter = Meter.objects.select_related("site").filter(pk=meter_id).first() if meter_id else None
+        meter_choice_items = None
+        if selected_meter and item is None:
+            matches = find_items_for_meter(selected_meter)
+            if len(matches) == 1:
+                item = matches[0]
+            elif len(matches) > 1:
+                meter_choice_items = matches
+
         class_labels = dict(ServicePoolItem.InvoiceClass.choices)
         item_groups = {}
         for it in items:
             key = (it.site.name, class_labels[it.invoice_class])
             item_groups.setdefault(key, []).append(it)
+
+        # Jen meridla, ktera se v nejake Polozce/Klici skutecne pouzivaji
+        # pro vypocet podilu - do vyberu nema smysl pridavat merici
+        # meridla bez vazby na zadny Klic.
+        relevant_meters = (
+            Meter.objects.filter(Q(service_items__isnull=False) | Q(submeter_keys__isnull=False))
+            .select_related("site").distinct().order_by("site__name", "code")
+        )
+        meter_groups = {}
+        for m in relevant_meters:
+            meter_groups.setdefault(m.site.name, []).append(m)
 
         data = get_weight_share_data(item, period) if (item and period) else None
 
@@ -2030,6 +2078,10 @@ class BillingLineAdmin(DefaultToLatestPeriodMixin, ModelAdmin):
                 {"label": f"{site} – {cls}", "items": its} for (site, cls), its in item_groups.items()
             ],
             "selected_item": item,
+            "meter_groups": [{"label": site, "meters": ms} for site, ms in meter_groups.items()],
+            "selected_meter": selected_meter,
+            "meter_choice_items": meter_choice_items,
+            "highlight_meter_id": selected_meter.pk if selected_meter else None,
             "data": data,
             "opts": self.model._meta,
         }

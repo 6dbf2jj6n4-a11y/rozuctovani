@@ -14,7 +14,7 @@
         </div>
         <div>
             <label for="id_item" style="display:block; font-weight:600; margin-bottom:6px;">Položka zásobníku</label>
-            <select name="item" id="id_item" onchange="this.form.submit()" style="padding:8px; min-width:320px;">
+            <select name="item" id="id_item" onchange="document.getElementById('id_meter').value=''; this.form.submit()" style="padding:8px; min-width:320px;">
                 <option value="">-- vyber položku --</option>
                 {% for group in item_groups %}
                     <optgroup label="{{ group.label }}">
@@ -25,17 +25,39 @@
                 {% endfor %}
             </select>
         </div>
+        <div>
+            <label for="id_meter" style="display:block; font-weight:600; margin-bottom:6px;">...nebo měřidlo</label>
+            <select name="meter" id="id_meter" onchange="document.getElementById('id_item').value=''; this.form.submit()" style="padding:8px; min-width:220px;">
+                <option value="">-- vyber měřidlo --</option>
+                {% for group in meter_groups %}
+                    <optgroup label="{{ group.label }}">
+                        {% for m in group.meters %}
+                            <option value="{{ m.pk }}" {% if selected_meter and m.pk == selected_meter.pk %}selected{% endif %}>{{ m.code|default:m.name }}</option>
+                        {% endfor %}
+                    </optgroup>
+                {% endfor %}
+            </select>
+        </div>
     </form>
 
     {% if not selected_period %}
         <p>Nejdřív je potřeba mít založené alespoň jedno Období.</p>
+    {% elif meter_choice_items %}
+        <p>Měřidlo {{ selected_meter }} se používá ve více položkách zásobníku - vyber jednu:</p>
+        <ul>
+            {% for it in meter_choice_items %}
+                <li><a href="?period={{ selected_period.pk }}&amp;item={{ it.pk }}&amp;meter={{ selected_meter.pk }}">{{ it.site }} – {{ it }}</a></li>
+            {% endfor %}
+        </ul>
+    {% elif selected_meter and not selected_item %}
+        <p>Měřidlo {{ selected_meter }} se v žádné položce zásobníku nepoužívá (ani jako hlavní měřidlo, ani napojené na klíč) - zkontroluj v <a href="/admin/core/meter/report/neprirazena/">Nepřiřazených měřidlech</a>.</p>
     {% elif not selected_item %}
-        <p>Vyber položku zásobníku výše.</p>
+        <p>Vyber položku zásobníku nebo měřidlo výše.</p>
     {% elif data %}
         <h2>{{ selected_item }}</h2>
         <p style="color:#999; font-size:13px;">
             {% if data.main_meter %}
-                Hlavní měřidlo položky: {{ data.main_meter }}, spotřeba za období: {% if data.total_consumption != None %}{{ data.total_consumption|floatformat:3 }} {{ data.main_meter.unit_of_measure }}{% else %}—{% endif %}
+                <span {% if highlight_meter_id and data.main_meter.pk == highlight_meter_id %}style="background:rgba(217,119,6,0.15); padding:1px 4px; border-radius:3px;"{% endif %}>Hlavní měřidlo položky: {{ data.main_meter }}</span>, spotřeba za období: {% if data.total_consumption != None %}{{ data.total_consumption|floatformat:3 }} {{ data.main_meter.unit_of_measure }}{% else %}—{% endif %}
             {% elif data.uses_consumption %}
                 Bez hlavního měřidla - "celek" dopočítaný jako součet napojených podružných měřidel, celková spotřeba: {% if data.total_consumption != None %}{{ data.total_consumption|floatformat:3 }}{% else %}—{% endif %}
             {% else %}
@@ -68,7 +90,7 @@
                 </thead>
                 <tbody>
                     {% for row in data.weight_rows %}
-                        <tr style="border-bottom:1px solid #333;">
+                        <tr style="border-bottom:1px solid #333; {% if highlight_meter_id and row.meter.pk == highlight_meter_id %}background:rgba(217,119,6,0.15);{% endif %}">
                             <td style="padding:6px 8px;">{{ row.client }}</td>
                             <td style="padding:6px 8px;">{{ row.card }}</td>
                             <td style="padding:6px 8px;">{{ row.type }}</td>
@@ -83,6 +105,39 @@
                                 {% if row.share != None %}{{ row.share|percent }}{% else %}—{% endif %}
                                 {% if not row.is_billed %}<span style="color:#d97706; font-weight:400;"> (nefakturováno)</span>{% endif %}
                             </td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            </div>
+        {% endif %}
+
+        {% if data.meter_rows %}
+            <h3 style="margin-top:28px;">Rozpad na měřidla</h3>
+            <p style="color:#999; font-size:13px;">
+                Stejné klíče seskupené podle fyzického měřidla (víc karet může sdílet jedno
+                měřidlo) - jeho podíl na celé položce, PŘED rozpočtením mezi sdílející karty
+                podle váhy (to je vidět výše ve sloupci "Lokální podíl").
+            </p>
+            <div style="overflow-x:auto;">
+            <table style="width:100%; border-collapse:collapse; font-size:13px;">
+                <thead>
+                    <tr style="border-bottom:2px solid #666; text-align:left;">
+                        <th style="padding:6px 8px;">Měřidlo</th>
+                        <th style="padding:6px 8px;">Karty</th>
+                        <th style="padding:6px 8px; text-align:right;">Spotřeba</th>
+                        <th style="padding:6px 8px; text-align:right;">Podíl na položce</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in data.meter_rows %}
+                        <tr style="border-bottom:1px solid #333; {% if highlight_meter_id and row.meter.pk == highlight_meter_id %}background:rgba(217,119,6,0.15);{% endif %}">
+                            <td style="padding:6px 8px;">
+                                <a href="/admin/core/meter/{{ row.meter.pk }}/change/">{{ row.meter.code|default:row.meter.name }}</a>
+                            </td>
+                            <td style="padding:6px 8px;">{{ row.cards|join:", " }}</td>
+                            <td style="padding:6px 8px; text-align:right;">{{ row.consumption|floatformat:3 }} {{ row.meter.unit_of_measure }}</td>
+                            <td style="padding:6px 8px; text-align:right; font-weight:600;">{{ row.contribution|percent }}</td>
                         </tr>
                     {% endfor %}
                 </tbody>

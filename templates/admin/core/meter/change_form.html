@@ -1,0 +1,13 @@
+{% extends "admin/prev_next_change_form.html" %}
+
+{% block object-tools-items %}
+    {{ block.super }}
+    {% if podil_vah_url %}
+        <li class="border border-base-200 max-md:-mt-px max-md:first:rounded-t-default max-md:last:rounded-b-default md:-ml-px md:first:rounded-l-default md:last:rounded-r-default hover:text-primary-600 dark:hover:text-primary-500 dark:border-base-700">
+            <a href="{{ podil_vah_url }}" title="Zobrazit podíl vah pro toto měřidlo" class="cursor-pointer flex grow items-center gap-2 px-3 py-2 text-left whitespace-nowrap">
+                <span class="material-symbols-outlined">percent</span>
+                Podíl vah
+            </a>
+        </li>
+    {% endif %}
+{% endblock %}

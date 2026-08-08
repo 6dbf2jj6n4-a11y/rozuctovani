@@ -10,10 +10,31 @@ tohle nemela (predchazela rewceniu enginu), takze pro polozky bez
 service_item.meter, ale s realnymi podruznymi meridly (napr. "hlavní
 odběr elektro NJ") davala jiny vysledek nez skutecny vypocet. Tady je to
 vzdy presne konzistentni s tim, co se opravdu vyuctuje.
+
+Vraci navic "meter_rows" - rozpad podilu PO MERIDLECH (ne po klicich/
+kartach), stejnym mechanismem (by_meter_out) jako billing/item_summary.py
+pouziva pro Prehled s rozpadem na meridla - uzitecne, kdyz vic karet
+sdili jedno fyzicke meridlo a chces videt jeho podil na cele polozce
+pred rozpoctenim mezi karty vahou.
 """
 from decimal import Decimal
 
 from .engine import ABSOLUTE_AMOUNT_TYPES, _consumption_shares, _fixed_amount_for, _meter_provides_consumption, _weighted_shares
+
+
+def find_items_for_meter(meter):
+    """Vrati seznam ServicePoolItem, ve kterych se dane Meridlo pouziva -
+    bud jako jeji hlavni meridlo (item.meter), nebo napojene na nektery
+    jeji Klic (AllocationKey.meter). Slouzi k "prokliku" Meridlo ->
+    Podil vah (core_meter_report_neprirazena ho nepokryva - tohle je
+    presny opak, meridla, ktera SE pouzivaji, jen neni hned videt kde)."""
+    from core.models import ServicePoolItem
+
+    ids = set(ServicePoolItem.objects.filter(meter=meter).values_list("pk", flat=True))
+    ids |= set(ServicePoolItem.objects.filter(allocation_keys__meter=meter).values_list("pk", flat=True))
+    return list(
+        ServicePoolItem.objects.filter(pk__in=ids).select_related("site").order_by("site__name", "name")
+    )
 
 
 def get_weight_share_data(item, period):
@@ -36,13 +57,17 @@ def get_weight_share_data(item, period):
 
     by_key_share = {}
     by_key_local_share = {}
+    by_meter_share = {}
     total_consumption = None
     if uses_consumption:
         _, total_consumption = _consumption_shares(
-            item, period, warnings, by_key_out=by_key_share, by_key_local_out=by_key_local_share
+            item, period, warnings, by_key_out=by_key_share, by_key_local_out=by_key_local_share,
+            by_meter_out=by_meter_share,
         )
     elif other_keys:
         _weighted_shares(other_keys, period, by_key_out=by_key_share)
+
+    meter_rows = sorted(by_meter_share.values(), key=lambda info: -info["contribution"])
 
     weight_rows = []
     for key in other_keys:
@@ -101,6 +126,7 @@ def get_weight_share_data(item, period):
         "main_meter": item.meter,
         "total_consumption": total_consumption,
         "weight_rows": weight_rows,
+        "meter_rows": meter_rows,
         "fixed_rows": fixed_rows,
         "invalid_rows": invalid_rows,
         "warnings": warnings,
