@@ -140,6 +140,7 @@ REST_FRAMEWORK = {
 CSRF_TRUSTED_ORIGINS = [
     "https://rozuctovani-production.up.railway.app",
     "https://rentex-eu-production.up.railway.app",
+    "https://rozuctovani.calamarise.eu",
 ]
 UNFOLD = {
     "SITE_TITLE": "RENTE)(",
