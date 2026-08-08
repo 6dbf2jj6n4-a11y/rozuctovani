@@ -110,6 +110,11 @@ def get_item_summary_rows(period, site=None, with_meters=False):
                     unit_of_measure = key_with_meter.meter.unit_of_measure
                 if by_meter:
                     for info in sorted(by_meter.values(), key=lambda i: -i["contribution"]):
+                        if info["consumption"] == 0:
+                            # Merene, ale s nulovou spotrebou v tomto obdobi
+                            # (napr. mimo sezonu) - v prehledu jen zbytecny
+                            # sum, viz konverzace s Danielem.
+                            continue
                         meter_breakdown.append({
                             "meter": info["meter"],
                             "consumption": info["consumption"],
