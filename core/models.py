@@ -247,6 +247,10 @@ class ClientCard(models.Model):
     )
     valid_from = models.DateField("Platnost od")
     valid_to = models.DateField("Platnost do", null=True, blank=True)
+    signed_on = models.DateField(
+        "Datum podpisu", null=True, blank=True,
+        help_text="Tiskne se na Kartu nájemce (Příloha č. 1). Pokud není vyplněno, předvyplní se při uložení podle Platnost od.",
+    )
     note = models.CharField("Poznámka", max_length=300, blank=True)
     external_id = models.IntegerField("Původní ID (IDK)", null=True, blank=True)
     description = models.CharField("Popis karty", max_length=200, blank=True)
@@ -283,6 +287,8 @@ class ClientCard(models.Model):
                 client_id=self.client_id, valid_from__year=year
             ).exclude(pk=self.pk).count() + 1
             self.description = f"Karta {self.client.code} {year} - {order}"
+        if not self.signed_on and self.valid_from:
+            self.signed_on = self.valid_from
         super().save(*args, **kwargs)
 
     def clean(self):

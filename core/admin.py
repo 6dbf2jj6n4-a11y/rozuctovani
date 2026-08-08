@@ -898,7 +898,7 @@ class ClientCardAdmin(ModelAdmin):
             "fields": (("po_number_rent", "po_number_services"),)
         }),
         ("Karta nájemce (Příloha č. 1)", {
-            "fields": ("generate_card_button", "document")
+            "fields": ("signed_on", "generate_card_button", "document")
         }),
     )
     readonly_fields = ("generate_card_button",)

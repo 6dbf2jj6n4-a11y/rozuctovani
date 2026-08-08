@@ -1,11 +1,12 @@
 """
 Generovani dokumentu Karty najemce (PDF) - Priloha c. 1 ke Smlouve.
 
-Cernobile, bezpatkove (DejaVu Sans - viz core/pdf_fonts.py), maly font
-(~8pt), tabulky zarovnane doleva a bez mezer mezi radky - vzhled
-odpovida poznamkovemu prehledu k podpisu, ne reprezentativnimu
-dokumentu. Klient/Karta/Platnost od jsou vyrazeny tucne a o neco
-vetsim pismem nez zbytek.
+Cernobile, bezpatkove (PT Sans Narrow - viz core/pdf_fonts.py, vizualne
+blizky Arial Narrow, kterym je psana samotna Smlouva), maly font (~8pt),
+tabulky zarovnane doleva a bez mezer mezi radky - vzhled odpovida
+poznamkovemu prehledu k podpisu, ne reprezentativnimu dokumentu.
+Klient/Karta/Platnost od jsou vyrazeny tucne a o neco vetsim pismem
+nez zbytek.
 """
 from decimal import ROUND_CEILING, Decimal
 
@@ -13,14 +14,45 @@ from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import ParagraphStyle
 from reportlab.lib.units import mm
+from reportlab.pdfgen import canvas as _canvas
 from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
 from core.contract_generator import format_date_cz, get_landlord
 from core.models import AllocationKey, ServicePoolItem
-from core.pdf_fonts import FONT_BOLD, FONT_REGULAR
+from core.pdf_fonts import FONT_CARD_BOLD as FONT_BOLD
+from core.pdf_fonts import FONT_CARD_REGULAR as FONT_REGULAR
 
 _CLASS_ORDER = [code for code, _ in ServicePoolItem.InvoiceClass.choices]
 _FONT_SIZE = 8
+
+
+class _NumberedCanvas(_canvas.Canvas):
+    """Canvas, ktery na konci kazdou stranku doplni o cislovani "Strana X z Y" -
+    celkovy pocet stran neni znamy, dokud nejsou vsechny vysazene, proto se
+    stranky nejdriv jen bufferuji (showPage) a fyzicky vykresli az v save()."""
+
+    def __init__(self, *args, **kwargs):
+        _canvas.Canvas.__init__(self, *args, **kwargs)
+        self._saved_page_states = []
+
+    def showPage(self):
+        self._saved_page_states.append(dict(self.__dict__))
+        self._startPage()
+
+    def save(self):
+        total_pages = len(self._saved_page_states)
+        for state in self._saved_page_states:
+            self.__dict__.update(state)
+            self._draw_page_number(total_pages)
+            _canvas.Canvas.showPage(self)
+        _canvas.Canvas.save(self)
+
+    def _draw_page_number(self, total_pages):
+        self.setFont(FONT_REGULAR, _FONT_SIZE)
+        self.drawCentredString(
+            A4[0] / 2, 10 * mm, f"Stránka {self._pageNumber} z {total_pages}"
+        )
+
 
 _STYLE_HEADER = ParagraphStyle("CardHeader", fontName=FONT_BOLD, fontSize=_FONT_SIZE, alignment=2)  # 2 = right
 _STYLE_INFO = ParagraphStyle("CardInfo", fontName=FONT_BOLD, fontSize=_FONT_SIZE + 2, leading=_FONT_SIZE + 5)
@@ -90,7 +122,7 @@ def generate_client_card_document(card, output_path):
         output_path, pagesize=A4,
         topMargin=18 * mm, bottomMargin=18 * mm, leftMargin=18 * mm, rightMargin=18 * mm,
     )
-    elements = [Paragraph("Příloha č. 1", _STYLE_HEADER), Spacer(1, 4 * mm)]
+    elements = [Paragraph("Příloha č. 1 ke Smlouvě o nájmu", _STYLE_HEADER), Spacer(1, 4 * mm)]
 
     info_lines = [
         f"Klient: {card.client}",
@@ -181,8 +213,9 @@ def generate_client_card_document(card, output_path):
         keys_table.setStyle(TableStyle(keys_style))
         elements.append(keys_table)
 
-    # --- Podpisy: nadpis strany / čára / jméno zástupce pod čarou ---
+    # --- Podpisy: datum podpisu / nadpis strany / čára / jméno zástupce pod čarou ---
     elements.append(Spacer(1, 10 * mm))
+    elements.append(Paragraph(f"Datum podpisu: {format_date_cz(card.signed_on)}", _STYLE_H2))
     sig_rows = [
         [Paragraph("Pronajímatel", _STYLE_SIG_LABEL), Paragraph("Nájemce", _STYLE_SIG_LABEL)],
         [Paragraph("_" * 35, _STYLE_SIG_LINE), Paragraph("_" * 35, _STYLE_SIG_LINE)],
@@ -198,5 +231,5 @@ def generate_client_card_document(card, output_path):
     ]))
     elements.append(sig_table)
 
-    doc.build(elements)
+    doc.build(elements, canvasmaker=_NumberedCanvas)
     return output_path
