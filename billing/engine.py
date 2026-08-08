@@ -483,7 +483,7 @@ def calculate_period(period, site=None):
 
     with transaction.atomic():
         billing_lines = BillingLine.objects.filter(period=period)
-        service_items = ServicePoolItem.objects.select_related("meter")
+        service_items = ServicePoolItem.objects.select_related("meter", "site")
         if site is not None:
             billing_lines = billing_lines.filter(service_item__site=site)
             service_items = service_items.filter(site=site)
