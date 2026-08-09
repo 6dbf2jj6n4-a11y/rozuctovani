@@ -263,6 +263,11 @@ UNFOLD = {
                         "icon": "pie_chart",
                         "link": reverse_lazy("admin:core_billingline_podil_vah"),
                     },
+                    {
+                        "title": _("Vyúčtování klienta"),
+                        "icon": "receipt",
+                        "link": reverse_lazy("moje-vyuctovani"),
+                    },
                 ],
             },
             {
