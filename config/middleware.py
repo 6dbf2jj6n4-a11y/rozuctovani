@@ -53,23 +53,36 @@ class SlowRequestLoggingMiddleware:
 
 
 class NonStaffAdminRedirectMiddleware:
-    """Prihlaseny uzivatel bez is_staff, ktery zkusi jakoukoliv /admin/...
+    """Dve situace, kdy by spravce/klient (bez is_staff) nemel skoncit na
+    Django adminove VLASTNI prihlasovaci strance (/admin/login/):
+
+    1) PRIHLASENY uzivatel bez is_staff, ktery zkusi jakoukoliv /admin/...
     adresu (napr. stara zalozka), by jinak skoncil na /admin/login/ -
     tam ale nekdy pada Unfold sablona (KeyError na 'opts'/'href'/'name'/
     'attrs' v unfold/components/button.html) pro prihlaseneho-ale-ne-
     staff uzivatele, misto hezke chybove hlasky Internal Server Error
     ve smycce. Viz konverzace s Danielem 2026-08-06 (Olda). Presmerujeme
     ho radeji rovnou na jeho domovskou obrazovku, driv nez se ta sablona
-    vubec zkusi vykreslit."""
+    vubec zkusi vykreslit.
+
+    2) NEPRIHLASENY uzivatel, ktery zkusi /admin/... (typicky /admin/login/
+    primo, napr. spatny odkaz/zvyk), skonci na Django adminove
+    AdminAuthenticationForm - ta i pri SPRAVNEM hesle odmitne kohokoliv
+    bez is_staff s hlaskou "Zadejte spravne uzivatelske jmeno a heslo pro
+    personál" (zmatecne pusobi jako spatne heslo, i kdyz je spravne - viz
+    konverzace s Danielem 2026-08-09, Olda a David se nemohli prihlasit).
+    Presmerujeme na normalni prihlasovaci stranku (/accounts/login/, bez
+    is_staff omezeni) se zachovanym 'next', aby po prihlaseni pokracovali
+    presne tam, kam meli namireno."""
 
     def __init__(self, get_response):
         self.get_response = get_response
 
     def __call__(self, request):
-        if (
-            request.path.startswith("/admin/")
-            and request.user.is_authenticated
-            and not request.user.is_staff
-        ):
-            return redirect("home")
+        if request.path.startswith("/admin/"):
+            if request.user.is_authenticated and not request.user.is_staff:
+                return redirect("home")
+            if not request.user.is_authenticated:
+                from django.contrib.auth.views import redirect_to_login
+                return redirect_to_login(request.get_full_path(), login_url="/accounts/login/")
         return self.get_response(request)
