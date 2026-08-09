@@ -142,9 +142,14 @@ CSRF_TRUSTED_ORIGINS = [
     "https://rentex-eu-production.up.railway.app",
     "https://rozuctovani.calamarise.eu",
 ]
+# Verze zobrazena v hlavicce adminu - zvysuje se o +1 po kazdem commitu
+# a pushi (dohoda s Danielem 2026-08-09), format RRRR.poradove_cislo,
+# napr. 2026.1 -> 2026.2 -> 2026.3...
+APP_VERSION = "2026.1"
+
 UNFOLD = {
     "SITE_TITLE": "RENTE)(",
-    "SITE_HEADER": "RENTEX_2026",
+    "SITE_HEADER": f"Rente)( 2026 · {APP_VERSION}",
     "SITE_SUBHEADER": "core.admin_branding.site_subheader",
     "STYLES": ["core.admin_branding.inline_date_width_fix_css"],
     "SIDEBAR": {
