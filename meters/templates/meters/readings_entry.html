@@ -1,3 +1,4 @@
+{% load static %}
 <!DOCTYPE html>
 <html lang="cs">
 <head>
@@ -75,6 +76,11 @@
         }
         input, select, textarea, button { font-family: inherit; color: inherit; }
         .wrap { max-width: 440px; width: 100%; margin: 0 auto; padding: 20px 16px 40px; flex-shrink: 0; overflow-x: hidden; }
+        .brand-header { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
+        .brand-logo { width: 28px; height: 28px; flex-shrink: 0; }
+        .brand-text { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+        .brand-title { font-size: 13px; font-weight: 600; color: var(--text); line-height: 1.2; }
+        .brand-subtitle { font-size: 11px; color: var(--text-faint); line-height: 1.2; }
         .topbar { display: flex; align-items: center; gap: 14px; margin-bottom: 16px; }
         .user-block { display: flex; flex-direction: column; align-items: center; gap: 3px; flex-shrink: 0; }
         .user-icon {
@@ -229,6 +235,14 @@
 <body>
 <div class="layout">
 <div class="wrap">
+    <div class="brand-header">
+        <img class="brand-logo" src="{% static 'core/img/logo.svg' %}" alt="">
+        <div class="brand-text">
+            <span class="brand-title">Rente )( {{ app_version }}</span>
+            {% if landlord_name %}<span class="brand-subtitle">{{ landlord_name }}</span>{% endif %}
+        </div>
+    </div>
+
     <div class="topbar">
         <div class="user-block">
             <span class="user-icon" title="{{ request.user.username }}">

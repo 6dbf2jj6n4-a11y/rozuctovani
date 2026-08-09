@@ -6,6 +6,7 @@ Viz core/models.py Meter.consumption_for pro vypocet spotreby.
 import json
 from decimal import Decimal, InvalidOperation
 
+from django.conf import settings
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import PermissionDenied
 from django.http import JsonResponse
@@ -13,7 +14,7 @@ from django.shortcuts import get_object_or_404, render
 from django.utils import timezone
 from django.views.decorators.http import require_POST
 
-from core.models import Meter, MeterReading, Period
+from core.models import Client, Meter, MeterReading, Period
 
 
 def _require_spravce(user):
@@ -126,6 +127,8 @@ def readings_entry(request):
                 } if existing else None,
             })
 
+    landlord = Client.objects.filter(is_landlord=True).first()
+
     return render(request, "meters/readings_entry.html", {
         "sites": sites,
         "site": site,
@@ -133,6 +136,11 @@ def readings_entry(request):
         "period": period,
         "meters_data": meters_data,
         "period_closed": bool(period and period.status == Period.Status.CLOSED),
+        # Stejna hlavicka (logo/verze/pronajimatel) jako v Django adminu
+        # (config.settings.UNFOLD SITE_ICON/SITE_HEADER/SITE_SUBHEADER) -
+        # viz konverzace s Danielem 2026-08-09, chtel sjednoceny vzhled.
+        "app_version": settings.APP_VERSION,
+        "landlord_name": landlord.name if landlord else None,
     })
 
 
