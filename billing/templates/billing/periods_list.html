@@ -51,6 +51,7 @@
     </div>
 
     {% if all_clients is not None %}
+        <p style="margin: -8px 0 16px;"><a href="{% url 'admin:index' %}" style="font-size:13px; color:#2563eb; text-decoration:none;">&larr; zpět do adminu</a></p>
         <form method="get" style="margin-bottom: 16px;">
             <select name="client" onchange="this.form.submit()">
                 <option value="">— vyber klienta —</option>

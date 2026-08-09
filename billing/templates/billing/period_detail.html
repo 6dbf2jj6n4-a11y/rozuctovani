@@ -46,6 +46,14 @@
     </div>
     <p class="sub">{{ client.name }} — {{ period }}</p>
 
+    {% if request.user.role != "klient" %}
+        <p class="sub" style="margin-top:-12px;">
+            <a class="back" href="{% url 'admin:index' %}">&larr; zpět do adminu</a>
+            &nbsp;·&nbsp;
+            <a class="back" href="{% url 'admin:core_billingline_detail_client' client.pk %}?period={{ period.pk }}">detail po měřidlech (interní)</a>
+        </p>
+    {% endif %}
+
     {% for cls in classes %}
         <div class="card">
             <h2>{{ cls.label }}</h2>
