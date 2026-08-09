@@ -1,5 +1,12 @@
 <svg viewBox="0 0 120 120" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-  <path d="M 95.35 43.52 A 39 39 0 0 1 43.52 95.35" fill="none" stroke="#303090" stroke-width="17" stroke-linecap="round"/>
-  <path d="M 24.65 76.48 A 39 39 0 0 1 76.48 24.65" fill="none" stroke="#48A5AE" stroke-width="17" stroke-linecap="round"/>
-  <circle cx="95.35" cy="43.52" r="6.5" fill="#48A5AE"/>
+  <style>
+    .spin { transform-origin: 60px 60px; animation: spin 5s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    @media (prefers-reduced-motion: reduce) { .spin { animation: none; } }
+  </style>
+  <g class="spin">
+    <path d="M 95.35 43.52 A 39 39 0 0 1 43.52 95.35" fill="none" stroke="#303090" stroke-width="17" stroke-linecap="round"/>
+    <path d="M 24.65 76.48 A 39 39 0 0 1 76.48 24.65" fill="none" stroke="#48A5AE" stroke-width="17" stroke-linecap="round"/>
+    <circle cx="95.35" cy="43.52" r="6.5" fill="#48A5AE"/>
+  </g>
 </svg>
