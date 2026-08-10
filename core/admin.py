@@ -1131,6 +1131,9 @@ class MeterReadingInline(TabularInline):
     extra = 1
     fields = ("period", "reading_date", "value", "reset_from_value", "note", "photo")
     ordering = ("-period",)
+    # Vypne Unfold radek s nazvem zaznamu ("668NT - 12/2025: 144095.000")
+    # nad kazdym radkem - jen duplikoval hodnoty uz vidne ve sloupcich.
+    hide_title = True
 
     class Media:
         css = {"all": ("core/css/meterreading_inline_no_header.css",)}
