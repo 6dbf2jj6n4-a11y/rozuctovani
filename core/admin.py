@@ -1174,10 +1174,10 @@ class MeterAdmin(DuplicateModelAdminMixin, ModelAdmin):
         ("Odečty", {
             "fields": ("reading_mode",),
             "description": (
-                "Vetsina meridel hlasi kumulativni Stav. Pokud dodavatel hlasi "
-                "rovnou Spotrebu za obdobi (napr. hlavni odberne misto elektro), "
-                "prepni na 'Spotreba za obdobi' - pak staci zadavat odecet jen "
-                "za aktualni mesic, bez nutnosti znat predchozi stav."
+                "Většina měřidel hlásí kumulativní Stav. Pokud dodavatel hlásí "
+                "rovnou Spotřebu za období (např. hlavní odběrné místo elektro), "
+                "přepni na 'Spotřeba za období' - pak stačí zadávat odečet jen "
+                "za aktuální měsíc, bez nutnosti znát předchozí stav."
             ),
         }),
         ("Hierarchie", {
@@ -1579,12 +1579,16 @@ def _jednotka_polozky(item):
 
 def _format_kc(value, decimals=2):
     """Cesky format meny: '1 234,50 Kč' (mezera jako oddelovac tisicu,
-    carka jako desetinny oddelovac)."""
+    carka jako desetinny oddelovac). Zarovnano vpravo (blokovy text-align)
+    - v CR se castky v tabulkach zarovnavaji vpravo, ne vlevo jako
+    bezny text, viz konverzace s Danielem 2026-08-12."""
+    from django.utils.html import format_html
+
     if value is None:
-        return "-"
+        return format_html('<span style="display:block; text-align:right;">-</span>')
     text = f"{value:,.{decimals}f}"
     text = text.replace(",", "\x00").replace(".", ",").replace("\x00", " ")
-    return f"{text} Kč"
+    return format_html('<span style="display:block; text-align:right;">{} Kč</span>', text)
 
 
 def _efektivni_cena_za_jednotku(cost_entry):
@@ -1813,7 +1817,7 @@ class CostEntryAdmin(DefaultToLatestPeriodMixin, ModelAdmin):
     @admin.display(description="Kč/jednotka")
     def kc_za_jednotku(self, obj):
         price = _efektivni_cena_za_jednotku(obj)
-        return _format_kc(price, decimals=4) if price is not None else "-"
+        return _format_kc(price, decimals=4)
 
     @admin.display(description="Částka (Kč)", ordering="amount_czk")
     def amount_czk_display(self, obj):
@@ -1829,7 +1833,7 @@ class CostEntryAdmin(DefaultToLatestPeriodMixin, ModelAdmin):
         if obj is None or obj.pk is None:
             return "(uloží se po prvním uložení záznamu)"
         price = _efektivni_cena_za_jednotku(obj)
-        return _format_kc(price, decimals=4) if price is not None else "-"
+        return _format_kc(price, decimals=4)
 
     @admin.display(description="Celková částka (kontrola)")
     def kontrola_castka_celkem(self, obj):
