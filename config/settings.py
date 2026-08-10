@@ -145,7 +145,7 @@ CSRF_TRUSTED_ORIGINS = [
 # Verze zobrazena v hlavicce adminu - zvysuje se o +1 po kazdem commitu
 # a pushi (dohoda s Danielem 2026-08-09), format RRRR.poradove_cislo,
 # napr. 2026.1 -> 2026.2 -> 2026.3...
-APP_VERSION = "2026.14"
+APP_VERSION = "2026.15"
 
 UNFOLD = {
     "SITE_TITLE": "RENTE)(",
@@ -304,6 +304,11 @@ UNFOLD = {
                         "title": _("Seznam klientů s kontakty"),
                         "icon": "contacts",
                         "link": reverse_lazy("admin:core_client_report_kontakty"),
+                    },
+                    {
+                        "title": _("Paušální klienti"),
+                        "icon": "balance",
+                        "link": reverse_lazy("admin:core_billingline_report_pausalni"),
                     },
                 ],
             },

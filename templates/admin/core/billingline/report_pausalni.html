@@ -1,0 +1,50 @@
+{% extends "admin/base_site.html" %}
+
+{% block content %}
+<div>
+    <p style="color:#888; margin-bottom:16px;">
+        Klienti se službami/energiemi zahrnutými přímo v nájmu (aspoň jedna položka
+        "v paušálu" v daném období). Náklad = co by je stálo služby, kdyby se fakturovaly
+        zvlášť. Výnos = co od nich reálně vybíráme (typicky nájem).
+    </p>
+
+    {% if not rows %}
+        <p>Za rok {{ year }} zatím nejsou žádná vypočtená období s paušálními klienty.</p>
+    {% else %}
+        <div style="overflow-x:auto;">
+        <table style="width:100%; border-collapse:collapse; font-size:13px;">
+            <thead>
+                <tr style="border-bottom:2px solid #666; text-align:left;">
+                    <th style="padding:6px 8px;">Období</th>
+                    <th style="padding:6px 8px; text-align:right;">Počet klientů</th>
+                    <th style="padding:6px 8px; text-align:right;">Náklad</th>
+                    <th style="padding:6px 8px; text-align:right;">Výnos</th>
+                    <th style="padding:6px 8px; text-align:right;">Rozdíl</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in rows %}
+                    <tr style="border-bottom:1px solid #333;">
+                        <td style="padding:6px 8px;">{{ row.period }}</td>
+                        <td style="padding:6px 8px; text-align:right;">{{ row.pocet_klientu }}</td>
+                        <td style="padding:6px 8px; text-align:right;">{{ row.naklad|floatformat:2 }} Kč</td>
+                        <td style="padding:6px 8px; text-align:right;">{{ row.vynos|floatformat:2 }} Kč</td>
+                        <td style="padding:6px 8px; text-align:right; font-weight:600; {% if row.rozdil < 0 %}color:#c0392b;{% endif %}">
+                            {{ row.rozdil|floatformat:2 }} Kč
+                        </td>
+                    </tr>
+                {% endfor %}
+                <tr style="border-top:2px solid #666; font-weight:700;">
+                    <td colspan="2" style="padding:8px; text-align:right;">Celkem {{ year }}</td>
+                    <td style="padding:8px; text-align:right;">{{ total_naklad|floatformat:2 }} Kč</td>
+                    <td style="padding:8px; text-align:right;">{{ total_vynos|floatformat:2 }} Kč</td>
+                    <td style="padding:8px; text-align:right; {% if total_rozdil < 0 %}color:#c0392b;{% endif %}">
+                        {{ total_rozdil|floatformat:2 }} Kč
+                    </td>
+                </tr>
+            </tbody>
+        </table>
+        </div>
+    {% endif %}
+</div>
+{% endblock %}

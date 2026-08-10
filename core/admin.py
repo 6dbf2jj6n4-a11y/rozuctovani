@@ -1881,8 +1881,69 @@ class BillingLineAdmin(DefaultToLatestPeriodMixin, ModelAdmin):
                 self.admin_site.admin_view(self.report_grafy_trid_view),
                 name="core_billingline_report_grafy_trid",
             ),
+            path(
+                "report/pausalni-klienti/",
+                self.admin_site.admin_view(self.report_pausalni_klienti_view),
+                name="core_billingline_report_pausalni",
+            ),
         ]
         return custom + urls
+
+    def report_pausalni_klienti_view(self, request):
+        """Report (Reporty v menu): pro klienty, kteri maji sluzby/energie
+        zahrnute rovnou v najmu (aspon jeden BillingLine.is_billed=False
+        v danem obdobi), ukaze po Obdobich za AKTUALNI rok:
+        - Naklad: soucet jejich is_billed=False radku (co by je stalo
+          sluzby, kdyby se fakturovaly zvlast)
+        - Vynos: soucet jejich is_billed=True radku ve STEJNEM obdobi
+          (typicky najem - co od nich skutecne vybirame)
+        - Rozdil: Vynos - Naklad (zaporne = na nich v tom obdobi
+          prodelavame - typicky v zime kvuli teplu, viz konverzace
+          s Danielem 2026-08-12)."""
+        from django.db.models import Sum
+        from django.shortcuts import render
+        from django.utils import timezone
+
+        current_year = timezone.localdate().year
+        periods = Period.objects.filter(year=current_year).order_by("year", "month")
+
+        rows = []
+        total_naklad = Decimal("0")
+        total_vynos = Decimal("0")
+        for period in periods:
+            client_ids_pausal = set(
+                BillingLine.objects.filter(period=period, is_billed=False)
+                .values_list("client_card__client_id", flat=True)
+            )
+            if not client_ids_pausal:
+                continue
+            naklad = BillingLine.objects.filter(
+                period=period, is_billed=False, client_card__client_id__in=client_ids_pausal,
+            ).aggregate(s=Sum("amount"))["s"] or Decimal("0")
+            vynos = BillingLine.objects.filter(
+                period=period, is_billed=True, client_card__client_id__in=client_ids_pausal,
+            ).aggregate(s=Sum("amount"))["s"] or Decimal("0")
+            rows.append({
+                "period": period,
+                "pocet_klientu": len(client_ids_pausal),
+                "naklad": naklad,
+                "vynos": vynos,
+                "rozdil": vynos - naklad,
+            })
+            total_naklad += naklad
+            total_vynos += vynos
+
+        context = {
+            **self.admin_site.each_context(request),
+            "title": f"Paušální klienti - náklad vs výnos ({current_year})",
+            "year": current_year,
+            "rows": rows,
+            "total_naklad": total_naklad,
+            "total_vynos": total_vynos,
+            "total_rozdil": total_vynos - total_naklad,
+            "opts": self.model._meta,
+        }
+        return render(request, "admin/core/billingline/report_pausalni.html", context)
 
     def report_grafy_trid_view(self, request):
         """Report (Reporty v menu): SVG sloupcovy graf (seskupene sloupce,
