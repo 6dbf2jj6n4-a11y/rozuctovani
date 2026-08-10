@@ -1133,10 +1133,9 @@ class MeterReadingInline(TabularInline):
     ordering = ("-period",)
     # Vypne Unfold radek s nazvem zaznamu ("668NT - 12/2025: 144095.000")
     # nad kazdym radkem - jen duplikoval hodnoty uz vidne ve sloupcich.
+    # Zahlavi sloupcu (thead) zustava - bez nej neni jasne, ktery sloupec
+    # je co (viz konverzace s Danielem).
     hide_title = True
-
-    class Media:
-        css = {"all": ("core/css/meterreading_inline_no_header.css",)}
 
 
 @admin.register(Meter)
