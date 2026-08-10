@@ -13,6 +13,7 @@ přičítá k Ostatní, aby součty za fakturu seděly na korunu.
 Použití:
   python manage.py porovnat_energie_flexi 06/2026
   python manage.py porovnat_energie_flexi 06/2026 --jen-nesedi
+  python manage.py porovnat_energie_flexi 07/2026 --stredisko NJ
 """
 import unicodedata
 from collections import defaultdict
@@ -21,7 +22,7 @@ from decimal import Decimal
 from django.core.management.base import BaseCommand, CommandError
 
 from core.flexi_client import FlexiAPIError, FlexiClient
-from core.models import BillingLine, Period, ServicePoolItem
+from core.models import BillingLine, Period, ServicePoolItem, Site
 
 KOD_TO_CLASS = {
     "ELEKTRO": ServicePoolItem.InvoiceClass.ELECTRICITY,
@@ -52,6 +53,10 @@ class Command(BaseCommand):
     def add_arguments(self, parser):
         parser.add_argument("period", type=str, help="MM/YYYY, např. 06/2026")
         parser.add_argument("--jen-nesedi", action="store_true", help="Vypsat jen řádky, které nesedí")
+        parser.add_argument(
+            "--stredisko", type=str, default=None,
+            help="Omezit na jeden areál/středisko (kód ve Flexi, např. NJ nebo FM).",
+        )
 
     def handle(self, *args, **options):
         try:
@@ -66,11 +71,22 @@ class Command(BaseCommand):
 
         popis = f"energie {month:02d}/{year}"
 
+        site = None
+        stredisko = options["stredisko"]
+        if stredisko:
+            site = Site.objects.filter(name__icontains=stredisko).first()
+            if not site:
+                raise CommandError(f"Areál '{stredisko}' v naší appce nenalezen.")
+
+        filter_expr = f"popis = '{popis}'"
+        if stredisko:
+            filter_expr += f" and stredisko = 'code:{stredisko}'"
+
         try:
             flexi_client = FlexiClient()
             invoices = flexi_client.list_records(
                 "faktura-vydana",
-                filter_expr=f"popis = '{popis}'",
+                filter_expr=filter_expr,
                 extra_params={"limit": 0, "detail": "full"},
             )
         except KeyError as e:
@@ -114,6 +130,8 @@ class Command(BaseCommand):
             BillingLine.objects.filter(period=period)
             .select_related("client_card__client", "service_item")
         )
+        if site:
+            lines = lines.filter(service_item__site=site)
         for line in lines:
             client = line.client_card.client
             key_client = _normalize(client.name)
@@ -127,7 +145,8 @@ class Command(BaseCommand):
         )
 
         header = f"{'Klient':<32}{'Třída':<12}{'Naše (Kč)':>14}{'Flexi bez DPH':>16}{'Rozdíl':>12}"
-        self.stdout.write(f"Porovnání energií za {period} (popis {popis!r}, {len(invoices)} faktur)\n")
+        stredisko_info = f", středisko {stredisko}" if stredisko else ""
+        self.stdout.write(f"Porovnání energií za {period} (popis {popis!r}{stredisko_info}, {len(invoices)} faktur)\n")
         self.stdout.write(header)
         self.stdout.write("-" * len(header))
 
