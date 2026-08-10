@@ -1890,16 +1890,22 @@ class BillingLineAdmin(DefaultToLatestPeriodMixin, ModelAdmin):
         return custom + urls
 
     def report_pausalni_klienti_view(self, request):
-        """Report (Reporty v menu): pro klienty, kteri maji sluzby/energie
+        """Report (Reporty v menu): pro KARTY, ktere maji sluzby/energie
         zahrnute rovnou v najmu (aspon jeden BillingLine.is_billed=False
         v danem obdobi), ukaze po Obdobich za AKTUALNI rok:
         - Naklad: soucet jejich is_billed=False radku (co by je stalo
           sluzby, kdyby se fakturovaly zvlast)
-        - Vynos: soucet jejich is_billed=True radku ve STEJNEM obdobi
-          (typicky najem - co od nich skutecne vybirame)
-        - Rozdil: Vynos - Naklad (zaporne = na nich v tom obdobi
-          prodelavame - typicky v zime kvuli teplu, viz konverzace
-          s Danielem 2026-08-12)."""
+        - Vynos: SKUTECNY najem karty (CardUnit.monthly_rent, stejny
+          vypocet jako "Přehled nájemného" vc. zaokrouhleni nahoru) -
+          PUVODNE se tu scital soucet is_billed=True radku, coz davalo
+          nesmyslne cislo (napr. u CALAMARI SE se takhle zapocitaly
+          jeji VLASTNI energie na FM, misto najmu - is_billed=False bylo
+          nastavene jen na NJ karte). Pocita se po KARTE, ne po klientovi,
+          aby se u klienta s vice kartami (ruzne arealy) nemichaly
+          dohromady - viz konverzace s Danielem 2026-08-12.
+        - Rozdil: Vynos - Naklad (zaporne = na te karte v tom obdobi
+          prodelavame - typicky v zime kvuli teplu)."""
+        from decimal import ROUND_CEILING
         from django.db.models import Sum
         from django.shortcuts import render
         from django.utils import timezone
@@ -1911,21 +1917,27 @@ class BillingLineAdmin(DefaultToLatestPeriodMixin, ModelAdmin):
         total_naklad = Decimal("0")
         total_vynos = Decimal("0")
         for period in periods:
-            client_ids_pausal = set(
+            card_ids_pausal = set(
                 BillingLine.objects.filter(period=period, is_billed=False)
-                .values_list("client_card__client_id", flat=True)
+                .values_list("client_card_id", flat=True)
             )
-            if not client_ids_pausal:
+            if not card_ids_pausal:
                 continue
             naklad = BillingLine.objects.filter(
-                period=period, is_billed=False, client_card__client_id__in=client_ids_pausal,
+                period=period, is_billed=False, client_card_id__in=card_ids_pausal,
             ).aggregate(s=Sum("amount"))["s"] or Decimal("0")
-            vynos = BillingLine.objects.filter(
-                period=period, is_billed=True, client_card__client_id__in=client_ids_pausal,
-            ).aggregate(s=Sum("amount"))["s"] or Decimal("0")
+
+            vynos = Decimal("0")
+            cards = ClientCard.objects.filter(id__in=card_ids_pausal).prefetch_related("card_units")
+            for card in cards:
+                raw_monthly = sum(
+                    (cu.monthly_rent or Decimal("0") for cu in card.card_units.all()), Decimal("0")
+                )
+                vynos += raw_monthly.quantize(Decimal("1"), rounding=ROUND_CEILING)
+
             rows.append({
                 "period": period,
-                "pocet_klientu": len(client_ids_pausal),
+                "pocet_klientu": len(card_ids_pausal),
                 "naklad": naklad,
                 "vynos": vynos,
                 "rozdil": vynos - naklad,
