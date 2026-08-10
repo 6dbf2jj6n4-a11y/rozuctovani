@@ -126,11 +126,16 @@ class Command(BaseCommand):
                 amount = item.get("sumZkl")
                 flexi_amounts[(key_client, invoice_class)] += _num(amount)
 
-        # nase vyuctovani - BillingLine.amount po klientech a tridach
+        # nase vyuctovani - BillingLine.amount po klientech a tridach. Jen
+        # is_billed=True - polozky "v pausalu" (is_billed=False) se
+        # klientovi nefakturuji zvlast, takze se logicky neobjevi ani
+        # v samostatne Flexi fakture za energie (viz konverzace
+        # s Danielem 2026-08-12, INNEXUM GROUP "Ostatní" 296,04 = soucet
+        # VSECH radku vc. pausalnich, misto jen fakturovanych 200 Kc).
         our_amounts = defaultdict(Decimal)
         our_names = {}
         lines = (
-            BillingLine.objects.filter(period=period)
+            BillingLine.objects.filter(period=period, is_billed=True)
             .select_related("client_card__client", "service_item")
         )
         if site:
