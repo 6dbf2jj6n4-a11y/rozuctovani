@@ -1132,6 +1132,9 @@ class MeterReadingInline(TabularInline):
     fields = ("period", "reading_date", "value", "reset_from_value", "note", "photo")
     ordering = ("-period",)
 
+    class Media:
+        css = {"all": ("core/css/meterreading_inline_no_header.css",)}
+
 
 @admin.register(Meter)
 class MeterAdmin(DuplicateModelAdminMixin, ModelAdmin):

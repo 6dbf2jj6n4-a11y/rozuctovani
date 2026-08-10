@@ -1,0 +1,11 @@
+/*
+Skryje zahlavi sloupcu (Obdobi, Datum odectu, Stav/spotreba...) v
+inline tabulce Odectu na strance Meridla - staci samotne radky s
+odecty, popisky sloupcu tam pusobily zbytecne (viz konverzace s
+Danielem). Scoped jen na tenhle inline (#readings-group je DOM id
+formsetu MeterReadingInline, viz related_name="readings" na
+MeterReading.meter).
+*/
+#readings-group thead {
+    display: none;
+}
