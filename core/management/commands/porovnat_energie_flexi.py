@@ -3,8 +3,13 @@ Porovná vydané faktury z ABRA Flexi (popis "energie MM/YYYY") s naším
 vyúčtováním (BillingLine) za stejné období - po klientech A třídách
 (Elektřina/Voda/Teplo/Ostatní).
 
-Srovnává se s částkou bez DPH (Flexi položky: sumZklCelkem) - naše
-vyúčtování je bez DPH.
+Srovnává se s částkou bez DPH (Flexi položky: sumZkl - "Základ") - naše
+vyúčtování je bez DPH. POZOR: pole "sumZklCelkem" ve Flexi neexistuje
+(vzdy vracelo None) - puvodni verze prikazu se tak potichu propadala na
+fallback sumCelkem (CASTKA S DPH), coz zpusobovalo zdanlivy system.
+rozdil mezi nasim vypoctem a Flexi (~79-83 % u zbozi/sluzeb se
+zakladni sazbou DPH 21 %, jiny pomer u zbozi se snizenou sazbou) - viz
+konverzace s Danielem 2026-08-12.
 
 Kód položky ve Flexi (ELEKTRO/VODA/TEPLO/OSTATNI) se mapuje na
 ServicePoolItem.InvoiceClass. Řádek "Zaokrouhleno" (bez kódu) se
@@ -118,9 +123,7 @@ class Command(BaseCommand):
                 if invoice_class is None:
                     unknown_kods.add(kod)
                     invoice_class = ServicePoolItem.InvoiceClass.OTHER
-                amount = item.get("sumZklCelkem")
-                if amount is None:
-                    amount = item.get("sumCelkem")
+                amount = item.get("sumZkl")
                 flexi_amounts[(key_client, invoice_class)] += _num(amount)
 
         # nase vyuctovani - BillingLine.amount po klientech a tridach
