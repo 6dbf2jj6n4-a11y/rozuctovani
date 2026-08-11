@@ -884,11 +884,45 @@ class ContractAdmin(DuplicateModelAdminMixin, ModelAdmin):
     )
 
 
+class ClientCardClientActiveFilter(admin.SimpleListFilter):
+    """Client.is_active i ClientCard.is_active se v modelu jmenuji stejne
+    ("Aktivní") - obycejny list_filter = ("client__is_active", "is_active")
+    proto v adminu zobrazi DVA filtry se stejnym nazvem, bez rozliseni, ktery
+    je za co (viz konverzace s Danielem)."""
+    title = "Klient aktivní"
+    parameter_name = "client_active"
+
+    def lookups(self, request, model_admin):
+        return (("1", "Ano"), ("0", "Ne"))
+
+    def queryset(self, request, queryset):
+        if self.value() == "1":
+            return queryset.filter(client__is_active=True)
+        if self.value() == "0":
+            return queryset.filter(client__is_active=False)
+        return queryset
+
+
+class ClientCardActiveFilter(admin.SimpleListFilter):
+    title = "Karta aktivní"
+    parameter_name = "card_active"
+
+    def lookups(self, request, model_admin):
+        return (("1", "Ano"), ("0", "Ne"))
+
+    def queryset(self, request, queryset):
+        if self.value() == "1":
+            return queryset.filter(is_active=True)
+        if self.value() == "0":
+            return queryset.filter(is_active=False)
+        return queryset
+
+
 @admin.register(ClientCard)
 class ClientCardAdmin(ModelAdmin):
     list_display = ("client", "description", "valid_from", "valid_to", "is_active")
     list_select_related = ("client",)
-    list_filter = ("client__is_active", "is_active")
+    list_filter = (ClientCardClientActiveFilter, ClientCardActiveFilter)
     autocomplete_fields = ("client",)
     search_fields = ("client__name", "description")
     fieldsets = (
