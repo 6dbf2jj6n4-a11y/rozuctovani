@@ -185,6 +185,31 @@ def get_key_rows_for_client(client, period):
                                 "consumption": leaf.consumption_for(period),
                                 "unit_of_measure": leaf.unit_of_measure,
                             })
+                            # Fyzicka podruzna meridla listu (napr. E_A7 ->
+                            # E_A1..E_A6) uz nejsou soucasti hodnoty, kterou
+                            # list prispiva do vzorce - do nej vstupuje jen
+                            # jeho vlastni zbytek (_consumption_net_of_children,
+                            # viz core/models.py _formula_consumption_for).
+                            # Zobrazit je pod listem s opacnym znamenkem, aby
+                            # soucet radku sedel s celkovou spotrebou
+                            # virtualniho meridla (jinak by +E_A7 vypadalo jako
+                            # surovych 1214 misto vlastnich 473). Odecitaji se
+                            # VSECHNY prime deti - shodne s netting ve vzorci.
+                            # Viz konverzace s Danielem 2026-08-13.
+                            for leaf_child in leaf.children.all():
+                                lc_current = leaf_child.readings.filter(period=period).first()
+                                lc_previous = (
+                                    leaf_child.readings.filter(period=prev_period).first()
+                                    if prev_period else None
+                                )
+                                row["sub_meters"].append({
+                                    "meter_code": leaf_child.code or leaf_child.name,
+                                    "sign": -leaf_sign,
+                                    "previous_state": lc_previous.value if lc_previous else None,
+                                    "current_state": lc_current.value if lc_current else None,
+                                    "consumption": leaf_child.consumption_for(period),
+                                    "unit_of_measure": leaf_child.unit_of_measure,
+                                })
 
                     # Realna hierarchie (Meter.parent_meter) - podrizena
                     # meridla, ktera jsou sama o sobe samostatne uctovana

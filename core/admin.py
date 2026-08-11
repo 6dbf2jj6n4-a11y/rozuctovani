@@ -1393,10 +1393,18 @@ class MeterAdmin(DuplicateModelAdminMixin, ModelAdmin):
                 indent_px = 8 + depth * 20
                 leaves = None
                 if meter.is_virtual:
+                    # Kazdy list se zobrazi hodnotou, kterou skutecne
+                    # prispiva do vzorce = jeho VLASTNI zbytek po odectu
+                    # primych podruznych meridel (_consumption_net_of_children),
+                    # ne surovy odecet. Bez toho listy nesedely se souctem
+                    # virtualniho meridla v hlavicce (napr. E_SPOL = 776,
+                    # ale +E_A7 se tisklo jako surovych 1214 misto vlastnich
+                    # 473). Shoduje se s vlastni radkou E_A7 ve stromu vyse.
+                    # Viz konverzace s Danielem 2026-08-13.
                     leaves = [
                         {
                             "meter": leaf, "sign_label": "+" if sign > 0 else "−",
-                            "consumption": leaf.consumption_for(period),
+                            "consumption": leaf._consumption_net_of_children(period),
                             "indent_px": indent_px + 20,
                         }
                         for leaf, sign in meter.consumption_leaves()
