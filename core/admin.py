@@ -1704,6 +1704,7 @@ class PeriodAdmin(ModelAdmin):
 class InflationRateAdmin(ModelAdmin):
     list_display = ("year", "percent")
     ordering = ("-year",)
+    list_per_page = 10
     list_after_template = "admin/core/inflationrate/chart.html"
 
     def changelist_view(self, request, extra_context=None):
