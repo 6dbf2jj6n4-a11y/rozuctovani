@@ -80,7 +80,12 @@ class PrevNextNavigationMixin:
 
 
 class ModelAdmin(PrevNextNavigationMixin, NoRelatedWidgetIconsMixin, UnfoldModelAdmin):
-    pass
+    # Unfoldova vestavena funkce (warn_unsaved_form=False je jeji vychozi
+    # hodnota) - pri odchodu ze zmeneneho formulare (vc. kliknuti na sipky
+    # Předchozí/Další, ktere jsou obycejne <a href> odkazy) vyvola
+    # nativni "opustit stranku bez ulozeni?" potvrzeni prohlizece
+    # (window.beforeunload). Zapnuto globalne pro cely admin.
+    warn_unsaved_form = True
 
 
 class TabularInline(NoRelatedWidgetIconsMixin, UnfoldTabularInline):
