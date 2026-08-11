@@ -1353,7 +1353,7 @@ class MeterAdmin(DuplicateModelAdminMixin, ModelAdmin):
 
 @admin.register(Period)
 class PeriodAdmin(ModelAdmin):
-    list_display = ("__str__", "status", "days_in_period", "odecty_button", "action_buttons")
+    list_display = ("__str__", "status", "days_in_period", "period_actions")
     list_filter = ("status",)
     ordering = ("-year", "-month")
     actions = [
@@ -1381,14 +1381,29 @@ class PeriodAdmin(ModelAdmin):
             url, confirm_text, csrf_token, color, label,
         )
 
-    def action_buttons(self, obj):
+    def _period_link_button(self, url, label, color):
+        from django.utils.html import format_html
+        return format_html(
+            '<a href="{}" target="_blank" style="padding:4px 10px; border-radius:6px; '
+            'color:white; font-weight:600; font-size:12px; text-decoration:none; '
+            'display:inline-block; white-space:nowrap; background:{};">{}</a>',
+            url, color, label,
+        )
+
+    def period_actions(self, obj):
         from django.urls import reverse
         from django.middleware.csrf import get_token
         from django.utils.html import format_html
 
         token = get_token(self.request)
+        odecty_url = f"{reverse('odecty')}?period={obj.pk}"
         return format_html(
-            "{} {} {}",
+            "{} {} {} {}",
+            self._period_link_button(odecty_url, "Zadat odečty", "#2563eb"),
+            self._period_action_button(
+                reverse("admin:core_period_vypocet", args=[obj.pk]), token,
+                "Výpočet", "#ca8a04", f"Spočítat rozúčtování za {obj} (všechny areály)?",
+            ),
             self._period_action_button(
                 reverse("admin:core_period_otevrit", args=[obj.pk]), token,
                 "Otevřít", "#16a34a", f"Znovu otevřít {obj}?",
@@ -1397,12 +1412,8 @@ class PeriodAdmin(ModelAdmin):
                 reverse("admin:core_period_zavrit", args=[obj.pk]), token,
                 "Zavřít", "#dc2626", f"Uzavřít {obj}? Rozúčtování už pak nepůjde přepočítat.",
             ),
-            self._period_action_button(
-                reverse("admin:core_period_vypocet", args=[obj.pk]), token,
-                "Výpočet", "#2563eb", f"Spočítat rozúčtování za {obj} (všechny areály)?",
-            ),
         )
-    action_buttons.short_description = "Akce"
+    period_actions.short_description = "Akce"
 
     def get_urls(self):
         from django.urls import path
@@ -1462,19 +1473,6 @@ class PeriodAdmin(ModelAdmin):
         period = get_object_or_404(Period, pk=period_id)
         self._spocitat_rozuctovani(request, Period.objects.filter(pk=period.pk), site=None)
         return self._redirect_back(request)
-
-    def odecty_button(self, obj):
-        from django.urls import reverse
-        from django.utils.html import format_html
-        url = f"{reverse('odecty')}?period={obj.pk}"
-        return format_html(
-            '<a href="{}" target="_blank" '
-            'style="padding:4px 12px; border-radius:6px; background:#2563eb; '
-            'color:white; font-weight:600; text-decoration:none; display:inline-block; font-size:12px;">'
-            'Zadat odečty</a>',
-            url,
-        )
-    odecty_button.short_description = "Odečty"
 
     def get_actions(self, request):
         actions = super().get_actions(request)
