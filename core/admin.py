@@ -1401,26 +1401,31 @@ class PeriodAdmin(ModelAdmin):
     def period_actions(self, obj):
         from django.urls import reverse
         from django.middleware.csrf import get_token
-        from django.utils.html import format_html
+        from django.utils.safestring import mark_safe
 
         token = get_token(self.request)
         odecty_url = f"{reverse('odecty')}?period={obj.pk}"
-        return format_html(
-            "{} {} {} {}",
+        buttons = [
             self._period_link_button(odecty_url, "Zadat odečty", "#2563eb"),
             self._period_action_button(
                 reverse("admin:core_period_vypocet", args=[obj.pk]), token,
                 "Výpočet", "#ca8a04", f"Spočítat rozúčtování za {obj} (všechny areály)?",
             ),
-            self._period_action_button(
+        ]
+        # Otevrit ma smysl jen u uzavreneho obdobi a naopak - u
+        # aktualniho stavu by tlacitko nic nezmenilo (viz konverzace
+        # s Danielem).
+        if obj.status == Period.Status.CLOSED:
+            buttons.append(self._period_action_button(
                 reverse("admin:core_period_otevrit", args=[obj.pk]), token,
                 "Otevřít", "#16a34a", f"Znovu otevřít {obj}?",
-            ),
-            self._period_action_button(
+            ))
+        else:
+            buttons.append(self._period_action_button(
                 reverse("admin:core_period_zavrit", args=[obj.pk]), token,
                 "Zavřít", "#dc2626", f"Uzavřít {obj}? Rozúčtování už pak nepůjde přepočítat.",
-            ),
-        )
+            ))
+        return mark_safe(" ".join(buttons))
     period_actions.short_description = "Akce"
 
     def get_urls(self):
