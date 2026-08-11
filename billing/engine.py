@@ -178,7 +178,18 @@ def _owned_consumption(meter, period, billed_meter_ids, cache, readings_cache=No
     meridla. Podrizena meridla BEZ vlastniho klice na teto polozce se
     neodecitaji - jejich spotreba spravne zustava soucasti nadrazeneho.
 
-    `readings_cache`: viz Meter.consumption_for - predano dal beze zmeny."""
+    `readings_cache`: viz Meter.consumption_for - predano dal beze zmeny.
+
+    DULEZITE: odecita se SUROVA spotreba primeho ditete
+    (child.consumption_for), NE jeho uz zredukovana "vlastni" hodnota
+    (rekurzivni _owned_consumption(child)). U vicevrstve hierarchie
+    (napr. meridlo -> dite -> vnouce, vsechny s vlastnim klicem na
+    stejne polozce) by odectenim uz zredukovane hodnoty ditete zustala
+    cast spotreby vnoucete "schovana" uvnitr nejvyssiho meridla (bylo
+    by odecteno min, nez ma byt) - matematicky overeno (teleskopicky
+    soucet), ze SUROVE odecitani na kazde urovni zvlast je spravne pro
+    libovolnou hloubku hierarchie. Viz konverzace s Danielem 2026-08-12
+    (stejna oprava jako v core/admin.py report_spotreby_view)."""
     if meter.id in cache:
         return cache[meter.id]
     raw = meter.consumption_for(period, readings_cache=readings_cache)
@@ -188,9 +199,7 @@ def _owned_consumption(meter, period, billed_meter_ids, cache, readings_cache=No
     deduction = Decimal("0")
     for child in meter.children.all():
         if child.id in billed_meter_ids:
-            child_consumption = _owned_consumption(
-                child, period, billed_meter_ids, cache, readings_cache=readings_cache
-            )
+            child_consumption = child.consumption_for(period, readings_cache=readings_cache)
             if child_consumption is not None:
                 deduction += child_consumption
     result = raw - deduction
