@@ -1316,7 +1316,7 @@ class MeterAdmin(DuplicateModelAdminMixin, ModelAdmin):
         sites = Site.objects.order_by("name")
         site = sites.filter(pk=site_id).first() if site_id else None
 
-        rows = []
+        groups = []
         if period is not None:
             meters_qs = (
                 Meter.objects.select_related("site", "parent_meter")
@@ -1357,15 +1357,38 @@ class MeterAdmin(DuplicateModelAdminMixin, ModelAdmin):
                 if raw is None:
                     owned_cache[meter.id] = None
                     return None
+                if meter.is_virtual:
+                    # Virtualni meridlo pocita spotrebu uz ze sveho Vzorce
+                    # (soucet zadanych meridel) - FK "Nadřazené měřidlo" u
+                    # virtualniho meridla (pokud vubec existuje) NENI
+                    # soucasti vypoctu spotreby, jen realna meridla maji
+                    # fyzickou hierarchii master/podruzne. Kombinace obou
+                    # (napr. E_SPOL) delala nesmyslny vysledek - viz
+                    # konverzace s Danielem 2026-08-12.
+                    owned_cache[meter.id] = raw
+                    return raw
+                # DULEZITE: odecita se SUROVA spotreba primych deti
+                # (child.consumption_for), NE jejich uz zredukovana
+                # "vlastni" hodnota (owned_consumption(child))! Kdyby se
+                # odecitala vlastni hodnota, u vicevrstve hierarchie (napr.
+                # A7 -> A4 -> A4KLIMA) by zbyla cast spotreby vnoucete
+                # "schovana" uvnitr A7 (protoze od A7 by se odecetlo jen
+                # zredukovanych 118 za A4, ne jeho skutecnych 134) - A7 by
+                # tak fakticky obsahovalo spotrebu A4KLIMA dvakrat (jednou
+                # schovane v sobe, jednou zvlast na radku A4KLIMA). Pri
+                # SUROVE dedukci na kazde urovni zvlast to spravne
+                # teleskopuje k soucet(vsechny "vlastni" hodnoty v podstromu)
+                # == surovy odecet korene. Viz konverzace s Danielem
+                # 2026-08-12 (E_A7 ma byt 473, ne 489).
                 deduction = sum(
-                    (owned_consumption(child) or Decimal("0"))
+                    (child.consumption_for(period) or Decimal("0"))
                     for child in children_by_parent.get(meter.id, [])
                 )
                 result = raw - deduction
                 owned_cache[meter.id] = result
                 return result
 
-            def add_row(meter, depth):
+            def add_row(meter, depth, rows):
                 consumption = owned_consumption(meter)
                 indent_px = 8 + depth * 20
                 leaves = None
@@ -1383,10 +1406,43 @@ class MeterAdmin(DuplicateModelAdminMixin, ModelAdmin):
                     "indent_px": indent_px, "leaves": leaves,
                 })
                 for child in children_by_parent.get(meter.id, []):
-                    add_row(child, depth + 1)
+                    add_row(child, depth + 1, rows)
 
+            # Koreny rozdelene do sekci podle Meter.meter_type (Elektrina/
+            # Voda/Plyn/Teplo/Jine) - stejne poradi jako MeterType.choices,
+            # v ramci sekce zustava abecedni razeni z meters_qs. Deti
+            # zustavaji ve stejne sekci jako jejich koren (fyzicky patri
+            # ke stejnemu typu meridla), viz konverzace s Danielem 2026-08-12.
+            type_labels = dict(Meter.MeterType.choices)
+            roots_by_type = {}
             for root in roots:
-                add_row(root, 0)
+                roots_by_type.setdefault(root.meter_type, []).append(root)
+
+            # Meridla, ktera jsou soucasti Vzorce nejakeho virtualniho
+            # meridla v tomhle vyberu - jejich spotreba uz je zapocitana
+            # UVNITR toho virtualniho meridla, takze se v souctu za sekci
+            # nesmi scitat jeste jednou zvlast (byla by tam 2x). V tabulce
+            # ale zustavaji vidět normalne, jen se vynechaji ze souctu -
+            # viz konverzace s Danielem 2026-08-12 (E_SPOL = A7+A8+A9+D_VS).
+            formula_component_ids = set()
+            for m in meters:
+                if m.is_virtual:
+                    for leaf, _sign in m.consumption_leaves():
+                        formula_component_ids.add(leaf.id)
+
+            for type_code, type_label in Meter.MeterType.choices:
+                type_roots = roots_by_type.get(type_code)
+                if not type_roots:
+                    continue
+                rows = []
+                for root in type_roots:
+                    add_row(root, 0, rows)
+                total = sum(
+                    (row["consumption"] or Decimal("0"))
+                    for row in rows
+                    if row["meter"].id not in formula_component_ids
+                )
+                groups.append({"label": type_label, "rows": rows, "total": total})
 
         context = {
             **self.admin_site.each_context(request),
@@ -1395,7 +1451,7 @@ class MeterAdmin(DuplicateModelAdminMixin, ModelAdmin):
             "selected_period": period,
             "sites": sites,
             "selected_site": site,
-            "rows": rows,
+            "groups": groups,
             "opts": self.model._meta,
         }
         return render(request, "admin/core/meter/report_spotreby.html", context)

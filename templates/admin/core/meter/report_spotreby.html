@@ -34,7 +34,7 @@
 
     {% if not selected_period %}
         <p>Nejdřív je potřeba mít založené alespoň jedno Období.</p>
-    {% elif not rows %}
+    {% elif not groups %}
         <p>Žádná měřidla nenalezena.</p>
     {% else %}
         <div style="overflow-x:auto;">
@@ -43,40 +43,46 @@
                 <tr style="border-bottom:2px solid #666; text-align:left;">
                     <th style="padding:6px 8px;">Areál</th>
                     <th style="padding:6px 8px;">Měřidlo</th>
-                    <th style="padding:6px 8px;">Typ</th>
                     <th style="padding:6px 8px;">Virtuální</th>
                     <th style="padding:6px 8px; text-align:right;">Spotřeba</th>
                 </tr>
             </thead>
             <tbody>
-                {% for row in rows %}
-                    <tr style="border-bottom:1px solid #333;">
-                        <td style="padding:6px 8px;">{{ row.meter.site }}</td>
-                        <td style="padding:6px 8px; padding-left:{{ row.indent_px }}px;">
-                            <a href="/admin/core/meter/{{ row.meter.pk }}/change/">{{ row.meter.code|default:row.meter.name }}</a>
-                            {% if row.meter.code %} – {{ row.meter.name }}{% endif %}
-                        </td>
-                        <td style="padding:6px 8px;">{{ row.meter.get_meter_type_display }}</td>
-                        <td style="padding:6px 8px;">{% if row.meter.is_virtual %}ano{% else %}ne{% endif %}</td>
-                        <td style="padding:6px 8px; text-align:right; font-weight:600;">
-                            {% if row.consumption != None %}{{ row.consumption|floatformat:3 }} {{ row.meter.unit_of_measure }}{% else %}—{% endif %}
-                        </td>
+                {% for group in groups %}
+                    <tr>
+                        <td colspan="4" style="padding:10px 8px 4px; font-weight:700; border-bottom:1.2px solid #666;">{{ group.label }}</td>
                     </tr>
-                    {% if row.leaves %}
-                        {% for leaf in row.leaves %}
-                            <tr style="border-bottom:1px solid #333; color:#999; font-size:12px;">
-                                <td style="padding:2px 8px;"></td>
-                                <td style="padding:2px 8px 2px {{ leaf.indent_px }}px;">
-                                    {{ leaf.sign_label }} {{ leaf.meter.code|default:leaf.meter.name }} – {{ leaf.meter.name }}
-                                </td>
-                                <td style="padding:2px 8px;"></td>
-                                <td style="padding:2px 8px;"></td>
-                                <td style="padding:2px 8px; text-align:right;">
-                                    {% if leaf.consumption != None %}{{ leaf.consumption|floatformat:3 }} {{ leaf.meter.unit_of_measure }}{% else %}chybí odečet{% endif %}
-                                </td>
-                            </tr>
-                        {% endfor %}
-                    {% endif %}
+                    {% for row in group.rows %}
+                        <tr style="border-bottom:1px solid #333;">
+                            <td style="padding:6px 8px;">{{ row.meter.site }}</td>
+                            <td style="padding:6px 8px; padding-left:{{ row.indent_px }}px;">
+                                <a href="/admin/core/meter/{{ row.meter.pk }}/change/">{{ row.meter.code|default:row.meter.name }}</a>
+                                {% if row.meter.code %} – {{ row.meter.name }}{% endif %}
+                            </td>
+                            <td style="padding:6px 8px;">{% if row.meter.is_virtual %}ano{% else %}ne{% endif %}</td>
+                            <td style="padding:6px 8px; text-align:right; font-weight:600;">
+                                {% if row.consumption != None %}{{ row.consumption|floatformat:3 }} {{ row.meter.unit_of_measure }}{% else %}—{% endif %}
+                            </td>
+                        </tr>
+                        {% if row.leaves %}
+                            {% for leaf in row.leaves %}
+                                <tr style="border-bottom:1px solid #333; color:#999; font-size:12px;">
+                                    <td style="padding:2px 8px;"></td>
+                                    <td style="padding:2px 8px 2px {{ leaf.indent_px }}px;">
+                                        {{ leaf.sign_label }} {{ leaf.meter.code|default:leaf.meter.name }} – {{ leaf.meter.name }}
+                                    </td>
+                                    <td style="padding:2px 8px;"></td>
+                                    <td style="padding:2px 8px; text-align:right;">
+                                        {% if leaf.consumption != None %}{{ leaf.consumption|floatformat:3 }} {{ leaf.meter.unit_of_measure }}{% else %}chybí odečet{% endif %}
+                                    </td>
+                                </tr>
+                            {% endfor %}
+                        {% endif %}
+                    {% endfor %}
+                    <tr>
+                        <td colspan="3" style="padding:6px 8px; text-align:right; font-weight:700; border-top:1px solid #666;">Celkem {{ group.label|lower }} (bez duplicit ze vzorců)</td>
+                        <td style="padding:6px 8px; text-align:right; font-weight:700; border-top:1px solid #666;">{{ group.total|floatformat:3 }}</td>
+                    </tr>
                 {% endfor %}
             </tbody>
         </table>
