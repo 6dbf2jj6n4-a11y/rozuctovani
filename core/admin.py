@@ -1320,7 +1320,7 @@ class MeterAdmin(DuplicateModelAdminMixin, ModelAdmin):
         if period is not None:
             meters_qs = (
                 Meter.objects.select_related("site", "parent_meter")
-                .order_by("meter_type", "display_order", "code")
+                .order_by("code")
             )
             if site is not None:
                 meters_qs = meters_qs.filter(site=site)
@@ -1337,8 +1337,36 @@ class MeterAdmin(DuplicateModelAdminMixin, ModelAdmin):
                 else:
                     roots.append(m)
 
+            owned_cache = {}
+
+            def owned_consumption(meter):
+                """Vlastni spotreba meridla = surovy odecet minus VLASTNI
+                spotreba vsech jeho primych deti (rekurzivne) - stejny
+                princip jako billing/engine.py _owned_consumption, ale
+                pocita se VZDY pro cely zobrazeny strom (ne jen pro
+                fakturovane deti na jedne polozce) - tenhle report ma
+                overit, ze fyzicky strom meridel dava smysl, ne
+                reprodukovat vysledek konkretni Polozky. Bez toho by
+                nadrazene meridlo (napr. E_A7) ukazovalo SVUJ surovy
+                odecet (vc. vsech deti), coz vedle jednotlivych deti se
+                stejnym souctem vypada jako nesmyslna duplicita - viz
+                konverzace s Danielem 2026-08-12."""
+                if meter.id in owned_cache:
+                    return owned_cache[meter.id]
+                raw = meter.consumption_for(period)
+                if raw is None:
+                    owned_cache[meter.id] = None
+                    return None
+                deduction = sum(
+                    (owned_consumption(child) or Decimal("0"))
+                    for child in children_by_parent.get(meter.id, [])
+                )
+                result = raw - deduction
+                owned_cache[meter.id] = result
+                return result
+
             def add_row(meter, depth):
-                consumption = meter.consumption_for(period)
+                consumption = owned_consumption(meter)
                 indent_px = 8 + depth * 20
                 leaves = None
                 if meter.is_virtual:

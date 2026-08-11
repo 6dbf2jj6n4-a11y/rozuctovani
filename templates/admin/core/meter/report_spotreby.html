@@ -4,9 +4,12 @@
 <div>
     <p style="color:#999; font-size:13px;">
         Spotřeba všech měřidel za vybrané období, seřazená podle hierarchie - odsazení podle
-        nadřazeného měřidla (pole "Nadřazené měřidlo"). U virtuálních měřidel je pod nimi navíc
-        šedě rozpad na jednotlivá reálná měřidla podle Vzorce, aby šlo zkontrolovat, že po
-        přepočtu období strom měřidel sedí.
+        nadřazeného měřidla (pole "Nadřazené měřidlo"). U měřidla s dětmi je "Spotřeba" jeho
+        VLASTNÍ podíl (surový odečet mínus spotřeba všech dětí) - ne surový odečet, který by
+        vedle součtu dětí vypadal jako duplicita. U virtuálních měřidel je pod nimi navíc
+        šedě rozpad na jednotlivá reálná měřidla podle Vzorce (tam jde o jejich surové odečty,
+        stejně jako je sčítá samotný Vzorec), aby šlo zkontrolovat, že po přepočtu období
+        strom měřidel sedí.
     </p>
 
     <form method="get" style="display:flex; gap:16px; align-items:flex-end; margin-bottom:20px; flex-wrap:wrap;">
