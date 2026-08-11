@@ -5,6 +5,7 @@ a jejich karty (najemni vztahy s platnosti).
 import calendar
 import re
 from datetime import date
+from decimal import Decimal
 
 from django.core.exceptions import ValidationError
 from django.db import models
@@ -562,15 +563,57 @@ class Meter(models.Model):
 
     def _formula_consumption_for(self, period, readings_cache=None):
         """Vyhodnoti pole Vzorec, napr. '668NT+668VT' - secte/odecte
-        spotrebu jinych mericí stejneho arealu podle jejich kodu."""
+        spotrebu jinych mericí stejneho arealu podle jejich kodu.
+
+        DULEZITE: kazdy clen vzorce vstupuje svou VLASTNI spotrebou
+        (surovy odecet minus jeho prime samostatne merene podprostory),
+        NE surovym odectem - viz _consumption_net_of_children. U meridla
+        bez deti je to totez co surovy odecet (napr. 668NT/668VT), takze
+        proste vzorce se chovaji beze zmeny. U master meridla to ale
+        zabrani dvojimu zapocteni: E_SPOL = E_A7+E_A8+E_A9+D_VS, kde E_A7
+        je master pro E_A1..E_A6 (samostatne uctovane najemniky) - do
+        spolecne spotreby ma vstoupit jen zbytek E_A7 (~473), ne cely
+        surovy odecet vc. najemniku (1214). Viz konverzace s Danielem
+        2026-08-13 a stejny princip v core/admin.py report_spotreby_view."""
         total = None
         for meter, sign in self._formula_tokens():
-            value = meter.consumption_for(period, readings_cache=readings_cache)
+            value = meter._consumption_net_of_children(period, readings_cache=readings_cache)
             if value is None:
                 continue
             signed_value = sign * value
             total = signed_value if total is None else total + signed_value
         return total
+
+    def _consumption_net_of_children(self, period, readings_cache=None):
+        """Spotreba meridla ocistena o jeho prime podruzne meridla - pro
+        pouziti jako clen ve Vzorci virtualniho meridla (napr. E_SPOL).
+        Surovy odecet minus SUROVA spotreba primych deti (Meter.children).
+
+        Odecita se SUROVA spotreba primeho ditete (child.consumption_for),
+        NE jeho uz zredukovana vlastni hodnota - u vicevrstve hierarchie
+        (A7 -> A4 -> A4KLIMA) to spravne teleskopuje k tomu, ze soucet
+        vsech vlastnich hodnot v podstromu == surovy odecet korene, takze
+        se zadna spotreba nezapocita dvakrat ani nevytrati. Stejna logika
+        jako owned_consumption v core/admin.py report_spotreby_view a
+        _owned_consumption v billing/engine.py (tam se ale odecitaji jen
+        deti fakturovane na TEZE polozce; tady, uvnitr vzorce, se odecitaji
+        vsechny prime deti - shodne s reportem, ktery ma overit fyzicky
+        strom). Viz konverzace s Danielem 2026-08-13.
+
+        Virtualni clen pocita svou spotrebu uz ze sveho vlastniho Vzorce
+        (ktery si sve deti resi sam) - fyzickou master/podruzne hierarchii
+        maji jen realna meridla, takze u nej se nic neodecita."""
+        if self.is_virtual:
+            return self._formula_consumption_for(period, readings_cache=readings_cache)
+        raw = self.consumption_for(period, readings_cache=readings_cache)
+        if raw is None:
+            return None
+        deduction = Decimal("0")
+        for child in self.children.all():
+            child_consumption = child.consumption_for(period, readings_cache=readings_cache)
+            if child_consumption is not None:
+                deduction += child_consumption
+        return raw - deduction
 
     def consumption_leaves(self, sign=1):
         """Rekurzivne rozbali virtualni meridlo (vcetne vnorenych vzorcu) az
