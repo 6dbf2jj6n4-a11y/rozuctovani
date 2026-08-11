@@ -1,0 +1,83 @@
+{% extends "admin/base_site.html" %}
+
+{% block content %}
+<div>
+    <p style="color:#999; font-size:13px;">
+        Spotřeba všech měřidel za vybrané období, seřazená podle hierarchie - odsazení podle
+        nadřazeného měřidla (pole "Nadřazené měřidlo"). U virtuálních měřidel je pod nimi navíc
+        šedě rozpad na jednotlivá reálná měřidla podle Vzorce, aby šlo zkontrolovat, že po
+        přepočtu období strom měřidel sedí.
+    </p>
+
+    <form method="get" style="display:flex; gap:16px; align-items:flex-end; margin-bottom:20px; flex-wrap:wrap;">
+        <div>
+            <label for="id_period" style="display:block; font-weight:600; margin-bottom:6px;">Období</label>
+            <select name="period" id="id_period" onchange="this.form.submit()" style="padding:8px; min-width:160px;">
+                {% for p in periods %}
+                    <option value="{{ p.pk }}" {% if selected_period and p.pk == selected_period.pk %}selected{% endif %}>{{ p }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div>
+            <label for="id_site" style="display:block; font-weight:600; margin-bottom:6px;">Areál</label>
+            <select name="site" id="id_site" onchange="this.form.submit()" style="padding:8px; min-width:180px;">
+                <option value="">-- všechny areály --</option>
+                {% for s in sites %}
+                    <option value="{{ s.pk }}" {% if selected_site and s.pk == selected_site.pk %}selected{% endif %}>{{ s.name }}</option>
+                {% endfor %}
+            </select>
+        </div>
+    </form>
+
+    {% if not selected_period %}
+        <p>Nejdřív je potřeba mít založené alespoň jedno Období.</p>
+    {% elif not rows %}
+        <p>Žádná měřidla nenalezena.</p>
+    {% else %}
+        <div style="overflow-x:auto;">
+        <table style="width:100%; border-collapse:collapse; font-size:13px;">
+            <thead>
+                <tr style="border-bottom:2px solid #666; text-align:left;">
+                    <th style="padding:6px 8px;">Areál</th>
+                    <th style="padding:6px 8px;">Měřidlo</th>
+                    <th style="padding:6px 8px;">Typ</th>
+                    <th style="padding:6px 8px;">Virtuální</th>
+                    <th style="padding:6px 8px; text-align:right;">Spotřeba</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in rows %}
+                    <tr style="border-bottom:1px solid #333;">
+                        <td style="padding:6px 8px;">{{ row.meter.site }}</td>
+                        <td style="padding:6px 8px; padding-left:{{ row.indent_px }}px;">
+                            <a href="/admin/core/meter/{{ row.meter.pk }}/change/">{{ row.meter.code|default:row.meter.name }}</a>
+                            {% if row.meter.code %} – {{ row.meter.name }}{% endif %}
+                        </td>
+                        <td style="padding:6px 8px;">{{ row.meter.get_meter_type_display }}</td>
+                        <td style="padding:6px 8px;">{% if row.meter.is_virtual %}ano{% else %}ne{% endif %}</td>
+                        <td style="padding:6px 8px; text-align:right; font-weight:600;">
+                            {% if row.consumption != None %}{{ row.consumption|floatformat:3 }} {{ row.meter.unit_of_measure }}{% else %}—{% endif %}
+                        </td>
+                    </tr>
+                    {% if row.leaves %}
+                        {% for leaf in row.leaves %}
+                            <tr style="border-bottom:1px solid #333; color:#999; font-size:12px;">
+                                <td style="padding:2px 8px;"></td>
+                                <td style="padding:2px 8px 2px {{ leaf.indent_px }}px;">
+                                    {{ leaf.sign_label }} {{ leaf.meter.code|default:leaf.meter.name }} – {{ leaf.meter.name }}
+                                </td>
+                                <td style="padding:2px 8px;"></td>
+                                <td style="padding:2px 8px;"></td>
+                                <td style="padding:2px 8px; text-align:right;">
+                                    {% if leaf.consumption != None %}{{ leaf.consumption|floatformat:3 }} {{ leaf.meter.unit_of_measure }}{% else %}chybí odečet{% endif %}
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    {% endif %}
+                {% endfor %}
+            </tbody>
+        </table>
+        </div>
+    {% endif %}
+</div>
+{% endblock %}

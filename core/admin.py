@@ -1289,8 +1289,88 @@ class MeterAdmin(DuplicateModelAdminMixin, ModelAdmin):
                 self.admin_site.admin_view(self.report_neprirazena_smazat_view),
                 name="core_meter_report_neprirazena_smazat",
             ),
+            path(
+                "report/spotreby/",
+                self.admin_site.admin_view(self.report_spotreby_view),
+                name="core_meter_report_spotreby",
+            ),
         ]
         return custom + urls
+
+    def report_spotreby_view(self, request):
+        """Report (Reporty v menu): pro vybrane Obdobi (volitelne i Areal)
+        ukaze spotrebu VSECH meridel podle hierarchie - odsazeni podle
+        stromu parent_meter/children, u virtualnich meridel navic rozpad
+        na jednotliva realna meridla podle Vzorce (Meter.consumption_leaves).
+        Cil: po prepoctu Obdobi jde zkontrolovat, ze navazany strom mericí
+        (fyzicky i vypocetni pres Vzorec) dava smysl - viz konverzace
+        s Danielem."""
+        from django.shortcuts import render
+
+        period_id = request.GET.get("period")
+        site_id = request.GET.get("site")
+
+        periods = Period.objects.all()
+        period = periods.filter(pk=period_id).first() if period_id else periods.first()
+
+        sites = Site.objects.order_by("name")
+        site = sites.filter(pk=site_id).first() if site_id else None
+
+        rows = []
+        if period is not None:
+            meters_qs = (
+                Meter.objects.select_related("site", "parent_meter")
+                .order_by("meter_type", "display_order", "code")
+            )
+            if site is not None:
+                meters_qs = meters_qs.filter(site=site)
+            meters = list(meters_qs)
+
+            # Strom se stavi jen z meridel VE VYBERU (napr. kdyz je vybrany
+            # jeden Areal) - meridlo s rodicem mimo vyber se chova jako koren.
+            meter_ids = {m.id for m in meters}
+            children_by_parent = {}
+            roots = []
+            for m in meters:
+                if m.parent_meter_id and m.parent_meter_id in meter_ids:
+                    children_by_parent.setdefault(m.parent_meter_id, []).append(m)
+                else:
+                    roots.append(m)
+
+            def add_row(meter, depth):
+                consumption = meter.consumption_for(period)
+                indent_px = 8 + depth * 20
+                leaves = None
+                if meter.is_virtual:
+                    leaves = [
+                        {
+                            "meter": leaf, "sign_label": "+" if sign > 0 else "−",
+                            "consumption": leaf.consumption_for(period),
+                            "indent_px": indent_px + 20,
+                        }
+                        for leaf, sign in meter.consumption_leaves()
+                    ]
+                rows.append({
+                    "meter": meter, "depth": depth, "consumption": consumption,
+                    "indent_px": indent_px, "leaves": leaves,
+                })
+                for child in children_by_parent.get(meter.id, []):
+                    add_row(child, depth + 1)
+
+            for root in roots:
+                add_row(root, 0)
+
+        context = {
+            **self.admin_site.each_context(request),
+            "title": "Spotřeby měřidel podle hierarchie",
+            "periods": periods,
+            "selected_period": period,
+            "sites": sites,
+            "selected_site": site,
+            "rows": rows,
+            "opts": self.model._meta,
+        }
+        return render(request, "admin/core/meter/report_spotreby.html", context)
 
     def _unassigned_meters_queryset(self):
         """Meridla, ktera nejsou pouzita VUBEC - ani jako hlavni meridlo
