@@ -1353,13 +1353,115 @@ class MeterAdmin(DuplicateModelAdminMixin, ModelAdmin):
 
 @admin.register(Period)
 class PeriodAdmin(ModelAdmin):
-    list_display = ("__str__", "status", "days_in_period", "odecty_button")
+    list_display = ("__str__", "status", "days_in_period", "odecty_button", "action_buttons")
     list_filter = ("status",)
     ordering = ("-year", "-month")
     actions = [
         "spocitat_rozuctovani", "zkontrolovat_co_zadat", "vygenerovat_chybejici_naklady",
         "uzavrit_obdobi", "znovu_otevrit_obdobi",
     ]
+
+    def changelist_view(self, request, extra_context=None):
+        """Ulozi request na self, aby si ho action_buttons (list_display
+        sloupec) mohl vzit pro CSRF token - list_display metody request
+        normalne nedostavaji, tohle je bezny obchazeci trik."""
+        self.request = request
+        return super().changelist_view(request, extra_context)
+
+    def _period_action_button(self, url, csrf_token, label, color, confirm_text):
+        from django.utils.html import format_html
+        return format_html(
+            '<form method="post" action="{}" style="display:inline;" '
+            'onsubmit="return confirm(\'{}\');">'
+            '<input type="hidden" name="csrfmiddlewaretoken" value="{}">'
+            '<button type="submit" style="padding:4px 10px; border-radius:6px; border:none; '
+            'color:white; font-weight:600; font-size:12px; cursor:pointer; white-space:nowrap; '
+            'background:{};">{}</button>'
+            '</form>',
+            url, confirm_text, csrf_token, color, label,
+        )
+
+    def action_buttons(self, obj):
+        from django.urls import reverse
+        from django.middleware.csrf import get_token
+        from django.utils.html import format_html
+
+        token = get_token(self.request)
+        return format_html(
+            "{} {} {}",
+            self._period_action_button(
+                reverse("admin:core_period_otevrit", args=[obj.pk]), token,
+                "Otevřít", "#16a34a", f"Znovu otevřít {obj}?",
+            ),
+            self._period_action_button(
+                reverse("admin:core_period_zavrit", args=[obj.pk]), token,
+                "Zavřít", "#dc2626", f"Uzavřít {obj}? Rozúčtování už pak nepůjde přepočítat.",
+            ),
+            self._period_action_button(
+                reverse("admin:core_period_vypocet", args=[obj.pk]), token,
+                "Výpočet", "#2563eb", f"Spočítat rozúčtování za {obj} (všechny areály)?",
+            ),
+        )
+    action_buttons.short_description = "Akce"
+
+    def get_urls(self):
+        from django.urls import path
+        urls = super().get_urls()
+        custom = [
+            path(
+                "<int:period_id>/otevrit/",
+                self.admin_site.admin_view(self.otevrit_view),
+                name="core_period_otevrit",
+            ),
+            path(
+                "<int:period_id>/zavrit/",
+                self.admin_site.admin_view(self.zavrit_view),
+                name="core_period_zavrit",
+            ),
+            path(
+                "<int:period_id>/vypocet/",
+                self.admin_site.admin_view(self.vypocet_view),
+                name="core_period_vypocet",
+            ),
+        ]
+        return custom + urls
+
+    def _redirect_back(self, request):
+        from django.http import HttpResponseRedirect
+        from django.urls import reverse
+        return HttpResponseRedirect(request.META.get("HTTP_REFERER") or reverse("admin:core_period_changelist"))
+
+    def otevrit_view(self, request, period_id):
+        from django.shortcuts import get_object_or_404
+        if request.method != "POST":
+            return self._redirect_back(request)
+        period = get_object_or_404(Period, pk=period_id)
+        period.status = Period.Status.OPEN
+        period.save(update_fields=["status"])
+        self.message_user(
+            request, f"{period}: znovu otevřeno - rozúčtování teď jde přepočítat.", level=messages.WARNING
+        )
+        return self._redirect_back(request)
+
+    def zavrit_view(self, request, period_id):
+        from django.shortcuts import get_object_or_404
+        if request.method != "POST":
+            return self._redirect_back(request)
+        period = get_object_or_404(Period, pk=period_id)
+        period.status = Period.Status.CLOSED
+        period.save(update_fields=["status"])
+        self.message_user(
+            request, f"{period}: uzavřeno - rozúčtování už nepůjde přepočítat.", level=messages.SUCCESS
+        )
+        return self._redirect_back(request)
+
+    def vypocet_view(self, request, period_id):
+        from django.shortcuts import get_object_or_404
+        if request.method != "POST":
+            return self._redirect_back(request)
+        period = get_object_or_404(Period, pk=period_id)
+        self._spocitat_rozuctovani(request, Period.objects.filter(pk=period.pk), site=None)
+        return self._redirect_back(request)
 
     def odecty_button(self, obj):
         from django.urls import reverse
