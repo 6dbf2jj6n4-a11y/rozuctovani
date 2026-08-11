@@ -1704,6 +1704,86 @@ class PeriodAdmin(ModelAdmin):
 class InflationRateAdmin(ModelAdmin):
     list_display = ("year", "percent")
     ordering = ("-year",)
+    list_after_template = "admin/core/inflationrate/chart.html"
+
+    def changelist_view(self, request, extra_context=None):
+        extra_context = extra_context or {}
+        extra_context.update(self._chart_context())
+        return super().changelist_view(request, extra_context)
+
+    def _chart_context(self):
+        """SVG sloupcovy graf vyvoje miry inflace po letech, vykreslovany
+        pod tabulkou na zmenovnem seznamu (list_after_template - podpora
+        primo v Unfoldu, viz change_list.html). Geometrie se pocita tady
+        v Pythonu, stejny vzor jako report_grafy_trid_view."""
+        import math
+        from decimal import Decimal
+
+        rates = list(InflationRate.objects.order_by("year"))
+        if not rates:
+            return {"inflation_chart_bars": None}
+
+        max_value = max(r.percent for r in rates)
+
+        def _nice_ceiling(value):
+            value = float(value)
+            if value <= 0:
+                return Decimal("1")
+            exp = math.floor(math.log10(value))
+            base = value / (10 ** exp)
+            nice = 1 if base <= 1 else 2 if base <= 2 else 5 if base <= 5 else 10
+            return Decimal(str(nice)) * (Decimal("10") ** exp)
+
+        y_max = _nice_ceiling(max_value)
+
+        plot_h = 220
+        bar_w = 20
+        bar_gap = 6
+        left_margin = 48
+        top_margin = 24
+        bottom_margin = 40
+        chart_w = left_margin + len(rates) * (bar_w + bar_gap) + bar_gap
+        chart_h = top_margin + plot_h + bottom_margin
+        baseline_y = top_margin + plot_h
+
+        def _y(value):
+            if y_max == 0:
+                return baseline_y
+            return float(baseline_y - (value / y_max) * plot_h)
+
+        gridlines = []
+        for i in range(5):
+            frac = Decimal(i) / Decimal(4)
+            value = y_max * frac
+            gy = _y(value)
+            gridlines.append({
+                "y": gy, "label_x": left_margin - 8, "label_y": gy + 4,
+                "label": f"{value:.1f} %",
+            })
+
+        bars = []
+        x = left_margin + bar_gap
+        for r in rates:
+            bar_top = _y(r.percent)
+            label_x = x + bar_w / 2
+            bars.append({
+                "x": x, "y": bar_top, "w": bar_w, "h": max(baseline_y - bar_top, 0),
+                "year": r.year, "value": r.percent,
+                "label_x": label_x,
+                "year_label_y": baseline_y + 14,
+                "is_peak": r.percent == max_value,
+                "peak_label_y": bar_top - 6,
+            })
+            x += bar_w + bar_gap
+
+        return {
+            "inflation_chart_bars": bars,
+            "inflation_chart_gridlines": gridlines,
+            "inflation_chart_w": chart_w,
+            "inflation_chart_h": chart_h,
+            "inflation_chart_baseline_y": baseline_y,
+            "inflation_chart_left_margin": left_margin,
+        }
 
 
 @admin.register(MeterReading)

@@ -1,0 +1,70 @@
+{% load l10n %}
+<div class="viz-root" style="margin-top:24px;">
+    <style>
+        .viz-root {
+            color-scheme: light;
+            --surface-1: #fcfcfb;
+            --text-primary: #0b0b0b;
+            --text-secondary: #52514e;
+            --text-muted: #898781;
+            --gridline: #e1e0d9;
+            --baseline: #c3c2b7;
+        }
+        @media (prefers-color-scheme: dark) {
+            :root:where(:not([data-theme="light"])) .viz-root {
+                color-scheme: dark;
+                --surface-1: #1a1a19;
+                --text-primary: #ffffff;
+                --text-secondary: #c3c2b7;
+                --text-muted: #898781;
+                --gridline: #2c2c2a;
+                --baseline: #383835;
+            }
+        }
+        :root[data-theme="dark"] .viz-root {
+            color-scheme: dark;
+            --surface-1: #1a1a19;
+            --text-primary: #ffffff;
+            --text-secondary: #c3c2b7;
+            --text-muted: #898781;
+            --gridline: #2c2c2a;
+            --baseline: #383835;
+        }
+        .inflation-bar { transition: opacity 0.1s; }
+        .inflation-bar:hover { opacity: 0.8; }
+        .inflation-year-label { font-size:9px; fill: var(--text-muted); }
+        .inflation-axis-label { font-size:10px; fill: var(--text-muted); text-anchor: end; }
+        .inflation-peak-label { font-size:11px; fill: var(--text-primary); font-weight:600; text-anchor: middle; }
+    </style>
+
+    <h2 style="font-size:14px; font-weight:600; color:var(--text-primary); margin:0 0 4px;">Vývoj míry inflace podle let</h2>
+
+    {% if inflation_chart_bars %}
+        <p style="color:var(--text-secondary); font-size:13px; margin:0 0 14px;">
+            Průměrná roční míra inflace (%). Přesná čísla jsou v tabulce výše.
+        </p>
+        <div style="overflow-x:auto; background:var(--surface-1); border-radius:8px; padding:8px;">
+        {% localize off %}
+        <svg width="{{ inflation_chart_w }}" height="{{ inflation_chart_h }}" viewBox="0 0 {{ inflation_chart_w }} {{ inflation_chart_h }}" role="img" aria-label="Graf vývoje míry inflace podle let">
+            {% for g in inflation_chart_gridlines %}
+                <line x1="{{ inflation_chart_left_margin }}" y1="{{ g.y }}" x2="{{ inflation_chart_w }}" y2="{{ g.y }}" stroke="var(--gridline)" stroke-width="1" />
+                <text class="inflation-axis-label" x="{{ g.label_x }}" y="{{ g.label_y }}">{{ g.label }}</text>
+            {% endfor %}
+            <line x1="{{ inflation_chart_left_margin }}" y1="{{ inflation_chart_baseline_y }}" x2="{{ inflation_chart_w }}" y2="{{ inflation_chart_baseline_y }}" stroke="var(--baseline)" stroke-width="1" />
+
+            {% for bar in inflation_chart_bars %}
+                <rect class="inflation-bar" x="{{ bar.x }}" y="{{ bar.y }}" width="{{ bar.w }}" height="{{ bar.h }}" rx="3" fill="#2a78d6">
+                    <title>{{ bar.year }}: {{ bar.value|floatformat:1 }} %</title>
+                </rect>
+                {% if bar.is_peak %}
+                    <text class="inflation-peak-label" x="{{ bar.label_x }}" y="{{ bar.peak_label_y }}">{{ bar.value|floatformat:1 }} %</text>
+                {% endif %}
+                <text class="inflation-year-label" x="{{ bar.label_x }}" y="{{ bar.year_label_y }}" text-anchor="end" transform="rotate(-55 {{ bar.label_x }} {{ bar.year_label_y }})">{{ bar.year }}</text>
+            {% endfor %}
+        </svg>
+        {% endlocalize %}
+        </div>
+    {% else %}
+        <p style="color:var(--text-secondary); font-size:13px;">Zatím nejsou zadané žádné míry inflace.</p>
+    {% endif %}
+</div>
