@@ -1,14 +1,21 @@
 """
 Generovani dokumentu Smlouvy (.docx) z sablony core/contract_templates/smlouva_template.docx.
 
-Sablona NENI cisty formular s placeholdery - je to skutecna, rucne doladena
-smlouva (konkretni najemce, konkretni castky, data, jmena). Generovani proto
-funguje tak, ze najde konkretni run(y) obsahujici tyto puvodni hodnoty a
-prepise jen jejich TEXT - font/velikost/barva runu se nikde nevynucuje ani
-nemeni, zustava presne takovy, jaky uz v sablone je. Kazda dosazena hodnota
-navic dostane zluty zvyraznovac (viz _highlight), aby bylo v dokumentu na
-prvni pohled videt, co se automaticky doplnilo a co je potreba pred
-odeslanim zkontrolovat.
+Sablona pouziva viditelne placeholdery ve tvaru [NAZEV_PLACEHOLDERU] (napr.
+[NÁZEV NÁJEMCE], [DATUM PODPISU]) na mistech, kam se dosazuji konkretni
+udaje z DB - diky tomu jde sablonu otevrit primo ve Wordu a hned je jasne,
+co je promenlive a co pevny text Smlouvy, aniz by to vypadalo jako uz
+vyplnena konkretni smlouva. Generovani funguje tak, ze najde konkretni
+run(y) obsahujici presne tento placeholder text a prepise jen jejich TEXT -
+font/velikost/barva runu se nikde nevynucuje ani nemeni, zustava presne
+takovy, jaky uz v sablone je. Kazda dosazena hodnota navic dostane zluty
+zvyraznovac (viz _highlight), aby bylo v dokumentu na prvni pohled videt,
+co se automaticky doplnilo a co je potreba pred odeslanim zkontrolovat.
+
+Pri pridavani noveho placeholderu do sablony: musi byt v ramci celeho
+dokumentu TEXTOVE UNIKATNI (marker/old se hleda jako prvni substring shoda
+- viz _find_paragraph_index/_replace_run_text), jinak se dosadi na spatne
+misto.
 
 Blok Pronajimatele v zahlavi dokumentu (odstavce 6-13) je zamerne staticky
 a NEzvyraznuje se - Pronajimatel (CALAMARI SE) je v teto aplikaci jeden
@@ -423,37 +430,37 @@ def fill_contract_template(data, output_path, template_path=TEMPLATE_PATH):
     # --- vse ZA clankem 1: dohledavat podle textu, ne podle indexu (viz docstring) ---
     paragraphs = doc.paragraphs
     _replace_run_text(
-        paragraphs, "1. ledna 2027", "1. ledna 2027",
+        paragraphs, "[DATUM ZVÝŠENÍ NÁJEMNÉHO]", "[DATUM ZVÝŠENÍ NÁJEMNÉHO]",
         format_date_cz(data.get("inflation_increase_from")),
     )
     paragraphs = doc.paragraphs
     _replace_run_text(
-        paragraphs, "50 000 Kč", "50 000 Kč",
+        paragraphs, "[POJISTNÁ ČÁSTKA]", "[POJISTNÁ ČÁSTKA]",
         format_czk(data.get("insurance_amount_czk")),
     )
     paragraphs = doc.paragraphs
     _replace_run_text(
-        paragraphs, "1. srpna 2026", "1. srpna 2026",
+        paragraphs, "[DATUM PLATNOSTI SMLOUVY]", "[DATUM PLATNOSTI SMLOUVY]",
         format_date_cz(data.get("valid_from")),
     )
     paragraphs = doc.paragraphs
     _replace_run_text(
-        paragraphs, "3 měsíce", "3 měsíce",
+        paragraphs, "[VÝPOVĚDNÍ LHŮTA]", "[VÝPOVĚDNÍ LHŮTA]",
         format_months(data.get("notice_period_months")),
     )
     paragraphs = doc.paragraphs
     _replace_run_text(
-        paragraphs, "15 000 Kč", "15 000 Kč",
+        paragraphs, "[VÝŠE KAUCE]", "[VÝŠE KAUCE]",
         format_czk(data.get("deposit_czk")),
     )
     paragraphs = doc.paragraphs
     _replace_run_text(
-        paragraphs, "V\xa0Ostravě dne 30. července 2026", "30. července 2026",
+        paragraphs, "V\xa0Ostravě dne [DATUM PODPISU]", "[DATUM PODPISU]",
         format_date_cz(data.get("signed_on")),
     )
     paragraphs = doc.paragraphs
     _replace_run_text(
-        paragraphs, "výpisu z obchodního rejstříku pořízeného ke dni", "30. července 2026",
+        paragraphs, "výpisu z obchodního rejstříku pořízeného ke dni", "[DATUM VÝPISU Z OR]",
         format_date_cz(data.get("signed_on")),
     )
 
