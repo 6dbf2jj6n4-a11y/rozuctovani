@@ -180,7 +180,7 @@ def generate_client_card_document(card, output_path):
     )
     class_labels = dict(ServicePoolItem.InvoiceClass.choices)
 
-    key_rows = [["Položka", "Měřidlo", "Typ výpočtu", "Hodnota"]]
+    key_rows = [["Položka", "Měřidlo", "Typ výpočtu", "Hodnota", "Fakturovat"]]
     type_labels = dict(AllocationKey.AllocationType.choices)
     class_header_rows = []  # indexy radku s nazvem tridy - pro silnejsi linku/tucne pismo
 
@@ -189,19 +189,20 @@ def generate_client_card_document(card, output_path):
         if not class_keys:
             continue
         class_header_rows.append(len(key_rows))
-        key_rows.append([class_labels[class_code], "", "", ""])
+        key_rows.append([class_labels[class_code], "", "", "", ""])
         for key in class_keys:
             key_rows.append([
                 key.service_item.name,
                 str(key.meter) if key.meter else "—",
                 type_labels.get(key.allocation_type, key.allocation_type),
                 _fmt_key_value(key),
+                "Ano" if key.is_billed else "V paušálu",
             ])
 
     keys_style = [
         *_TABLE_BASE_STYLE,
         ("FONTNAME", (0, 0), (-1, 0), FONT_BOLD),
-        ("ALIGN", (-1, 0), (-1, -1), "RIGHT"),
+        ("ALIGN", (3, 0), (-1, -1), "RIGHT"),
     ]
     for row_idx in class_header_rows:
         keys_style.append(("SPAN", (0, row_idx), (-1, row_idx)))
