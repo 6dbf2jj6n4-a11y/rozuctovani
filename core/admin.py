@@ -12,6 +12,7 @@ try:
 except admin.sites.NotRegistered:
     pass
 from django import forms
+from unfold.decorators import display
 from .admin_mixins import ModelAdmin, TabularInline
 
 from .models import (
@@ -1353,13 +1354,20 @@ class MeterAdmin(DuplicateModelAdminMixin, ModelAdmin):
 
 @admin.register(Period)
 class PeriodAdmin(ModelAdmin):
-    list_display = ("__str__", "status", "days_in_period", "period_actions")
+    list_display = ("__str__", "status_badge", "days_in_period", "period_actions")
     list_filter = ("status",)
     ordering = ("-year", "-month")
     actions = [
         "spocitat_rozuctovani", "zkontrolovat_co_zadat", "vygenerovat_chybejici_naklady",
         "uzavrit_obdobi", "znovu_otevrit_obdobi",
     ]
+
+    @display(
+        description="Stav", ordering="status",
+        label={Period.Status.OPEN.label: "success", Period.Status.CLOSED.label: "danger"},
+    )
+    def status_badge(self, obj):
+        return obj.get_status_display()
 
     def changelist_view(self, request, extra_context=None):
         """Ulozi request na self, aby si ho action_buttons (list_display
