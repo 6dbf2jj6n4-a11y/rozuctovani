@@ -1430,7 +1430,7 @@ class MeterAdmin(DuplicateModelAdminMixin, ModelAdmin):
                 owned_cache[meter.id] = result
                 return result
 
-            def add_row(meter, depth, rows):
+            def add_row(meter, depth, rows, allowed_ids):
                 consumption = owned_consumption(meter)
                 indent_px = 8 + depth * 20
                 leaves = None
@@ -1453,46 +1453,118 @@ class MeterAdmin(DuplicateModelAdminMixin, ModelAdmin):
                     ]
                 rows.append({
                     "meter": meter, "depth": depth, "consumption": consumption,
-                    "indent_px": indent_px, "leaves": leaves,
+                    "indent_px": indent_px, "leaves": leaves, "is_virtual": meter.is_virtual,
                 })
                 for child in children_by_parent.get(meter.id, []):
-                    add_row(child, depth + 1, rows)
+                    if child.id in allowed_ids:
+                        add_row(child, depth + 1, rows, allowed_ids)
 
-            # Koreny rozdelene do sekci podle Meter.meter_type (Elektrina/
-            # Voda/Plyn/Teplo/Jine) - stejne poradi jako MeterType.choices,
-            # v ramci sekce zustava abecedni razeni z meters_qs. Deti
-            # zustavaji ve stejne sekci jako jejich koren (fyzicky patri
-            # ke stejnemu typu meridla), viz konverzace s Danielem 2026-08-12.
-            type_labels = dict(Meter.MeterType.choices)
-            roots_by_type = {}
-            for root in roots:
-                roots_by_type.setdefault(root.meter_type, []).append(root)
+            # Prehled se cleni podle Meter.meter_type (Elektrina/Voda/...) a
+            # uvnitr podle Odberneho mista (SupplyPoint): pro kazdy odber se
+            # porovna "dodano" (privodni meridlo) vs. "namereno" (soucet
+            # vlastnich spotreb realnych clenskych meridel) a rozdil =
+            # ztraty/nezmereno. Meridla bez odberneho mista jdou do skupiny
+            # "Nezarazena". Viz konverzace s Danielem 2026-08-12.
+            supplies_qs = SupplyPoint.objects.select_related("main_meter", "site")
+            if site is not None:
+                supplies_qs = supplies_qs.filter(site=site)
+            supplies = list(supplies_qs)
 
-            # Meridla, ktera jsou soucasti Vzorce nejakeho virtualniho
-            # meridla v tomhle vyberu - jejich spotreba uz je zapocitana
-            # UVNITR toho virtualniho meridla, takze se v souctu za sekci
-            # nesmi scitat jeste jednou zvlast (byla by tam 2x). V tabulce
-            # ale zustavaji vidět normalne, jen se vynechaji ze souctu -
-            # viz konverzace s Danielem 2026-08-12 (E_SPOL = A7+A8+A9+D_VS).
-            formula_component_ids = set()
+            # Privodni meridla odberu (a u virtualniho privodu i jeho slozky,
+            # napr. 668_CELKEM -> 668NT/668VT) NEJSOU podruzne clenske
+            # meridlo - patri k odberu jako "dodano". Vynechavame je z
+            # clenskych i nezarazenych skupin bez ohledu na to, jak ma
+            # dotycne meridlo nastaveny supply_point (aby se dodavka
+            # nezapocitala jeste jednou i jako namereno).
+            supply_side_ids = set()
+            for sp in supplies:
+                if sp.main_meter_id:
+                    supply_side_ids.add(sp.main_meter_id)
+                    if sp.main_meter and sp.main_meter.is_virtual:
+                        for leaf, _s in sp.main_meter.consumption_leaves():
+                            supply_side_ids.add(leaf.id)
+
+            def sum_measured(bucket_rows):
+                """Namereno = soucet VLASTNICH spotreb realnych (nevirtualnich)
+                clenskych meridel. Virtualni meridlo (napr. E_SPOL) je jen
+                agregace uz zapocitanych realnych meridel - zobrazi se
+                seede, ale do souctu se nepricita (jinak by jeho slozky
+                byly 2x)."""
+                return sum(
+                    (r["consumption"] or Decimal("0"))
+                    for r in bucket_rows if not r["is_virtual"]
+                )
+
+            def build_bucket_rows(member_meters):
+                """Radky pro jednu skupinu (odberne misto / Nezarazena) vc.
+                stromu parent/child JEN v ramci teto skupiny - meridlo,
+                jehoz rodic je jinde, se chova jako koren."""
+                member_ids = {m.id for m in member_meters}
+                bucket_rows = []
+                for m in member_meters:
+                    if m.parent_meter_id not in member_ids:
+                        add_row(m, 0, bucket_rows, member_ids)
+                return bucket_rows
+
+            supplies_by_type = {}
+            for sp in supplies:
+                supplies_by_type.setdefault(sp.meter_type, []).append(sp)
+
+            members_by_supply = {}
+            unassigned_by_type = {}
             for m in meters:
-                if m.is_virtual:
-                    for leaf, _sign in m.consumption_leaves():
-                        formula_component_ids.add(leaf.id)
+                if m.id in supply_side_ids:
+                    continue
+                if m.supply_point_id:
+                    members_by_supply.setdefault(m.supply_point_id, []).append(m)
+                else:
+                    unassigned_by_type.setdefault(m.meter_type, []).append(m)
 
             for type_code, type_label in Meter.MeterType.choices:
-                type_roots = roots_by_type.get(type_code)
-                if not type_roots:
+                type_supplies = supplies_by_type.get(type_code, [])
+                type_unassigned = unassigned_by_type.get(type_code, [])
+                if not type_supplies and not type_unassigned:
                     continue
-                rows = []
-                for root in type_roots:
-                    add_row(root, 0, rows)
-                total = sum(
-                    (row["consumption"] or Decimal("0"))
-                    for row in rows
-                    if row["meter"].id not in formula_component_ids
-                )
-                groups.append({"label": type_label, "rows": rows, "total": total})
+
+                supply_blocks = []
+                total_dodano = None
+                total_namereno = Decimal("0")
+
+                for sp in type_supplies:
+                    bucket_rows = build_bucket_rows(members_by_supply.get(sp.id, []))
+                    namereno = sum_measured(bucket_rows)
+                    total_namereno += namereno
+                    dodano = owned_consumption(sp.main_meter) if sp.main_meter_id else None
+                    main_leaves = None
+                    if sp.main_meter and sp.main_meter.is_virtual:
+                        main_leaves = [
+                            {"meter": leaf, "consumption": leaf._consumption_net_of_children(period)}
+                            for leaf, _s in sp.main_meter.consumption_leaves()
+                        ]
+                    rozdil = None
+                    if dodano is not None:
+                        rozdil = dodano - namereno
+                        total_dodano = (total_dodano or Decimal("0")) + dodano
+                    supply_blocks.append({
+                        "supply": sp, "dodano": dodano, "namereno": namereno,
+                        "rozdil": rozdil, "rows": bucket_rows,
+                        "main_meter": sp.main_meter, "main_leaves": main_leaves,
+                    })
+
+                unassigned_block = None
+                if type_unassigned:
+                    u_rows = build_bucket_rows(type_unassigned)
+                    u_namereno = sum_measured(u_rows)
+                    total_namereno += u_namereno
+                    unassigned_block = {"rows": u_rows, "namereno": u_namereno}
+
+                groups.append({
+                    "label": type_label,
+                    "supplies": supply_blocks,
+                    "unassigned": unassigned_block,
+                    "total_dodano": total_dodano,
+                    "total_namereno": total_namereno,
+                })
 
         context = {
             **self.admin_site.each_context(request),

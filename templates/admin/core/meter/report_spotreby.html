@@ -3,13 +3,12 @@
 {% block content %}
 <div>
     <p style="color:#999; font-size:13px;">
-        Spotřeba všech měřidel za vybrané období, seřazená podle hierarchie - odsazení podle
-        nadřazeného měřidla (pole "Nadřazené měřidlo"). U měřidla s dětmi je "Spotřeba" jeho
-        VLASTNÍ podíl (surový odečet mínus spotřeba všech dětí) - ne surový odečet, který by
-        vedle součtu dětí vypadal jako duplicita. U virtuálních měřidel je pod nimi navíc
-        šedě rozpad na jednotlivá reálná měřidla podle Vzorce (tam jde o jejich surové odečty,
-        stejně jako je sčítá samotný Vzorec), aby šlo zkontrolovat, že po přepočtu období
-        strom měřidel sedí.
+        Spotřeba měřidel za vybrané období, členěná podle <strong>odběrných míst (EAN)</strong>.
+        U každého odběru se porovnává <strong>Dodáno</strong> (přívodní měřidlo) vs. <strong>Naměřeno</strong>
+        (součet vlastních spotřeb reálných podružných měřidel) a <strong>Rozdíl</strong> = ztráty/nezměřeno.
+        U měřidla s dětmi je „Spotřeba" jeho vlastní podíl (surový odečet mínus děti). Virtuální měřidla
+        (šedě, např. E_SPOL) jsou jen agregace už započtených reálných měřidel – do „Naměřeno" se nesčítají.
+        Měřidla bez přiřazeného odběrného místa jsou ve skupině „Nezařazená".
     </p>
 
     <form method="get" style="display:flex; gap:16px; align-items:flex-end; margin-bottom:20px; flex-wrap:wrap;">
@@ -37,56 +36,114 @@
     {% elif not groups %}
         <p>Žádná měřidla nenalezena.</p>
     {% else %}
-        <div style="overflow-x:auto;">
-        <table style="width:100%; border-collapse:collapse; font-size:13px;">
-            <thead>
-                <tr style="border-bottom:2px solid #666; text-align:left;">
-                    <th style="padding:6px 8px;">Areál</th>
-                    <th style="padding:6px 8px;">Měřidlo</th>
-                    <th style="padding:6px 8px;">Virtuální</th>
-                    <th style="padding:6px 8px; text-align:right;">Spotřeba</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for group in groups %}
-                    <tr>
-                        <td colspan="4" style="padding:10px 8px 4px; font-weight:700; border-bottom:1.2px solid #666;">{{ group.label }}</td>
+        {% for group in groups %}
+            <h2 style="margin:24px 0 8px; border-bottom:2px solid #666; padding-bottom:4px;">{{ group.label }}</h2>
+            <div style="overflow-x:auto;">
+            <table style="width:100%; border-collapse:collapse; font-size:13px;">
+                <thead>
+                    <tr style="text-align:left; color:#999;">
+                        <th style="padding:4px 8px; width:60%;">Měřidlo</th>
+                        <th style="padding:4px 8px;">Virt.</th>
+                        <th style="padding:4px 8px; text-align:right;">Spotřeba</th>
                     </tr>
-                    {% for row in group.rows %}
-                        <tr style="border-bottom:1px solid #333;">
-                            <td style="padding:6px 8px;">{{ row.meter.site }}</td>
-                            <td style="padding:6px 8px; padding-left:{{ row.indent_px }}px;">
-                                <a href="/admin/core/meter/{{ row.meter.pk }}/change/">{{ row.meter.code|default:row.meter.name }}</a>
-                                {% if row.meter.code %} – {{ row.meter.name }}{% endif %}
-                            </td>
-                            <td style="padding:6px 8px;">{% if row.meter.is_virtual %}ano{% else %}ne{% endif %}</td>
-                            <td style="padding:6px 8px; text-align:right; font-weight:600;">
-                                {% if row.consumption != None %}{{ row.consumption|floatformat:3 }} {{ row.meter.unit_of_measure }}{% else %}—{% endif %}
+                </thead>
+                <tbody>
+                    {% for block in group.supplies %}
+                        <tr style="background:rgba(120,120,120,0.12);">
+                            <td colspan="3" style="padding:8px; font-weight:700; border-top:1.5px solid #666;">
+                                📍 {{ block.supply.name }}{% if block.supply.code %} <span style="color:#888; font-weight:400;">({{ block.supply.code }})</span>{% endif %}
                             </td>
                         </tr>
-                        {% if row.leaves %}
+                        {# Dodáno #}
+                        <tr>
+                            <td style="padding:4px 8px 4px 24px;">
+                                Dodáno{% if block.main_meter %} <span style="color:#888;">(přívod
+                                    <a href="/admin/core/meter/{{ block.main_meter.pk }}/change/">{{ block.main_meter.code|default:block.main_meter.name }}</a>)</span>{% else %} <span style="color:#888;">(z faktury – bez měřidla)</span>{% endif %}
+                            </td>
+                            <td></td>
+                            <td style="padding:4px 8px; text-align:right; font-weight:600;">
+                                {% if block.dodano != None %}{{ block.dodano|floatformat:3 }} kWh{% else %}—{% endif %}
+                            </td>
+                        </tr>
+                        {% for leaf in block.main_leaves %}
+                            <tr style="color:#999; font-size:12px;">
+                                <td style="padding:1px 8px 1px 44px;">+ <a href="/admin/core/meter/{{ leaf.meter.pk }}/change/">{{ leaf.meter.code|default:leaf.meter.name }}</a> – {{ leaf.meter.name }}</td>
+                                <td></td>
+                                <td style="padding:1px 8px; text-align:right;">{% if leaf.consumption != None %}{{ leaf.consumption|floatformat:3 }}{% else %}—{% endif %}</td>
+                            </tr>
+                        {% endfor %}
+                        {# Členská měřidla #}
+                        {% for row in block.rows %}
+                            <tr style="border-bottom:1px solid #333;{% if row.is_virtual %} color:#999;{% endif %}">
+                                <td style="padding:4px 8px 4px {{ row.indent_px }}px;">
+                                    <a href="/admin/core/meter/{{ row.meter.pk }}/change/">{{ row.meter.code|default:row.meter.name }}</a>{% if row.meter.code %} – {{ row.meter.name }}{% endif %}
+                                </td>
+                                <td style="padding:4px 8px;">{% if row.is_virtual %}ano{% else %}ne{% endif %}</td>
+                                <td style="padding:4px 8px; text-align:right;{% if not row.is_virtual %} font-weight:600;{% endif %}">
+                                    {% if row.consumption != None %}{{ row.consumption|floatformat:3 }}{% else %}—{% endif %}
+                                </td>
+                            </tr>
                             {% for leaf in row.leaves %}
-                                <tr style="border-bottom:1px solid #333; color:#999; font-size:12px;">
-                                    <td style="padding:2px 8px;"></td>
-                                    <td style="padding:2px 8px 2px {{ leaf.indent_px }}px;">
-                                        {{ leaf.sign_label }} <a href="/admin/core/meter/{{ leaf.meter.pk }}/change/">{{ leaf.meter.code|default:leaf.meter.name }}</a> – {{ leaf.meter.name }}
-                                    </td>
-                                    <td style="padding:2px 8px;"></td>
-                                    <td style="padding:2px 8px; text-align:right;">
-                                        {% if leaf.consumption != None %}{{ leaf.consumption|floatformat:3 }} {{ leaf.meter.unit_of_measure }}{% else %}chybí odečet{% endif %}
-                                    </td>
+                                <tr style="color:#999; font-size:12px;">
+                                    <td style="padding:1px 8px 1px {{ leaf.indent_px }}px;">{{ leaf.sign_label }} <a href="/admin/core/meter/{{ leaf.meter.pk }}/change/">{{ leaf.meter.code|default:leaf.meter.name }}</a> – {{ leaf.meter.name }}</td>
+                                    <td></td>
+                                    <td style="padding:1px 8px; text-align:right;">{% if leaf.consumption != None %}{{ leaf.consumption|floatformat:3 }}{% else %}chybí odečet{% endif %}</td>
                                 </tr>
                             {% endfor %}
+                        {% endfor %}
+                        {# Souhrn odběru #}
+                        <tr style="border-top:1px solid #666;">
+                            <td style="padding:5px 8px; text-align:right; font-weight:600;" colspan="2">Naměřeno na podměrech</td>
+                            <td style="padding:5px 8px; text-align:right; font-weight:600;">{{ block.namereno|floatformat:3 }} kWh</td>
+                        </tr>
+                        {% if block.rozdil != None %}
+                            <tr>
+                                <td style="padding:2px 8px 8px; text-align:right; font-weight:700; color:{% if block.rozdil|floatformat:0 == '0' %}#3a3{% else %}#c60{% endif %};" colspan="2">Rozdíl (ztráty/nezměřeno)</td>
+                                <td style="padding:2px 8px 8px; text-align:right; font-weight:700; color:{% if block.rozdil|floatformat:0 == '0' %}#3a3{% else %}#c60{% endif %};">{{ block.rozdil|floatformat:3 }} kWh</td>
+                            </tr>
                         {% endif %}
                     {% endfor %}
-                    <tr>
-                        <td colspan="3" style="padding:6px 8px; text-align:right; font-weight:700; border-top:1px solid #666;">Celkem {{ group.label|lower }} (bez duplicit ze vzorců)</td>
-                        <td style="padding:6px 8px; text-align:right; font-weight:700; border-top:1px solid #666;">{{ group.total|floatformat:3 }}</td>
+
+                    {% if group.unassigned %}
+                        <tr style="background:rgba(200,140,0,0.12);">
+                            <td colspan="3" style="padding:8px; font-weight:700; border-top:1.5px solid #666;">⚠️ Nezařazená měřidla (bez odběrného místa)</td>
+                        </tr>
+                        {% for row in group.unassigned.rows %}
+                            <tr style="border-bottom:1px solid #333;{% if row.is_virtual %} color:#999;{% endif %}">
+                                <td style="padding:4px 8px 4px {{ row.indent_px }}px;">
+                                    <a href="/admin/core/meter/{{ row.meter.pk }}/change/">{{ row.meter.code|default:row.meter.name }}</a>{% if row.meter.code %} – {{ row.meter.name }}{% endif %}
+                                </td>
+                                <td style="padding:4px 8px;">{% if row.is_virtual %}ano{% else %}ne{% endif %}</td>
+                                <td style="padding:4px 8px; text-align:right;{% if not row.is_virtual %} font-weight:600;{% endif %}">
+                                    {% if row.consumption != None %}{{ row.consumption|floatformat:3 }}{% else %}—{% endif %}
+                                </td>
+                            </tr>
+                            {% for leaf in row.leaves %}
+                                <tr style="color:#999; font-size:12px;">
+                                    <td style="padding:1px 8px 1px {{ leaf.indent_px }}px;">{{ leaf.sign_label }} <a href="/admin/core/meter/{{ leaf.meter.pk }}/change/">{{ leaf.meter.code|default:leaf.meter.name }}</a> – {{ leaf.meter.name }}</td>
+                                    <td></td>
+                                    <td style="padding:1px 8px; text-align:right;">{% if leaf.consumption != None %}{{ leaf.consumption|floatformat:3 }}{% else %}chybí odečet{% endif %}</td>
+                                </tr>
+                            {% endfor %}
+                        {% endfor %}
+                        <tr style="border-top:1px solid #666;">
+                            <td style="padding:5px 8px; text-align:right; font-weight:600;" colspan="2">Naměřeno (nezařazené)</td>
+                            <td style="padding:5px 8px; text-align:right; font-weight:600;">{{ group.unassigned.namereno|floatformat:3 }} kWh</td>
+                        </tr>
+                    {% endif %}
+
+                    {# Součet za typ energie #}
+                    <tr style="border-top:2px solid #666;">
+                        <td style="padding:8px; text-align:right; font-weight:700;" colspan="2">Celkem {{ group.label|lower }} — dodáno / naměřeno</td>
+                        <td style="padding:8px; text-align:right; font-weight:700;">
+                            {% if group.total_dodano != None %}{{ group.total_dodano|floatformat:3 }}{% else %}—{% endif %}
+                            &nbsp;/&nbsp;{{ group.total_namereno|floatformat:3 }} kWh
+                        </td>
                     </tr>
-                {% endfor %}
-            </tbody>
-        </table>
-        </div>
+                </tbody>
+            </table>
+            </div>
+        {% endfor %}
     {% endif %}
 </div>
 {% endblock %}
