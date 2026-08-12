@@ -1,0 +1,35 @@
+{% extends "admin/base_site.html" %}
+
+{% block content %}
+<div>
+    <p>Vybraná měřidla (<strong>{{ meters|length }}</strong>) budou přiřazena k jednomu odběrnému místu.
+       Prázdná volba je od odběrného místa odpojí.</p>
+
+    <form method="post" action="">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="{{ action_name }}">
+        {% for pk in selected_ids %}
+            <input type="hidden" name="_selected_action" value="{{ pk }}">
+        {% endfor %}
+
+        <div style="margin:16px 0;">
+            <label for="id_supply_point" style="display:block; font-weight:600; margin-bottom:6px;">Odběrné místo</label>
+            <select name="supply_point" id="id_supply_point" style="padding:8px; min-width:280px;">
+                <option value="">-- žádné (odpojit) --</option>
+                {% for sp in supply_points %}
+                    <option value="{{ sp.pk }}">{{ sp.site.name }} – {{ sp }}{% if sp.code %} ({{ sp.code }}){% endif %}</option>
+                {% endfor %}
+            </select>
+        </div>
+
+        <ul style="color:#999; font-size:13px; max-height:220px; overflow:auto; margin:12px 0;">
+            {% for m in meters %}
+                <li>{{ m.code|default:m.name }} – {{ m.name }} <span style="color:#777;">({{ m.site }})</span></li>
+            {% endfor %}
+        </ul>
+
+        <button type="submit" name="apply" value="1" class="button" style="padding:8px 16px;">Přiřadit</button>
+        <a href="../" style="margin-left:12px;">Zrušit</a>
+    </form>
+</div>
+{% endblock %}

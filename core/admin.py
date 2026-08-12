@@ -17,7 +17,7 @@ from .admin_mixins import ModelAdmin, TabularInline
 
 from .models import (
     Client, ClientCard, Contract, Site, Unit, CardUnit,
-    Meter, MeterReading, Period, InflationRate,
+    Meter, MeterReading, Period, InflationRate, SupplyPoint,
     ServicePoolItem, AllocationKey, PriceList, CostEntry, BillingLine, UnitService
 )
 
@@ -1176,15 +1176,47 @@ class MeterReadingInline(TabularInline):
 @admin.register(Meter)
 class MeterAdmin(DuplicateModelAdminMixin, ModelAdmin):
     list_display = (
-        "code", "name", "site", "meter_type", "parent_meter",
+        "code", "name", "site", "meter_type", "parent_meter", "supply_point",
         "reading_mode", "is_virtual", "unit_of_measure", "weight_unit_label",
     )
-    list_select_related = ("site", "parent_meter")
-    list_filter = ("site", "meter_type", "reading_mode", "is_virtual")
+    list_select_related = ("site", "parent_meter", "supply_point")
+    list_filter = ("site", "meter_type", "supply_point", "reading_mode", "is_virtual")
     search_fields = ("name", "code", "serial_number")
-    autocomplete_fields = ("parent_meter",)
-    actions = ["duplicate_selected"]
+    autocomplete_fields = ("parent_meter", "supply_point")
+    actions = ["duplicate_selected", "assign_supply_point"]
     inlines = [MeterReadingInline]
+
+    @admin.action(description="Přiřadit vybraná měřidla k odběrnému místu…")
+    def assign_supply_point(self, request, queryset):
+        """Hromadne priradi vybrana meridla pod jedno Odberne misto (nebo
+        odpoji, kdyz se zvoli prazdna volba) - aby Daniel nemusel
+        rozklikavat kazde meridlo zvlast. Mezikrok s formularem, kde se
+        vybere cilove odberne misto; vyber meridel se prenasi pres
+        _selected_action. Viz konverzace s Danielem 2026-08-12."""
+        if "apply" in request.POST:
+            raw = request.POST.get("supply_point") or ""
+            supply_point = SupplyPoint.objects.filter(pk=raw).first() if raw else None
+            count = queryset.update(supply_point=supply_point)
+            target = str(supply_point) if supply_point else "(žádné – odpojeno)"
+            self.message_user(
+                request, f"Přiřazeno {count} měřidel k odběrnému místu: {target}.",
+                level=messages.SUCCESS,
+            )
+            return None
+
+        from django.template.response import TemplateResponse
+        return TemplateResponse(
+            request,
+            "admin/core/meter/assign_supply_point.html",
+            {
+                **self.admin_site.each_context(request),
+                "title": "Přiřadit k odběrnému místu",
+                "meters": queryset,
+                "supply_points": SupplyPoint.objects.select_related("site").all(),
+                "action_name": "assign_supply_point",
+                "selected_ids": queryset.values_list("pk", flat=True),
+            },
+        )
 
     def prepare_duplicate(self, copy, original):
         """Kod se NEKOPIRUJE (necha se prazdny) - je to kratky kod pro
@@ -1217,6 +1249,16 @@ class MeterAdmin(DuplicateModelAdminMixin, ModelAdmin):
         }),
         ("Hierarchie", {
             "fields": ("parent_meter",)
+        }),
+        ("Odběrné místo", {
+            "fields": ("supply_point",),
+            "description": (
+                "Pod které odběrné místo (EAN) měřidlo fyzicky patří - slouží "
+                "k reconciliaci 'dodáno vs. naměřeno' v přehledu spotřeb. "
+                "Přívodní/fakturační měřidlo samotného odběru (např. 668_CELKEM) "
+                "tu nech prázdné - to se nastavuje na Odběrném místě jako "
+                "'Přívodní měřidlo'. Hromadně jde přiřadit i akcí v seznamu měřidel."
+            ),
         }),
         ("Virtuální měřidlo", {
             "fields": (("is_virtual", "formula"),),
@@ -1957,6 +1999,36 @@ class InflationRateAdmin(ModelAdmin):
             "inflation_chart_baseline_y": baseline_y,
             "inflation_chart_left_margin": left_margin,
         }
+
+
+@admin.register(SupplyPoint)
+class SupplyPointAdmin(ModelAdmin):
+    list_display = ("name", "code", "site", "meter_type", "main_meter", "member_count")
+    list_select_related = ("site", "main_meter")
+    list_filter = ("site", "meter_type")
+    search_fields = ("name", "code")
+    autocomplete_fields = ("main_meter",)
+    fieldsets = (
+        (None, {
+            "fields": (
+                ("site", "meter_type"),
+                ("name", "code"),
+                "main_meter",
+                "note",
+            ),
+            "description": (
+                "Odběrné místo = fyzický přípojný bod (EAN), pod který spadá víc "
+                "podružných měřidel. 'Přívodní měřidlo' je to, jehož spotřeba = kolik "
+                "do odběru celkem došlo (např. 668_CELKEM); nech prázdné, pokud se "
+                "dodané množství bere jen z faktury. Členská měřidla se přiřazují na "
+                "samotném Měřidle (pole 'Odběrné místo') nebo hromadnou akcí v seznamu měřidel."
+            ),
+        }),
+    )
+
+    @display(description="Počet měřidel")
+    def member_count(self, obj):
+        return obj.member_meters.count()
 
 
 @admin.register(MeterReading)

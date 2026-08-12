@@ -487,6 +487,17 @@ class Meter(models.Model):
         "Pořadí při zadávání odečtů", default=0,
         help_text="Určuje pořadí měřidel na obrazovce pro zadávání odečtů. Stejná hodnota (výchozí 0) řadí abecedně podle kódu.",
     )
+    supply_point = models.ForeignKey(
+        "SupplyPoint", null=True, blank=True, on_delete=models.SET_NULL,
+        related_name="member_meters", verbose_name="Odběrné místo",
+        help_text=(
+            "Pod které odběrné místo (EAN) toto měřidlo fyzicky patří. "
+            "Slouží k reconciliaci 'dodáno vs. naměřeno' v přehledu spotřeb. "
+            "Nech prázdné u přívodního/fakturačního měřidla samotného odběru "
+            "(např. 668_CELKEM) - to se nastavuje na Odběrném místě jako "
+            "'Přívodní měřidlo', ne jako jeho vlastní člen."
+        ),
+    )
 
     class Meta:
         verbose_name = "Měřidlo"
@@ -627,6 +638,50 @@ class Meter(models.Model):
         for sub_meter, sub_sign in self._formula_tokens():
             leaves.extend(sub_meter.consumption_leaves(sign=sign * sub_sign))
         return leaves
+
+
+class SupplyPoint(models.Model):
+    """Odberne misto / EAN - fyzicky pripojny bod dodavky energie (napr.
+    "EAN 668" nebo "Hlavni odber elektro FM"). Pod jedno odberne misto
+    spada vic podruznych meridel (Meter.supply_point / related_name
+    member_meters). "Privod" (main_meter) je meridlo, jehoz spotreba =
+    kolik do odberneho mista celkem doslo od dodavatele (napr. virtualni
+    668_CELKEM = 668NT+668VT); muze zustat prazdny, kdyz se dodane
+    mnozstvi bere jen z faktury a zadne hlavni meridlo neexistuje (napr.
+    "Hlavni odber elektro FM"). Slouzi k reconciliaci v prehledu spotreb:
+    dodano (main_meter) vs. soucet vlastnich spotreb clenskych meridel =
+    ztraty/nezmereno. Viz konverzace s Danielem 2026-08-12."""
+    site = models.ForeignKey(
+        Site, on_delete=models.CASCADE, related_name="supply_points", verbose_name="Areál"
+    )
+    name = models.CharField(
+        "Název", max_length=200,
+        help_text="Např. 'EAN 668' nebo 'Hlavní odběr elektro FM'.",
+    )
+    code = models.CharField("Kód / EAN", max_length=50, blank=True)
+    meter_type = models.CharField(
+        "Typ energie", max_length=20, choices=Meter.MeterType.choices,
+        default=Meter.MeterType.ELECTRICITY,
+    )
+    main_meter = models.ForeignKey(
+        Meter, null=True, blank=True, on_delete=models.SET_NULL,
+        related_name="supplies_as_main", verbose_name="Přívodní měřidlo (dodaná spotřeba)",
+        help_text=(
+            "Měřidlo, jehož spotřeba = kolik do odběrného místa celkem "
+            "došlo od dodavatele (např. 668_CELKEM). Nech prázdné, pokud "
+            "se dodané množství bere jen z faktury a žádné hlavní měřidlo "
+            "neexistuje."
+        ),
+    )
+    note = models.CharField("Poznámka", max_length=300, blank=True)
+
+    class Meta:
+        verbose_name = "Odběrné místo"
+        verbose_name_plural = "Odběrná místa"
+        ordering = ["site", "meter_type", "name"]
+
+    def __str__(self):
+        return self.name
 
 
 class MeterReading(models.Model):
