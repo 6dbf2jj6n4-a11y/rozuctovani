@@ -600,7 +600,12 @@ def calculate_period(period, site=None):
                     continue
                 fixed_amounts[key.client_card_id] = fixed_amounts.get(key.client_card_id, Decimal("0")) + amount
                 if key.allocation_type == AllocationKey.AllocationType.AREA_PRICE:
-                    price = PriceList.get_price_for_period(service_item, period, price_cache=price_cache)
+                    # Cena z klíče (sjednaná cena karty) má přednost před Ceníkem
+                    # - stejně jako v _fixed_amount_for.
+                    if key.unit_price is not None:
+                        price = key.unit_price
+                    else:
+                        price = PriceList.get_price_for_period(service_item, period, price_cache=price_cache)
                     if price is not None:
                         fixed_units[key.client_card_id] = (
                             fixed_units.get(key.client_card_id, Decimal("0")) + (key.value or Decimal("0"))
