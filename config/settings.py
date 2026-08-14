@@ -145,7 +145,7 @@ CSRF_TRUSTED_ORIGINS = [
 # Verze zobrazena v hlavicce adminu - zvysuje se o +1 po kazdem commitu
 # a pushi (dohoda s Danielem 2026-08-09), format RRRR.poradove_cislo,
 # napr. 2026.1 -> 2026.2 -> 2026.3...
-APP_VERSION = "2026.43"
+APP_VERSION = "2026.44"
 
 UNFOLD = {
     "SITE_TITLE": "RENTE)(",
@@ -206,6 +206,11 @@ UNFOLD = {
                         "title": _("Měřidla"),
                         "icon": "speed",
                         "link": reverse_lazy("admin:core_meter_changelist"),
+                    },
+                    {
+                        "title": _("Odběrná místa"),
+                        "icon": "bolt",
+                        "link": reverse_lazy("admin:core_supplypoint_changelist"),
                     },
                 ],
             },
