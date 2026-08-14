@@ -1531,9 +1531,37 @@ class MeterAdmin(DuplicateModelAdminMixin, ModelAdmin):
                 total_namereno = Decimal("0")
 
                 for sp in type_supplies:
-                    bucket_rows = build_bucket_rows(members_by_supply.get(sp.id, []))
-                    namereno = sum_measured(bucket_rows)
+                    member_meters = members_by_supply.get(sp.id, [])
+                    bucket_rows = build_bucket_rows(member_meters)
+
+                    # Spolecna spotreba = hodnota virtualnich clenskych meridel
+                    # (napr. E_SPOL = A7+A8+A9+E_D_VS) - merena spolecna cast,
+                    # ktera se rozpocitava vahou. Jeji slozky (listy vzorce,
+                    # napr. A7/A8/A9/D_VS) se do "podmeru" nepocitaji podruhe -
+                    # jsou uz zahrnute ve spolecne. Viz Daniel 2026-08-12.
+                    spolecne = Decimal("0")
+                    spolecne_leaf_ids = set()
+                    for m in member_meters:
+                        if m.is_virtual:
+                            val = owned_consumption(m)
+                            if val is not None:
+                                spolecne += val
+                            for leaf, _s in m.consumption_leaves():
+                                spolecne_leaf_ids.add(leaf.id)
+
+                    # Podmery = vlastni spotreba realnych clenskych meridel
+                    # najemniku (bez spolecnych slozek E_SPOL).
+                    podmery = Decimal("0")
+                    for m in member_meters:
+                        if m.is_virtual or m.id in spolecne_leaf_ids:
+                            continue
+                        val = owned_consumption(m)
+                        if val is not None:
+                            podmery += val
+
+                    namereno = podmery + spolecne
                     total_namereno += namereno
+
                     dodano = owned_consumption(sp.main_meter) if sp.main_meter_id else None
                     main_leaves = None
                     if sp.main_meter and sp.main_meter.is_virtual:
@@ -1541,13 +1569,27 @@ class MeterAdmin(DuplicateModelAdminMixin, ModelAdmin):
                             {"meter": leaf, "consumption": leaf._consumption_net_of_children(period)}
                             for leaf, _s in sp.main_meter.consumption_leaves()
                         ]
-                    rozdil = None
+
+                    # Kaskada: Dodano (faktura/privod) - Zakonna ztrata (%) =
+                    # Realne dodane; z nej po odectu podmeru zbyva "rozpocitano
+                    # vahou", z toho merena Spolecna (E_SPOL) a zbytek jsou
+                    # Skutecne ztraty (promereni/pozdni odecet). Viz Daniel
+                    # 2026-08-12 (4 % zakonna ztrata jen u velkoodberu FM,
+                    # pocita se z faktury: realne = faktura x (1 - %/100)).
+                    zakonne = realne = vahou = skutecne = None
                     if dodano is not None:
-                        rozdil = dodano - namereno
+                        pct = sp.legal_loss_pct or Decimal("0")
+                        zakonne = (dodano * pct / Decimal("100"))
+                        realne = dodano - zakonne
+                        vahou = realne - podmery
+                        skutecne = vahou - spolecne
                         total_dodano = (total_dodano or Decimal("0")) + dodano
+
                     supply_blocks.append({
-                        "supply": sp, "dodano": dodano, "namereno": namereno,
-                        "rozdil": rozdil, "rows": bucket_rows,
+                        "supply": sp, "dodano": dodano, "zakonne": zakonne,
+                        "realne": realne, "podmery": podmery, "spolecne": spolecne,
+                        "vahou": vahou, "skutecne": skutecne, "namereno": namereno,
+                        "pct": sp.legal_loss_pct, "rows": bucket_rows,
                         "main_meter": sp.main_meter, "main_leaves": main_leaves,
                     })
 
@@ -2075,7 +2117,7 @@ class InflationRateAdmin(ModelAdmin):
 
 @admin.register(SupplyPoint)
 class SupplyPointAdmin(ModelAdmin):
-    list_display = ("name", "code", "site", "meter_type", "main_meter", "member_count")
+    list_display = ("name", "code", "site", "meter_type", "main_meter", "legal_loss_pct", "member_count")
     list_select_related = ("site", "main_meter")
     list_filter = ("site", "meter_type")
     search_fields = ("name", "code")
@@ -2086,6 +2128,7 @@ class SupplyPointAdmin(ModelAdmin):
                 ("site", "meter_type"),
                 ("name", "code"),
                 "main_meter",
+                "legal_loss_pct",
                 "note",
             ),
             "description": (
