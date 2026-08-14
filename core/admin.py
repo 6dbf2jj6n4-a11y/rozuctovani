@@ -2125,14 +2125,17 @@ def _format_kc(value, decimals=2):
     """Cesky format meny: '1 234,50 Kč' (mezera jako oddelovac tisicu,
     carka jako desetinny oddelovac). Zarovnano vpravo (blokovy text-align)
     - v CR se castky v tabulkach zarovnavaji vpravo, ne vlevo jako
-    bezny text, viz konverzace s Danielem 2026-08-12."""
+    bezny text, viz konverzace s Danielem 2026-08-12. white-space:nowrap,
+    aby se castka v uzsim sloupci nezalamovala na dva radky (viz
+    konverzace s Danielem) - sloupec se pak sam roztahne podle obsahu."""
     from django.utils.html import format_html
 
+    style = "display:block; text-align:right; white-space:nowrap;"
     if value is None:
-        return format_html('<span style="display:block; text-align:right;">-</span>')
+        return format_html('<span style="{}">-</span>', style)
     text = f"{value:,.{decimals}f}"
     text = text.replace(",", "\x00").replace(".", ",").replace("\x00", " ")
-    return format_html('<span style="display:block; text-align:right;">{} Kč</span>', text)
+    return format_html('<span style="{}">{} Kč</span>', style, text)
 
 
 def _efektivni_cena_za_jednotku(cost_entry):
@@ -2314,24 +2317,46 @@ class CostEntryVyplnenoFilter(admin.SimpleListFilter):
 
 @admin.register(CostEntry)
 class CostEntryAdmin(DefaultToLatestPeriodMixin, ModelAdmin):
-    """list_editable u amount_units/amount_czk/note - primo v seznamu (po
+    """list_editable u amount_units/amount_czk - primo v seznamu (po
     filtru na Obdobi) jde zadat cisla u vice polozek najednou a ulozit
     jednim tlacitkem, misto otevirani kazdeho zaznamu zvlast. Kvuli tomu
     (Django to vyzaduje) je list_display_links presunuty na service_item,
     aby zustal jasny "odkazovaci" sloupec pro otevreni celeho formulare
-    (napr. kvuli kontrolnim polim)."""
+    (napr. kvuli kontrolnim polim). Poznamka se v seznamu nezobrazuje
+    (jen ve formulari zaznamu) - viz konverzace s Danielem."""
     list_display = (
         "trida", "service_item", "period", "amount_units", "amount_czk", "jednotka", "kc_za_jednotku",
-        "amount_czk_display", "note",
+        "amount_czk_display",
     )
     list_select_related = ("service_item", "service_item__meter", "service_item__site", "period")
     list_display_links = ("service_item",)
-    list_editable = ("amount_units", "amount_czk", "note")
+    list_editable = ("amount_units", "amount_czk")
     list_filter = (
         CostEntryVyplnenoFilter, "period", "service_item__invoice_class", "service_item__site",
         _PeriodDefaultMarkerFilter,
     )
     search_fields = ("note", "service_item__name")
+
+    def formfield_for_dbfield(self, db_field, request, **kwargs):
+        """amount_units/amount_czk: bezny <input type=number> mel dve
+        neduziti vlastnosti - cisla zarovnana vlevo (v CR se castky
+        zarovnavaji vpravo) a nechtene sipky nahoru/dolu, ktere u
+        nich nedavaji smysl (viz konverzace s Danielem). Sipky jde
+        schovat jen pres CSS pseudo-elementy (::-webkit-inner-spin-
+        button), coz u type=number vubec nejde bez CSS - proto misto
+        toho pouzity Unfoldem vlastni textovy widget
+        (UnfoldAdminTextInputWidget) s vyrovnanim vpravo a Kc
+        priponou primo pres jeho "suffix" - nativni Unfold funkce,
+        zadne vlastni CSS."""
+        formfield = super().formfield_for_dbfield(db_field, request, **kwargs)
+        if db_field.name in ("amount_units", "amount_czk"):
+            from unfold.widgets import INPUT_CLASSES, UnfoldAdminTextInputWidget
+            attrs = {"class": " ".join([*INPUT_CLASSES, "text-right"]), "inputmode": "decimal"}
+            if db_field.name == "amount_czk":
+                attrs["suffix"] = "Kč"
+            formfield.widget = UnfoldAdminTextInputWidget(attrs=attrs)
+            formfield.localize = True
+        return formfield
     autocomplete_fields = ("service_item",)
     readonly_fields = ("kontrola_cena_za_jednotku", "kontrola_castka_celkem")
 
