@@ -111,11 +111,17 @@ def _fixed_amount_for(key, service_item, period, warnings, price_cache=None):
 
     `price_cache`: viz PriceList.get_price_for_period - predano dal beze zmeny."""
     if key.allocation_type == AllocationKey.AllocationType.AREA_PRICE:
-        price = PriceList.get_price_for_period(service_item, period, price_cache=price_cache)
+        # Cena z klíče (individuálně sjednaná cena karty) má přednost před
+        # Ceníkem položky; Ceník je implicitní default, když klíč cenu nemá.
+        if key.unit_price is not None:
+            price = key.unit_price
+        else:
+            price = PriceList.get_price_for_period(service_item, period, price_cache=price_cache)
         if price is None:
             warnings.append(
                 f"{service_item}: klíč 'Plocha × cena/m²' pro kartu {key.client_card} "
-                f"nemá cenu v Ceníku pro toto ani žádné dřívější období - karta vynechána."
+                f"nemá cenu ani na klíči, ani v Ceníku pro toto ani žádné dřívější "
+                f"období - karta vynechána."
             )
             return None
         return ((key.value or Decimal("0")) * price / 12).quantize(Decimal("0.01"))

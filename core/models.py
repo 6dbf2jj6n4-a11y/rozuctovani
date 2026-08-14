@@ -838,6 +838,15 @@ class AllocationKey(models.Model):
             "dal dohromady 100 %, stačí tedy zadat správný POMĚR mezi kartami."
         ),
     )
+    unit_price = models.DecimalField(
+        "Cena za m²/rok (přebíjí Ceník)", max_digits=12, decimal_places=4, null=True, blank=True,
+        help_text=(
+            "Jen pro typ 'Dle výměry (m²)'. Dohodnutá cena Kč/m²/rok pro TUTO "
+            "kartu - přebíjí cenu z Ceníku položky (např. individuálně sjednaný "
+            "paušál). Nech prázdné, aby se použila cena z Ceníku (implicitní "
+            "default). Měsíční částka = Hodnota (m²) × tato cena / 12."
+        ),
+    )
     meter = models.ForeignKey(
         Meter, null=True, blank=True, on_delete=models.SET_NULL,
         related_name="submeter_keys", verbose_name="Podružné měřidlo"

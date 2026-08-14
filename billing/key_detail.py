@@ -142,7 +142,9 @@ def get_key_rows_for_client(client, period):
                 amount = _fixed_amount_for(key, si, period, warnings)
                 row["amount"] = amount if amount is not None else Decimal("0")
                 if key.allocation_type == AllocationKey.AllocationType.AREA_PRICE:
-                    price = PriceList.get_price_for_period(si, period)
+                    # Cena z klíče (sjednaná cena karty) má přednost před Ceníkem
+                    # - viz billing/engine.py _fixed_amount_for.
+                    price = key.unit_price if key.unit_price is not None else PriceList.get_price_for_period(si, period)
                     row["units"] = key.value
                     row["unit_of_measure"] = "m²"
                     row["price_per_unit"] = price
