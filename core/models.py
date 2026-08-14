@@ -274,7 +274,12 @@ class ClientCard(models.Model):
         ordering = ["client", "valid_from"]
 
     def __str__(self):
-        return ""
+        parts = [str(self.client)]
+        if self.unit:
+            parts.append(str(self.unit))
+        if self.valid_from:
+            parts.append(f"od {self.valid_from:%-m/%Y}")
+        return " – ".join(parts)
 
     def save(self, *args, **kwargs):
         """Pokud Popis karty neni vyplneny, dopocita se ve formatu "Karta
