@@ -2379,6 +2379,48 @@ class CostEntryAdmin(DefaultToLatestPeriodMixin, ModelAdmin):
         _PeriodDefaultMarkerFilter,
     )
     search_fields = ("note", "service_item__name")
+    list_after_template = "admin/core/costentry/default_amount_items.html"
+
+    def changelist_view(self, request, extra_context=None):
+        extra_context = extra_context or {}
+        extra_context["default_amount_rows"] = self._default_amount_rows(request)
+        return super().changelist_view(request, extra_context)
+
+    def _default_amount_rows(self, request):
+        """Polozky, ktere pro vybrane Obdobi NEMAJI zadny Naklad (CostEntry),
+        ale presto se do vyuctovani pocitaji - pres jejich Vychozi castku
+        (ServicePoolItem.default_amount_czk), viz billing/engine.py
+        calculate_period (elif service_item.default_amount_czk is not
+        None). Bez tohohle by v seznamu Nakladu za obdobi tyhle
+        "automaticky se opakujici" polozky vubec nebyly videt - Daniel
+        chce videt VSECHNY naklady vazane k obdobi, i kdyz se kazdy
+        mesic nevyplnuji (viz konverzace s Danielem)."""
+        period_id = request.GET.get("period__id__exact")
+        if not period_id:
+            return None
+        period = Period.objects.filter(pk=period_id).first()
+        if period is None:
+            return None
+
+        items = ServicePoolItem.objects.exclude(default_amount_czk__isnull=True).select_related("site")
+        site_id = request.GET.get("service_item__site__id__exact")
+        if site_id:
+            items = items.filter(site_id=site_id)
+        invoice_class = request.GET.get("service_item__invoice_class__exact")
+        if invoice_class:
+            items = items.filter(invoice_class=invoice_class)
+        items = items.exclude(cost_entries__period=period).order_by("invoice_class", "site__name", "name")
+
+        class_labels = dict(ServicePoolItem.InvoiceClass.choices)
+        rows = [
+            {
+                "trida": class_labels[item.invoice_class],
+                "item": item,
+                "amount_html": _format_kc(item.default_amount_czk),
+            }
+            for item in items
+        ]
+        return {"period": period, "rows": rows}
 
     def formfield_for_dbfield(self, db_field, request, **kwargs):
         """amount_units/amount_czk: bezny <input type=number> mel dve
