@@ -1587,13 +1587,19 @@ class MeterAdmin(DuplicateModelAdminMixin, ModelAdmin):
                         vahou = realne - podmery
                         skutecne = vahou - spolecne
                         total_dodano = (total_dodano or Decimal("0")) + dodano
+                    # Zaporne "skutecne ztraty" = namereno je vyssi nez realne
+                    # dodane, tj. skutecne ztraty jsou MENSI nez zakonna
+                    # rezerva (napr. 4 %) - to je v poradku, ne chyba. Ukazeme
+                    # to jako nevycerpanou rezervu misto straselneho zaporu.
+                    rezerva = -skutecne if (skutecne is not None and skutecne < 0) else None
 
                     supply_blocks.append({
                         "supply": sp, "dodano": dodano, "zakonne": zakonne,
                         "realne": realne, "podmery": podmery, "spolecne": spolecne,
-                        "vahou": vahou, "skutecne": skutecne, "namereno": namereno,
-                        "pct": sp.legal_loss_pct, "rows": bucket_rows,
-                        "main_meter": sp.main_meter, "main_leaves": main_leaves,
+                        "vahou": vahou, "skutecne": skutecne, "rezerva": rezerva,
+                        "namereno": namereno, "pct": sp.legal_loss_pct,
+                        "rows": bucket_rows, "main_meter": sp.main_meter,
+                        "main_leaves": main_leaves,
                     })
 
                 unassigned_block = None

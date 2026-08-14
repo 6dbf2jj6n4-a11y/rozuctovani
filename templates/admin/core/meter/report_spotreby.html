@@ -102,10 +102,22 @@
                                 <td style="padding:1px 8px 1px 40px; text-align:right;">z toho měřená společná (E_SPOL)</td>
                                 <td style="padding:1px 8px; text-align:right;">{{ block.spolecne|floatformat:3 }} kWh</td>
                             </tr>
-                            <tr style="color:#a70; font-size:12px;">
-                                <td style="padding:1px 8px 8px 40px; text-align:right;">z toho neměřené (skutečné ztráty)</td>
-                                <td style="padding:1px 8px 8px; text-align:right;">{{ block.skutecne|floatformat:3 }} kWh</td>
-                            </tr>
+                            {% if block.rezerva != None %}
+                                <tr style="color:#3a3; font-size:12px;">
+                                    <td style="padding:1px 8px 8px 40px; text-align:right;">skutečné ztráty v rámci {{ block.pct|floatformat:0 }}% rezervy ✅ (nevyčerpáno)</td>
+                                    <td style="padding:1px 8px 8px; text-align:right;">{{ block.rezerva|floatformat:3 }} kWh</td>
+                                </tr>
+                            {% elif block.pct %}
+                                <tr style="color:#c33; font-size:12px;">
+                                    <td style="padding:1px 8px 8px 40px; text-align:right;">skutečné ztráty NAD {{ block.pct|floatformat:0 }}% rezervu ⚠️</td>
+                                    <td style="padding:1px 8px 8px; text-align:right;">{{ block.skutecne|floatformat:3 }} kWh</td>
+                                </tr>
+                            {% else %}
+                                <tr style="color:#888; font-size:12px;">
+                                    <td style="padding:1px 8px 8px 40px; text-align:right;">z toho neměřené (rozpočítá se vahou)</td>
+                                    <td style="padding:1px 8px 8px; text-align:right;">{{ block.skutecne|floatformat:3 }} kWh</td>
+                                </tr>
+                            {% endif %}
                         {% else %}
                             <tr style="color:#888; font-size:12px;">
                                 <td style="padding:1px 8px 8px; text-align:right;">z toho měřená společná (E_SPOL)</td>
