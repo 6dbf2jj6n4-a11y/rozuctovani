@@ -1574,13 +1574,16 @@ class MeterAdmin(DuplicateModelAdminMixin, ModelAdmin):
                     # Realne dodane; z nej po odectu podmeru zbyva "rozpocitano
                     # vahou", z toho merena Spolecna (E_SPOL) a zbytek jsou
                     # Skutecne ztraty (promereni/pozdni odecet). Viz Daniel
-                    # 2026-08-12 (4 % zakonna ztrata jen u velkoodberu FM,
-                    # pocita se z faktury: realne = faktura x (1 - %/100)).
+                    # 2026-08-12. 4 % zakonna ztrata jen u velkoodberu FM.
+                    # Faktura UZ ztratu OBSAHUJE (dodavatel k realne dodanemu
+                    # pripocita 4 %), takze realne = faktura / (1 + %/100),
+                    # ne faktura x (1 - %/100). Viz oprava Daniel 2026-08-12
+                    # (7436 kWh se 4 % => 7436/1,04 = 7150, ne 0,96x7436).
                     zakonne = realne = vahou = skutecne = None
                     if dodano is not None:
                         pct = sp.legal_loss_pct or Decimal("0")
-                        zakonne = (dodano * pct / Decimal("100"))
-                        realne = dodano - zakonne
+                        realne = dodano / (Decimal("1") + pct / Decimal("100"))
+                        zakonne = dodano - realne
                         vahou = realne - podmery
                         skutecne = vahou - spolecne
                         total_dodano = (total_dodano or Decimal("0")) + dodano

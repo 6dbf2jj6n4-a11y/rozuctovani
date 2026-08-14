@@ -677,9 +677,9 @@ class SupplyPoint(models.Model):
         "Zákonná ztráta %", max_digits=5, decimal_places=2, default=Decimal("0"),
         help_text=(
             "Zákonná (systémová) ztráta, kterou dodavatel účtuje navíc - "
-            "typicky 4 % u velkoodběru. Naměřené hodnoty se porovnávají s "
-            "fakturovanou spotřebou až PO odečtení těchto % (reálně dodané "
-            "= faktura × (1 − %/100)); do vyúčtování se klientům ztráta "
+            "typicky 4 % u velkoodběru. Faktura už ztrátu obsahuje "
+            "(dodavatel k reálně dodanému připočítá tato %), takže reálně "
+            "dodané = faktura / (1 + %/100); do vyúčtování se klientům ztráta "
             "vrací. Co zůstane po odečtení této i naměřené spotřeby jsou "
             "skutečné ztráty (proměření / pozdní odečet). 0 = nepoužít "
             "(např. EAN 668, kde čteme vlastní měřidla)."
