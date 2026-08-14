@@ -58,7 +58,7 @@
                                 <td style="padding:1px 8px; text-align:right;">{% if leaf.consumption != None %}{{ leaf.consumption|floatformat:3 }}{% else %}—{% endif %}</td>
                             </tr>
                         {% endfor %}
-                        {% if block.pct %}
+                        {% if block.zakonne != None and block.pct %}
                             <tr style="color:#a70;">
                                 <td style="padding:2px 8px 2px 24px;">− Zákonné ztráty ({{ block.pct|floatformat:0 }} %)</td>
                                 <td style="padding:2px 8px; text-align:right;">{{ block.zakonne|floatformat:3 }} kWh</td>
@@ -66,6 +66,10 @@
                             <tr>
                                 <td style="padding:2px 8px 2px 24px; font-weight:600;">= Reálně dodané</td>
                                 <td style="padding:2px 8px; text-align:right; font-weight:600;">{{ block.realne|floatformat:3 }} kWh</td>
+                            </tr>
+                        {% elif not block.main_meter and block.dodano == None %}
+                            <tr style="color:#a70; font-size:12px;">
+                                <td colspan="2" style="padding:2px 8px 2px 24px;">⚠️ Bez přívodního měřidla nelze spočítat ztráty – nastav u odběrného místa „Přívodní měřidlo".</td>
                             </tr>
                         {% endif %}
 
