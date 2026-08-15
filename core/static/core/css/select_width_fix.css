@@ -16,3 +16,27 @@ table td .select2-container {
 .select2-dropdown {
     min-width: 320px !important;
 }
+
+/*
+Inline klice (AllocationKey) na Karte klienta - vzhled poli:
+- ciselna pole Hodnota / Cena za m2/rok: pryc s sipkami (spinner) a sirsi,
+  aby nebylo cislo orezane
+- Typ rozpoctu (plain <select>): sirsi, ať je videt cely text (ne "Podl...")
+Selektory podle konce name atributu -> nezavisle na strukture Unfold sablony.
+*/
+input[name$="-value"],
+input[name$="-unit_price"] {
+    -moz-appearance: textfield;
+    appearance: textfield;
+    min-width: 110px !important;
+}
+input[name$="-value"]::-webkit-outer-spin-button,
+input[name$="-value"]::-webkit-inner-spin-button,
+input[name$="-unit_price"]::-webkit-outer-spin-button,
+input[name$="-unit_price"]::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}
+select[name$="-allocation_type"] {
+    min-width: 160px !important;
+}
