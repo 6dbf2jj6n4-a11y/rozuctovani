@@ -1777,12 +1777,12 @@ class MeterAdmin(DuplicateModelAdminMixin, ModelAdmin):
 
 @admin.register(Period)
 class PeriodAdmin(ModelAdmin):
-    list_display = ("__str__", "status_badge", "days_in_period", "period_actions")
-    list_filter = ("status",)
+    list_display = ("__str__", "current_badge", "status_badge", "days_in_period", "period_actions")
+    list_filter = ("status", "is_current")
     ordering = ("-year", "-month")
     actions = [
         "spocitat_rozuctovani", "zkontrolovat_co_zadat", "vygenerovat_chybejici_naklady",
-        "uzavrit_obdobi", "znovu_otevrit_obdobi",
+        "nastavit_jako_aktualni", "uzavrit_obdobi", "znovu_otevrit_obdobi",
     ]
     # Tlacitko "Generovat pro celý rok" nad tabulkou - puvodne zkoušeno
     # pres object-tools-items blok jako u change_form, ale na
@@ -1807,6 +1807,23 @@ class PeriodAdmin(ModelAdmin):
     )
     def status_badge(self, obj):
         return obj.get_status_display()
+
+    @display(description="Aktuální", ordering="is_current", boolean=True)
+    def current_badge(self, obj):
+        return obj.is_current
+
+    @admin.action(description="Nastavit jako aktuální období (předvyplní se v sestavách)")
+    def nastavit_jako_aktualni(self, request, queryset):
+        """Aktualni obdobi je jen jedno - z vyberu se bere to nejnovejsi
+        a ostatni se odznaci (dela Period.save())."""
+        period = queryset.order_by("-year", "-month").first()
+        if period is None:
+            return
+        period.is_current = True
+        period.save()
+        self.message_user(
+            request, f"Aktuální období je nyní {period} - předvyplní se ve všech sestavách."
+        )
 
     def changelist_view(self, request, extra_context=None):
         """Ulozi request na self, aby si ho action_buttons (list_display

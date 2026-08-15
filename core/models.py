@@ -389,6 +389,15 @@ class Period(models.Model):
     year = models.PositiveIntegerField("Rok")
     month = models.PositiveSmallIntegerField("Měsíc")
     status = models.CharField("Stav", max_length=10, choices=Status.choices, default=Status.OPEN)
+    is_current = models.BooleanField(
+        "Aktuální období", default=False,
+        help_text=(
+            "Období, se kterým se právě pracuje - předvyplní se ve všech "
+            "sestavách. Není to totéž co kalendářní měsíc: v srpnu se běžně "
+            "rozúčtovává červenec. Aktuální může být vždy jen jedno období, "
+            "zaškrtnutím se ostatní automaticky odznačí."
+        ),
+    )
 
     class Meta:
         verbose_name = "Období"
@@ -417,21 +426,33 @@ class Period(models.Model):
             prev_year, prev_month = self.year, self.month - 1
         return Period.objects.filter(year=prev_year, month=prev_month).first()
 
+    def save(self, *args, **kwargs):
+        """Aktuální období může být jen jedno - zaškrtnutí odznačí ostatní."""
+        super().save(*args, **kwargs)
+        if self.is_current:
+            Period.objects.exclude(pk=self.pk).filter(is_current=True).update(is_current=False)
+
     @classmethod
     def current(cls):
-        """Období, které se má v sestavách předvyplnit - to odpovídající
-        dnešnímu kalendářnímu měsíci.
+        """Období, které se má v sestavách předvyplnit.
 
-        Dřív se všude používalo `Period.objects.first()` (= nejnovější
-        podle Meta.ordering). Jenže od zavedení tlačítka "Generovat pro
-        celý rok" jsou v DB založené i budoucí měsíce, takže sestavy
-        najížděly třeba na prosinec místo aktuálního srpna - viz
-        konverzace s Danielem 2026-08-15.
+        Primárně to, které je ručně označené jako Aktuální (is_current) -
+        pracovní období totiž není totéž co kalendářní měsíc: v srpnu se
+        běžně rozúčtovává červenec, takže si ho Daniel nastavuje sám
+        (viz konverzace 2026-08-15).
 
-        Když období pro dnešní měsíc ještě neexistuje, vezme se nejnovější
-        už začaté (ne budoucí); a kdyby v DB byla jen budoucí období, tak
-        prostě nejbližší z nich. Vrací None jen když není žádné období.
+        Když žádné označené není, spadne se na kalendářní odhad: období
+        dnešního měsíce, jinak nejnovější už začaté (ne budoucí), a kdyby
+        v DB byla jen budoucí, tak nejbližší z nich. Ten fallback tu je
+        proto, že dřív se všude používalo `Period.objects.first()`
+        (= nejnovější podle Meta.ordering) a od zavedení tlačítka
+        "Generovat pro celý rok" jsou v DB i budoucí měsíce, takže
+        sestavy najížděly třeba na prosinec. Vrací None jen když není
+        žádné období.
         """
+        marked = cls.objects.filter(is_current=True).first()
+        if marked is not None:
+            return marked
         today = date.today()
         exact = cls.objects.filter(year=today.year, month=today.month).first()
         if exact is not None:
