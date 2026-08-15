@@ -93,6 +93,26 @@
                             <td style="padding:2px 8px;" colspan="4"></td>
                         </tr>
                     {% endfor %}
+                    {% comment %}
+                       Rozpad castky: kolik klient plati za svou namerenou spotrebu
+                       a kolik je priplatek za spolecne prostory + ztraty, ktery je
+                       jinak schovany ve vyssi cene za jednotku. Viz
+                       billing/engine.py surcharge_split.
+                    {% endcomment %}
+                    {% if row.surcharge_amount %}
+                        <tr style="color:#7c9; border-bottom:1px solid #333;">
+                            <td colspan="8" style="padding:2px 8px 2px 24px;">↳ z toho vlastní naměřená spotřeba</td>
+                            <td style="padding:2px 8px; text-align:right;">{{ row.units|floatformat:3 }} {{ row.unit_of_measure }}</td>
+                            <td style="padding:2px 8px; text-align:right;">{{ row.base_price_per_unit|floatformat:4 }} Kč</td>
+                            <td style="padding:2px 8px; text-align:right;">{{ row.own_amount|floatformat:2 }} Kč</td>
+                        </tr>
+                        <tr style="color:#7c9; border-bottom:1px solid #333;">
+                            <td colspan="8" style="padding:2px 8px 8px 24px;">↳ z toho společné prostory a ztráty</td>
+                            <td style="padding:2px 8px 8px; text-align:right;">{{ row.surcharge_units|floatformat:3 }} {{ row.unit_of_measure }}</td>
+                            <td style="padding:2px 8px 8px; text-align:right;">{{ row.base_price_per_unit|floatformat:4 }} Kč</td>
+                            <td style="padding:2px 8px 8px; text-align:right;">{{ row.surcharge_amount|floatformat:2 }} Kč</td>
+                        </tr>
+                    {% endif %}
                 {% endfor %}
                 <tr style="border-top:2px solid #666; font-weight:700;">
                     <td colspan="10" style="padding:8px; text-align:right;">Mezisoučet {{ group.label }}</td>

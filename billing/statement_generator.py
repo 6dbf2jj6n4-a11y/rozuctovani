@@ -73,9 +73,14 @@ def build_statement_data(client, period):
     )
     class_labels = dict(ServicePoolItem.InvoiceClass.choices)
 
+    def _dec(calc_detail, field):
+        raw = calc_detail.get(field)
+        return Decimal(raw) if raw is not None else None
+
     classes = []
     grand_total = Decimal("0")
     any_unbilled = False
+    any_surcharge = False
     for class_code in _CLASS_ORDER:
         class_lines = [line for line in lines if line.service_item.invoice_class == class_code]
         if not class_lines:
@@ -86,6 +91,8 @@ def build_statement_data(client, period):
         subtotal = sum((line.amount for line in class_lines if line.is_billed), Decimal("0"))
         if any(not line.is_billed for line in class_lines):
             any_unbilled = True
+        if any(line.calc_detail.get("surcharge_amount") for line in class_lines):
+            any_surcharge = True
         classes.append({
             "label": class_labels[class_code],
             "lines": [
@@ -100,6 +107,15 @@ def build_statement_data(client, period):
                         Decimal(line.calc_detail["price_per_unit"])
                         if line.calc_detail.get("price_per_unit") else None
                     ),
+                    # Rozpad castky na vlastni namerenou spotrebu a priplatek
+                    # za spolecne prostory + ztraty (viz billing/engine.py
+                    # surcharge_split). U starsich obdobi, spocitanych jeste
+                    # pred zavedenim rozpadu, tahle pole v calc_detail nejsou -
+                    # zustanou None a v PDF se proste neukazou.
+                    "base_price_per_unit": _dec(line.calc_detail, "base_price_per_unit"),
+                    "own_amount": _dec(line.calc_detail, "own_amount"),
+                    "surcharge_units": _dec(line.calc_detail, "surcharge_units"),
+                    "surcharge_amount": _dec(line.calc_detail, "surcharge_amount"),
                 }
                 for line in class_lines
             ],
@@ -107,7 +123,10 @@ def build_statement_data(client, period):
         })
         grand_total += subtotal
 
-    return {"classes": classes, "grand_total": grand_total, "any_unbilled": any_unbilled}
+    return {
+        "classes": classes, "grand_total": grand_total,
+        "any_unbilled": any_unbilled, "any_surcharge": any_surcharge,
+    }
 
 
 def generate_client_statement_pdf(client, period, output_path):
@@ -136,6 +155,10 @@ def generate_client_statement_pdf(client, period, output_path):
             + ["Spotřeba", "Cena/jednotku", "Částka (Kč)"]
         )
         rows = [headers]
+        # Radky rozpadu (vlastni spotreba / spolecne + ztraty) jsou jen
+        # vysvetlujici - do mezisouctu nevstupuji, proto se tisknou mensim
+        # sedym pismem, aby nevypadaly jako dalsi uctovana polozka.
+        detail_row_indexes = []
         for line in cls["lines"]:
             row = [line["item"]]
             if show_card_column:
@@ -147,6 +170,24 @@ def generate_client_statement_pdf(client, period, output_path):
                 amount_text += " (v paušálu)"
             row.append(amount_text)
             rows.append(row)
+
+            if line["surcharge_amount"]:
+                breakdown = (
+                    ("z toho vlastní naměřená spotřeba", line["units"], line["own_amount"]),
+                    ("z toho společné prostory a ztráty", line["surcharge_units"], line["surcharge_amount"]),
+                )
+                for label, sub_units, sub_amount in breakdown:
+                    detail_row_indexes.append(len(rows))
+                    sub_row = [f"     {label}"]
+                    if show_card_column:
+                        sub_row.append("")
+                    sub_row.append(format_units(sub_units, line["unit_of_measure"]))
+                    sub_row.append(
+                        format_price_per_unit(line["base_price_per_unit"], line["unit_of_measure"])
+                    )
+                    sub_row.append(_fmt_czk(sub_amount))
+                    rows.append(sub_row)
+
         filler = [""] * (2 + (1 if show_card_column else 0))
         rows.append(["Mezisoučet"] + filler + [_fmt_czk(cls["subtotal"])])
 
@@ -162,6 +203,16 @@ def generate_client_statement_pdf(client, period, output_path):
             ("FONTSIZE", (0, 0), (-1, -1), 9),
             ("TOPPADDING", (0, 0), (-1, -1), 3),
             ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
+            # Az na konci - pravidla pro cely rozsah tabulky vyse by je
+            # jinak prepsala (reportlab aplikuje prikazy v poradi).
+            *[
+                style
+                for i in detail_row_indexes
+                for style in (
+                    ("TEXTCOLOR", (0, i), (-1, i), colors.HexColor("#6b7280")),
+                    ("FONTSIZE", (0, i), (-1, i), 8),
+                )
+            ],
         ]))
         elements.append(table)
 
@@ -170,6 +221,14 @@ def generate_client_statement_pdf(client, period, output_path):
         elements.append(Paragraph(
             "Položky označené „(v paušálu)“ jsou v tomto výpisu jen pro přehlednost - "
             "máte je již zahrnuté v paušální platbě, proto nejsou v částce k úhradě.",
+            _STYLE_EMPTY,
+        ))
+    if data["any_surcharge"]:
+        elements.append(Paragraph(
+            "Řádky „z toho“ jsou jen rozpis částky nad nimi, nepřičítají se k ní. "
+            "Dodavatel fakturuje více, než kolik naměří jednotlivá podružná měřidla - "
+            "rozdíl je spotřeba společných prostor a ztráty v rozvodech, které se dělí "
+            "mezi odběratele v poměru jejich naměřené spotřeby.",
             _STYLE_EMPTY,
         ))
 

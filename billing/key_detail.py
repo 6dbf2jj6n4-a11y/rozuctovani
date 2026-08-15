@@ -21,6 +21,7 @@ from .engine import (
     _fixed_amount_for,
     _meter_provides_consumption,
     _weighted_shares,
+    surcharge_split,
 )
 
 
@@ -44,6 +45,7 @@ def get_key_rows_for_client(client, period):
     rows = []
     item_losses = []
     seen_loss_items = set()
+    cost_entries_by_item = {}
 
     lines = (
         BillingLine.objects.filter(period=period, client_card__client=client)
@@ -87,13 +89,22 @@ def get_key_rows_for_client(client, period):
             weight_keys = [k for k in valid_keys if k.allocation_type not in ABSOLUTE_AMOUNT_TYPES]
             _weighted_shares(weight_keys, period, by_key_out=by_key_share)
 
+        # Fakturovane mnozstvi od dodavatele - potrebne jak pro interni
+        # prehled ztrat (nize), tak pro rozpad castky na vlastni spotrebu
+        # a priplatek za spolecne/ztraty (viz surcharge_split). Cachuje se
+        # po polozce, aby se stejny dotaz neopakoval za kazdou kartu.
+        if si.id in cost_entries_by_item:
+            cost_entry = cost_entries_by_item[si.id]
+        else:
+            cost_entry = CostEntry.objects.filter(service_item=si, period=period).first()
+            cost_entries_by_item[si.id] = cost_entry
+        reported_units = cost_entry.amount_units if cost_entry else None
+
         if (
             not si.meter and has_meter_keys and total_consumption is not None
             and si.id not in seen_loss_items
         ):
             seen_loss_items.add(si.id)
-            cost_entry = CostEntry.objects.filter(service_item=si, period=period).first()
-            reported_units = cost_entry.amount_units if cost_entry else None
             if reported_units:
                 loss_units = reported_units - total_consumption
                 key_with_meter = next((k for k in valid_keys if k.meter_id), None)
@@ -136,6 +147,12 @@ def get_key_rows_for_client(client, period):
                 "amount": Decimal("0"),
                 "sub_meters": [],
                 "is_billed": key.is_billed,
+                # Rozpad castky na vlastni spotrebu a priplatek za spolecne
+                # prostory + ztraty - viz billing/engine.py surcharge_split.
+                "base_price_per_unit": None,
+                "own_amount": None,
+                "surcharge_units": None,
+                "surcharge_amount": None,
             }
 
             if key.allocation_type in ABSOLUTE_AMOUNT_TYPES:
@@ -246,6 +263,17 @@ def get_key_rows_for_client(client, period):
                         row["unit_of_measure"] = si.meter.unit_of_measure
                     if total_cost:
                         row["price_per_unit"] = (total_cost / total_consumption).quantize(Decimal("0.0001"))
+
+                    split = surcharge_split(
+                        share, row["units"], remaining_cost, reported_units, total_consumption
+                    )
+                    if split:
+                        row.update({
+                            "base_price_per_unit": split["base_price_per_unit"],
+                            "own_amount": split["own_amount"],
+                            "surcharge_units": split["surcharge_units"],
+                            "surcharge_amount": split["surcharge_amount"],
+                        })
 
             rows.append(row)
 

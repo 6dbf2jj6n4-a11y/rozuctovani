@@ -414,6 +414,46 @@ def _consumption_shares(
     return shares, total_consumption
 
 
+def surcharge_split(share, units, remaining_cost, reported_units, total_consumption):
+    """Rozpad spotrebni casti castky na "vlastni spotreba" a "spolecne
+    prostory + ztraty" - JEN pro zobrazeni, na vypocet nema zadny vliv.
+
+    Klient plati sve namerene jednotky, jenze cena za jednotku, kterou
+    vidi ve vyuctovani (total_cost / namerena spotreba), je vyssi nez ta
+    fakturovana dodavatelem (naklad / fakturovane mnozstvi) - do rozdilu
+    je schovane vsechno, co dodavatel naúctoval navic proti souctu
+    podmeru: osvetleni spolecnych prostor, technicke ztraty, nezachycene
+    odbery. Bez rozpadu to ve vyuctovani vypada jako 5,20 Kc/kWh proti
+    4,80 Kc/kWh na fakture, aniz by z ceho koli slo poznat proc.
+    Viz konverzace s Danielem 2026-08-15.
+
+    Rozpad (vse odvozene z uz spocitanych hodnot, nic se nepocita znovu):
+      cena bez priplatku = zbyla castka / fakturovane mnozstvi
+      vlastni spotreba   = jednotky karty x cena bez priplatku
+      priplatek          = zbyla castka x podil - vlastni spotreba
+    Priplatek se dopocitava jako zbytek (ne nezavislym zaokrouhlenim),
+    aby soucet obou radku dal presne fakturovanou castku.
+
+    Vraci dict, nebo None kdyz rozpad nedava smysl (polozka bez
+    fakturovaneho mnozstvi - typicky nemerena sluzba uctovana v Kc, nebo
+    karta bez podilu na spotrebe).
+    """
+    if not reported_units or reported_units <= 0 or not total_consumption:
+        return None
+    if share is None or units is None or remaining_cost is None:
+        return None
+    base_price_per_unit = (remaining_cost / reported_units).quantize(Decimal("0.0001"))
+    own_amount = (units * base_price_per_unit).quantize(Decimal("0.01"))
+    share_amount = (remaining_cost * share).quantize(Decimal("0.01"))
+    return {
+        "reported_units": reported_units,
+        "base_price_per_unit": base_price_per_unit,
+        "own_amount": own_amount,
+        "surcharge_units": (share * (reported_units - total_consumption)).quantize(Decimal("0.001")),
+        "surcharge_amount": share_amount - own_amount,
+    }
+
+
 def sync_card_activity(period, site=None):
     """Pred vypoctem rozuctovani automaticky zkontroluje a opravi
     ClientCard.is_active podle Platnost od/do vuci pocitanemu obdobi -
@@ -674,6 +714,7 @@ def calculate_period(period, site=None):
                 units = None
                 price_per_unit = None
                 unit_of_measure = None
+                split = None
                 if card_id in fixed_units:
                     units = fixed_units[card_id]
                     price_per_unit = fixed_price_per_unit.get(card_id)
@@ -692,6 +733,17 @@ def calculate_period(period, site=None):
                         key_with_meter = next((k for k in valid_keys if k.meter_id), None)
                         unit_of_measure = key_with_meter.meter.unit_of_measure if key_with_meter else ""
 
+                    # Rozpad "vlastni spotreba" vs "spolecne + ztraty" - jen
+                    # informativni, uklada se do calc_detail, aby ho slo ukazat
+                    # v klientskem vyuctovani i po uzavreni obdobi (PDF cte
+                    # vyhradne ulozene hodnoty, nikdy neprepocitava). Viz
+                    # surcharge_split.
+                    split = surcharge_split(
+                        share, units, remaining_cost,
+                        cost_entry.amount_units if cost_entry is not None else None,
+                        total_consumption,
+                    )
+
                 to_create.append(BillingLine(
                     client_card_id=card_id,
                     period=period,
@@ -708,6 +760,13 @@ def calculate_period(period, site=None):
                         "share": str(share) if share is not None else None,
                         "price_per_unit": str(price_per_unit) if price_per_unit is not None else None,
                         "unit_of_measure": unit_of_measure,
+                        **({
+                            "reported_units": str(split["reported_units"]),
+                            "base_price_per_unit": str(split["base_price_per_unit"]),
+                            "own_amount": str(split["own_amount"]),
+                            "surcharge_units": str(split["surcharge_units"]),
+                            "surcharge_amount": str(split["surcharge_amount"]),
+                        } if split else {}),
                     },
                 ))
 

@@ -1609,6 +1609,17 @@ class MeterAdmin(DuplicateModelAdminMixin, ModelAdmin):
                     # ne faktura x (1 - %/100). Viz oprava Daniel 2026-08-12
                     # (7436 kWh se 4 % => 7436/1,04 = 7150, ne 0,96x7436).
                     zakonne = realne = vahou = skutecne = None
+                    # Realne ztraty se merí vuci FAKTUROVANEMU mnozstvi, ne
+                    # vuci "realne dodanemu" - je to ta cast dodavky, kterou
+                    # nezachytil ani podmer najemnika, ani merena spolecna
+                    # (= zakonna rezerva + skutecne ztraty dohromady). Vnitrni
+                    # "skutecne" muze vyjit zaporne (namerene je vyssi nez
+                    # dodano po odectu 4 % rezervy), coz samo o sobe vypada
+                    # jako chyba, i kdyz je to v poradku - proto se stav
+                    # posuzuje az tímto souhrnnym radkem: X kWh / Y %, a jestli
+                    # se to vejde do zakonne rezervy. Viz Daniel 2026-08-15.
+                    realne_ztraty = realne_ztraty_pct = None
+                    ztraty_ok = None
                     if dodano is not None:
                         pct = sp.legal_loss_pct or Decimal("0")
                         realne = dodano / (Decimal("1") + pct / Decimal("100"))
@@ -1616,16 +1627,19 @@ class MeterAdmin(DuplicateModelAdminMixin, ModelAdmin):
                         vahou = realne - podmery
                         skutecne = vahou - spolecne
                         total_dodano = (total_dodano or Decimal("0")) + dodano
-                    # Zaporne "skutecne ztraty" = namereno je vyssi nez realne
-                    # dodane, tj. skutecne ztraty jsou MENSI nez zakonna
-                    # rezerva (napr. 4 %) - to je v poradku, ne chyba. Ukazeme
-                    # to jako nevycerpanou rezervu misto straselneho zaporu.
-                    rezerva = -skutecne if (skutecne is not None and skutecne < 0) else None
+                        realne_ztraty = dodano - podmery - spolecne
+                        if dodano:
+                            realne_ztraty_pct = realne_ztraty / dodano * Decimal("100")
+                            if pct:
+                                ztraty_ok = realne_ztraty_pct <= pct
 
                     supply_blocks.append({
                         "supply": sp, "dodano": dodano, "zakonne": zakonne,
                         "realne": realne, "podmery": podmery, "spolecne": spolecne,
-                        "vahou": vahou, "skutecne": skutecne, "rezerva": rezerva,
+                        "vahou": vahou, "skutecne": skutecne,
+                        "realne_ztraty": realne_ztraty,
+                        "realne_ztraty_pct": realne_ztraty_pct,
+                        "ztraty_ok": ztraty_ok,
                         "namereno": namereno, "pct": sp.legal_loss_pct,
                         "rows": bucket_rows, "main_meter": sp.main_meter,
                         "main_leaves": main_leaves,
