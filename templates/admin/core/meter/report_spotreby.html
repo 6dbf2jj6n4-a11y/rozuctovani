@@ -50,7 +50,7 @@
                         {# ---- kaskáda dodávky ---- #}
                         <tr>
                             <td style="padding:4px 8px 4px 24px;">Dodáno{% if block.main_meter %} <span style="color:#888;">(přívod <a href="/admin/core/meter/{{ block.main_meter.pk }}/change/">{{ block.main_meter.code|default:block.main_meter.name }}</a>)</span>{% else %} <span style="color:#888;">(z faktury – bez měřidla)</span>{% endif %}</td>
-                            <td style="padding:4px 8px; text-align:right; font-weight:700;">{% if block.dodano != None %}{{ block.dodano|floatformat:3 }} kWh{% else %}—{% endif %}</td>
+                            <td style="padding:4px 8px; text-align:right; font-weight:700;">{% if block.dodano != None %}{{ block.dodano|floatformat:3 }} {{ group.unit }}{% else %}—{% endif %}</td>
                         </tr>
                         {% for leaf in block.main_leaves %}
                             <tr style="color:#999; font-size:12px;">
@@ -61,11 +61,11 @@
                         {% if block.zakonne != None and block.pct %}
                             <tr style="color:#a70;">
                                 <td style="padding:2px 8px 2px 24px;">− Zákonné ztráty ({{ block.pct|floatformat:0 }} %)</td>
-                                <td style="padding:2px 8px; text-align:right;">{{ block.zakonne|floatformat:3 }} kWh</td>
+                                <td style="padding:2px 8px; text-align:right;">{{ block.zakonne|floatformat:3 }} {{ group.unit }}</td>
                             </tr>
                             <tr>
                                 <td style="padding:2px 8px 2px 24px; font-weight:600;">= Reálně dodané</td>
-                                <td style="padding:2px 8px; text-align:right; font-weight:600;">{{ block.realne|floatformat:3 }} kWh</td>
+                                <td style="padding:2px 8px; text-align:right; font-weight:600;">{{ block.realne|floatformat:3 }} {{ group.unit }}</td>
                             </tr>
                         {% elif not block.main_meter and block.dodano == None %}
                             <tr style="color:#a70; font-size:12px;">
@@ -91,37 +91,37 @@
                         {# ---- souhrn odběru ---- #}
                         <tr style="border-top:1px solid #666;">
                             <td style="padding:5px 8px; text-align:right; font-weight:600;">Podměry (nájemníkům)</td>
-                            <td style="padding:5px 8px; text-align:right; font-weight:600;">{{ block.podmery|floatformat:3 }} kWh</td>
+                            <td style="padding:5px 8px; text-align:right; font-weight:600;">{{ block.podmery|floatformat:3 }} {{ group.unit }}</td>
                         </tr>
                         {% if block.vahou != None %}
                             <tr>
                                 <td style="padding:3px 8px; text-align:right; font-weight:600;">Rozpočítáno vahou{% if block.pct %} (reálně − podměry){% else %} (dodáno − podměry){% endif %}</td>
-                                <td style="padding:3px 8px; text-align:right; font-weight:600;">{{ block.vahou|floatformat:3 }} kWh</td>
+                                <td style="padding:3px 8px; text-align:right; font-weight:600;">{{ block.vahou|floatformat:3 }} {{ group.unit }}</td>
                             </tr>
                             <tr style="color:#888; font-size:12px;">
                                 <td style="padding:1px 8px 1px 40px; text-align:right;">z toho měřená společná (E_SPOL)</td>
-                                <td style="padding:1px 8px; text-align:right;">{{ block.spolecne|floatformat:3 }} kWh</td>
+                                <td style="padding:1px 8px; text-align:right;">{{ block.spolecne|floatformat:3 }} {{ group.unit }}</td>
                             </tr>
                             {% if block.rezerva != None %}
                                 <tr style="color:#3a3; font-size:12px;">
                                     <td style="padding:1px 8px 8px 40px; text-align:right;">skutečné ztráty v rámci {{ block.pct|floatformat:0 }}% rezervy ✅ (nevyčerpáno)</td>
-                                    <td style="padding:1px 8px 8px; text-align:right;">{{ block.rezerva|floatformat:3 }} kWh</td>
+                                    <td style="padding:1px 8px 8px; text-align:right;">{{ block.rezerva|floatformat:3 }} {{ group.unit }}</td>
                                 </tr>
                             {% elif block.pct %}
                                 <tr style="color:#c33; font-size:12px;">
                                     <td style="padding:1px 8px 8px 40px; text-align:right;">skutečné ztráty NAD {{ block.pct|floatformat:0 }}% rezervu ⚠️</td>
-                                    <td style="padding:1px 8px 8px; text-align:right;">{{ block.skutecne|floatformat:3 }} kWh</td>
+                                    <td style="padding:1px 8px 8px; text-align:right;">{{ block.skutecne|floatformat:3 }} {{ group.unit }}</td>
                                 </tr>
                             {% else %}
                                 <tr style="color:#888; font-size:12px;">
                                     <td style="padding:1px 8px 8px 40px; text-align:right;">z toho neměřené (rozpočítá se vahou)</td>
-                                    <td style="padding:1px 8px 8px; text-align:right;">{{ block.skutecne|floatformat:3 }} kWh</td>
+                                    <td style="padding:1px 8px 8px; text-align:right;">{{ block.skutecne|floatformat:3 }} {{ group.unit }}</td>
                                 </tr>
                             {% endif %}
                         {% else %}
                             <tr style="color:#888; font-size:12px;">
                                 <td style="padding:1px 8px 8px; text-align:right;">z toho měřená společná (E_SPOL)</td>
-                                <td style="padding:1px 8px 8px; text-align:right;">{{ block.spolecne|floatformat:3 }} kWh</td>
+                                <td style="padding:1px 8px 8px; text-align:right;">{{ block.spolecne|floatformat:3 }} {{ group.unit }}</td>
                             </tr>
                         {% endif %}
                     {% endfor %}
@@ -138,13 +138,13 @@
                         {% endfor %}
                         <tr style="border-top:1px solid #666;">
                             <td style="padding:5px 8px; text-align:right; font-weight:600;">Naměřeno (nezařazené)</td>
-                            <td style="padding:5px 8px; text-align:right; font-weight:600;">{{ group.unassigned.namereno|floatformat:3 }} kWh</td>
+                            <td style="padding:5px 8px; text-align:right; font-weight:600;">{{ group.unassigned.namereno|floatformat:3 }} {{ group.unit }}</td>
                         </tr>
                     {% endif %}
 
                     <tr style="border-top:2px solid #666;">
                         <td style="padding:8px; text-align:right; font-weight:700;">Celkem {{ group.label|lower }} — dodáno / naměřeno</td>
-                        <td style="padding:8px; text-align:right; font-weight:700;">{% if group.total_dodano != None %}{{ group.total_dodano|floatformat:3 }}{% else %}—{% endif %} / {{ group.total_namereno|floatformat:3 }} kWh</td>
+                        <td style="padding:8px; text-align:right; font-weight:700;">{% if group.total_dodano != None %}{{ group.total_dodano|floatformat:3 }}{% else %}—{% endif %} / {{ group.total_namereno|floatformat:3 }} {{ group.unit }}</td>
                     </tr>
                 </tbody>
             </table>

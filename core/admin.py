@@ -1614,8 +1614,12 @@ class MeterAdmin(DuplicateModelAdminMixin, ModelAdmin):
                     total_namereno += u_namereno
                     unassigned_block = {"rows": u_rows, "namereno": u_namereno}
 
+                type_unit = {
+                    "electricity": "kWh", "heat": "GJ", "water": "m³", "gas": "m³",
+                }.get(type_code, "")
                 groups.append({
                     "label": type_label,
+                    "unit": type_unit,
                     "supplies": supply_blocks,
                     "unassigned": unassigned_block,
                     "total_dodano": total_dodano,
