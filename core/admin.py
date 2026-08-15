@@ -1617,9 +1617,13 @@ class MeterAdmin(DuplicateModelAdminMixin, ModelAdmin):
                     total_namereno += u_namereno
                     unassigned_block = {"rows": u_rows, "namereno": u_namereno}
 
-                type_unit = {
-                    "electricity": "kWh", "heat": "GJ", "water": "m³", "gas": "m³",
-                }.get(type_code, "")
+                # Jednotka se bere z reálných měřidel dané skupiny (ne napevno) -
+                # respektuje skutečnou jednotku (teplo FM = kWh, jinde třeba GJ).
+                type_unit = next(
+                    (m.unit_of_measure for m in meters
+                     if m.meter_type == type_code and m.unit_of_measure),
+                    {"electricity": "kWh", "heat": "GJ", "water": "m³", "gas": "m³"}.get(type_code, ""),
+                )
                 groups.append({
                     "label": type_label,
                     "unit": type_unit,
