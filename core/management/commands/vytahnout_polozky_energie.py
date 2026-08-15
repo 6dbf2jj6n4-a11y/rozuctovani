@@ -7,6 +7,7 @@ vyúčtováním v naší appce (Vyúčtování → Detail).
 Použití:
   python manage.py vytahnout_polozky_energie 06/2026
   python manage.py vytahnout_polozky_energie 06/2026 --csv vystup.csv
+  python manage.py vytahnout_polozky_energie 06/2026 --xlsx vystup.xlsx
 """
 import csv as csv_module
 
@@ -21,6 +22,7 @@ class Command(BaseCommand):
     def add_arguments(self, parser):
         parser.add_argument("period", type=str, help="MM/YYYY, např. 06/2026")
         parser.add_argument("--csv", type=str, default=None, help="Volitelně uložit i jako CSV soubor")
+        parser.add_argument("--xlsx", type=str, default=None, help="Volitelně uložit i jako XLSX soubor")
 
     def handle(self, *args, **options):
         try:
@@ -68,7 +70,8 @@ class Command(BaseCommand):
                     "nazev_polozky": item.get("nazev") or "",
                     "mnozstvi": item.get("mnozMj"),
                     "cena_mj": item.get("cenaMj"),
-                    "celkem_bez_dph": item.get("sumZklCelkem") if item.get("sumZklCelkem") is not None else item.get("sumCelkem"),
+                    # sumZklCelkem u polozek vzdy chybi - stejny bug jako v porovnat_energie_flexi.py
+                    "celkem_bez_dph": item.get("sumZkl") if item.get("sumZkl") is not None else item.get("sumCelkem"),
                     "celkem_s_dph": item.get("sumCelkem"),
                 })
 
@@ -98,3 +101,34 @@ class Command(BaseCommand):
                 writer.writeheader()
                 writer.writerows(rows)
             self.stdout.write(self.style.SUCCESS(f"Uloženo do {options['csv']}"))
+
+        if options["xlsx"]:
+            import openpyxl
+            from openpyxl.styles import Font
+
+            wb = openpyxl.Workbook()
+            ws = wb.active
+            ws.title = popis[:31]
+
+            headers = ["Klient", "Faktura", "Kód položky", "Název položky", "Množství", "Kč bez DPH", "Kč s DPH"]
+            ws.append(headers)
+            for cell in ws[1]:
+                cell.font = Font(bold=True)
+
+            for r in rows:
+                ws.append([
+                    r["klient"],
+                    r["faktura"],
+                    r["kod_polozky"],
+                    r["nazev_polozky"],
+                    _num(r["mnozstvi"]),
+                    _num(r["celkem_bez_dph"]),
+                    _num(r["celkem_s_dph"]),
+                ])
+
+            widths = [32, 12, 12, 55, 10, 14, 14]
+            for col, width in zip("ABCDEFG", widths):
+                ws.column_dimensions[col].width = width
+
+            wb.save(options["xlsx"])
+            self.stdout.write(self.style.SUCCESS(f"Uloženo do {options['xlsx']}"))

@@ -2657,33 +2657,34 @@ class BillingLineAdmin(DefaultToLatestPeriodMixin, ModelAdmin):
         except ValueError:
             n = 6
 
+        sites = Site.objects.order_by("name")
+        site_id = request.GET.get("site")
+        site = sites.filter(pk=site_id).first() if site_id else None
+
         periods = list(Period.objects.order_by("-year", "-month")[:n])
         periods.reverse()  # chronologicky pro graf
 
         class_labels = dict(ServicePoolItem.InvoiceClass.choices)
-        class_order = [code for code, _ in ServicePoolItem.InvoiceClass.choices]
-        # Pevne poradi barevnych slotu (nikdy necyklovat) - viz dataviz
-        # skill references/palette.md, kategoriala paleta sloty 1-5.
+        # Najemne se do grafu nekresli - neuctuje se jako spolecny Naklad
+        # (CostEntry), ale per Karta, takze by byla cara vzdy na nule.
+        class_order = [c for c, _ in ServicePoolItem.InvoiceClass.choices if c != "rent"]
         class_colors = {
-            "rent": "#2a78d6",
             "electricity": "#eb6834",
             "water": "#1baf7a",
             "heat": "#eda100",
             "other": "#e87ba4",
+            "rent": "#2a78d6",
         }
 
-        # get_naklad_by_class dela jen par dotazu CELKEM (bez ohledu na
-        # pocet obdobi) - puvodne se tu volala get_item_summary_rows
-        # jednou na kazde obdobi, coz pri 6 obdobich dohromady snadno
-        # prekrocilo gunicorn WORKER TIMEOUT (30s), viz konverzace
-        # s Danielem.
-        naklad_by_period = get_naklad_by_class(periods)
+        # get_naklad_by_class dela jen par dotazu CELKEM (bez ohledu na pocet
+        # obdobi) - viz jeji docstring (drive spadlo na WORKER TIMEOUT).
+        naklad_by_period = get_naklad_by_class(periods, site=site)
         raw_totals = [(period, naklad_by_period[period.id]) for period in periods]
 
         max_value = Decimal("0")
         for _, totals in raw_totals:
-            period_max = max(totals.values()) if totals else Decimal("0")
-            max_value = max(max_value, period_max)
+            for code in class_order:
+                max_value = max(max_value, totals.get(code, Decimal("0")))
 
         def _nice_ceiling(value):
             """Zaokrouhli nahoru na "hezke" cislo (1/2/5 x 10^n) pro osu Y."""
@@ -2697,16 +2698,15 @@ class BillingLineAdmin(DefaultToLatestPeriodMixin, ModelAdmin):
 
         y_max = _nice_ceiling(max_value)
 
-        # --- SVG geometrie (vse v px, pocitano tady, sablona uz jen kresli) ---
+        # --- SVG geometrie spojnicoveho grafu (vse v px, pocitano tady) ---
         plot_h = 240
-        bar_w = 14
-        bar_gap = 2
-        cluster_gap = 22
-        left_margin = 64
-        top_margin = 30
+        left_margin = 72
+        top_margin = 20
         bottom_margin = 34
-        cluster_w = len(class_order) * bar_w + (len(class_order) - 1) * bar_gap
-        chart_w = left_margin + len(periods) * (cluster_w + cluster_gap) + cluster_gap
+        right_margin = 16
+        col_w = 90
+        plot_w = max(col_w * max(len(periods) - 1, 1), col_w)
+        chart_w = left_margin + plot_w + right_margin
         chart_h = top_margin + plot_h + bottom_margin
         baseline_y = top_margin + plot_h
 
@@ -2714,6 +2714,11 @@ class BillingLineAdmin(DefaultToLatestPeriodMixin, ModelAdmin):
             if y_max == 0:
                 return baseline_y
             return float(baseline_y - (value / y_max) * plot_h)
+
+        def _x(i):
+            if len(periods) <= 1:
+                return left_margin + plot_w / 2
+            return left_margin + (plot_w * i / (len(periods) - 1))
 
         gridlines = []
         for i in range(5):
@@ -2727,35 +2732,23 @@ class BillingLineAdmin(DefaultToLatestPeriodMixin, ModelAdmin):
                 "label": f"{value:,.0f}".replace(",", " "),
             })
 
-        clusters = []
-        x = left_margin + cluster_gap
-        for period, totals in raw_totals:
-            bars = []
-            bx = x
-            total = Decimal("0")
-            for code in class_order:
-                value = totals[code]
-                total += value
-                bar_top = _y(value)
-                bars.append({
-                    "x": bx,
-                    "y": bar_top,
-                    "w": bar_w,
-                    "h": max(baseline_y - bar_top, 0),
-                    "color": class_colors[code],
-                    "label": class_labels[code],
-                    "value": value,
-                })
-                bx += bar_w + bar_gap
-            clusters.append({
-                "period": period,
-                "bars": bars,
-                "label_x": x + cluster_w / 2,
-                "total": total,
-                "total_label_y": top_margin - 6,
-                "period_label_y": baseline_y + 18,
-            })
-            x += cluster_w + cluster_gap
+        series = []
+        for code in class_order:
+            dots = []
+            for i, (period, totals) in enumerate(raw_totals):
+                value = totals.get(code, Decimal("0"))
+                dots.append({"cx": _x(i), "cy": _y(value), "value": value, "label": class_labels[code]})
+            points = " ".join(f"{d['cx']:.1f},{d['cy']:.1f}" for d in dots)
+            series.append({"label": class_labels[code], "color": class_colors[code], "points": points, "dots": dots})
+
+        period_labels = [
+            {"x": _x(i), "label": str(period)} for i, (period, _) in enumerate(raw_totals)
+        ]
+        table_rows = [
+            {"period": str(period), "values": [totals.get(code, Decimal("0")) for code in class_order]}
+            for period, totals in raw_totals
+        ]
+        has_data = any(any(t.get(c, 0) for c in class_order) for _, t in raw_totals)
 
         context = {
             **self.admin_site.each_context(request),
@@ -2764,13 +2757,18 @@ class BillingLineAdmin(DefaultToLatestPeriodMixin, ModelAdmin):
                 {"code": code, "label": class_labels[code], "color": class_colors[code]}
                 for code in class_order
             ],
-            "clusters": clusters,
+            "series": series,
+            "period_labels": period_labels,
+            "table_rows": table_rows,
             "gridlines": gridlines,
             "chart_w": chart_w,
             "chart_h": chart_h,
             "baseline_y": baseline_y,
             "left_margin": left_margin,
             "n": n,
+            "sites": sites,
+            "selected_site": site,
+            "has_data": has_data,
             "opts": self.model._meta,
         }
         return render(request, "admin/core/billingline/report_grafy_trid.html", context)

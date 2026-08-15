@@ -16,39 +16,36 @@
         @media (prefers-color-scheme: dark) {
             :root:where(:not([data-theme="light"])) .viz-root {
                 color-scheme: dark;
-                --surface-1: #1a1a19;
-                --text-primary: #ffffff;
-                --text-secondary: #c3c2b7;
-                --text-muted: #898781;
-                --gridline: #2c2c2a;
-                --baseline: #383835;
+                --surface-1: #1a1a19; --text-primary: #ffffff; --text-secondary: #c3c2b7;
+                --text-muted: #898781; --gridline: #2c2c2a; --baseline: #383835;
             }
         }
         :root[data-theme="dark"] .viz-root {
             color-scheme: dark;
-            --surface-1: #1a1a19;
-            --text-primary: #ffffff;
-            --text-secondary: #c3c2b7;
-            --text-muted: #898781;
-            --gridline: #2c2c2a;
-            --baseline: #383835;
+            --surface-1: #1a1a19; --text-primary: #ffffff; --text-secondary: #c3c2b7;
+            --text-muted: #898781; --gridline: #2c2c2a; --baseline: #383835;
         }
         .viz-legend { display:flex; gap:16px; margin-bottom:14px; font-size:12px; color:var(--text-secondary); flex-wrap:wrap; }
         .viz-legend-item { display:flex; align-items:center; gap:6px; }
-        .viz-swatch { width:10px; height:10px; border-radius:2px; display:inline-block; }
-        .viz-bar { transition: opacity 0.1s; }
-        .viz-bar:hover { opacity: 0.8; }
-        .viz-total-label { font-size:11px; fill: var(--text-secondary); text-anchor: middle; }
-        .viz-period-label { font-size:11px; fill: var(--text-muted); text-anchor: middle; }
+        .viz-swatch { width:14px; height:3px; border-radius:2px; display:inline-block; }
         .viz-axis-label { font-size:10px; fill: var(--text-muted); text-anchor: end; }
+        .viz-period-label { font-size:11px; fill: var(--text-muted); text-anchor: middle; }
     </style>
 
     <p style="color:var(--text-secondary); font-size:13px;">
-        Vývoj Nákladu (Kč) podle Třídy za posledních {{ n }} období. Interní přehled. Přesná čísla
-        jsou v tabulce pod grafem.
+        Vývoj Nákladu (Kč) podle Třídy za posledních {{ n }} období. Nájemné se nekreslí (účtuje se per karta, ne jako společný náklad). Přesná čísla jsou v tabulce pod grafem.
     </p>
 
     <form method="get" style="display:flex; gap:16px; align-items:flex-end; margin-bottom:20px; flex-wrap:wrap;">
+        <div>
+            <label for="id_site" style="display:block; font-weight:600; margin-bottom:6px;">Areál</label>
+            <select name="site" id="id_site" onchange="this.form.submit()" style="padding:8px; min-width:180px;">
+                <option value="">-- všechny areály --</option>
+                {% for s in sites %}
+                    <option value="{{ s.pk }}" {% if selected_site and s.pk == selected_site.pk %}selected{% endif %}>{{ s.name }}</option>
+                {% endfor %}
+            </select>
+        </div>
         <div>
             <label for="id_n" style="display:block; font-weight:600; margin-bottom:6px;">Počet období</label>
             <select name="n" id="id_n" onchange="this.form.submit()" style="padding:8px; min-width:120px;">
@@ -60,36 +57,33 @@
         </div>
     </form>
 
-    {% if not clusters %}
-        <p>Žádná Období nenalezena.</p>
+    {% if not has_data %}
+        <p>Za vybrané období/areál nejsou žádné náklady.</p>
     {% else %}
         <div class="viz-legend">
             {% for cls in class_choices %}
-                <span class="viz-legend-item">
-                    <span class="viz-swatch" style="background:{{ cls.color }};"></span>
-                    {{ cls.label }}
-                </span>
+                <span class="viz-legend-item"><span class="viz-swatch" style="background:{{ cls.color }};"></span> {{ cls.label }}</span>
             {% endfor %}
         </div>
 
         <div style="overflow-x:auto; background:var(--surface-1); border-radius:8px; padding:8px;">
         {% localize off %}
-        <svg width="{{ chart_w }}" height="{{ chart_h }}" viewBox="0 0 {{ chart_w }} {{ chart_h }}" role="img" aria-label="Graf nákladů podle tříd">
+        <svg width="{{ chart_w }}" height="{{ chart_h }}" viewBox="0 0 {{ chart_w }} {{ chart_h }}" role="img" aria-label="Spojnicový graf nákladů podle tříd">
             {% for g in gridlines %}
                 <line x1="{{ left_margin }}" y1="{{ g.y }}" x2="{{ chart_w }}" y2="{{ g.y }}" stroke="var(--gridline)" stroke-width="1" />
                 <text class="viz-axis-label" x="{{ g.label_x }}" y="{{ g.label_y }}">{{ g.label }}</text>
             {% endfor %}
             <line x1="{{ left_margin }}" y1="{{ baseline_y }}" x2="{{ chart_w }}" y2="{{ baseline_y }}" stroke="var(--baseline)" stroke-width="1" />
 
-            {% for cluster in clusters %}
-                {% for bar in cluster.bars %}
-                    <rect class="viz-bar" x="{{ bar.x }}" y="{{ bar.y }}" width="{{ bar.w }}" height="{{ bar.h }}"
-                          rx="3" fill="{{ bar.color }}">
-                        <title>{{ bar.label }}: {{ bar.value|floatformat:0 }} Kč</title>
-                    </rect>
+            {% for s in series %}
+                <polyline fill="none" stroke="{{ s.color }}" stroke-width="2" stroke-linejoin="round" points="{{ s.points }}" />
+                {% for d in s.dots %}
+                    <circle cx="{{ d.cx }}" cy="{{ d.cy }}" r="3" fill="{{ s.color }}"><title>{{ d.label }}: {{ d.value|floatformat:0 }} Kč</title></circle>
                 {% endfor %}
-                <text class="viz-total-label" x="{{ cluster.label_x }}" y="{{ cluster.total_label_y }}">{{ cluster.total|floatformat:0 }}</text>
-                <text class="viz-period-label" x="{{ cluster.label_x }}" y="{{ cluster.period_label_y }}">{{ cluster.period }}</text>
+            {% endfor %}
+
+            {% for p in period_labels %}
+                <text class="viz-period-label" x="{{ p.x }}" y="{{ baseline_y }}" dy="18">{{ p.label }}</text>
             {% endfor %}
         </svg>
         {% endlocalize %}
@@ -106,11 +100,11 @@
                 </tr>
             </thead>
             <tbody>
-                {% for cluster in clusters %}
+                {% for row in table_rows %}
                     <tr style="border-bottom:1px solid #333;">
-                        <td style="padding:6px 8px;">{{ cluster.period }}</td>
-                        {% for bar in cluster.bars %}
-                            <td style="padding:6px 8px; text-align:right;">{{ bar.value|floatformat:0 }} Kč</td>
+                        <td style="padding:6px 8px;">{{ row.period }}</td>
+                        {% for v in row.values %}
+                            <td style="padding:6px 8px; text-align:right;">{{ v|floatformat:0 }} Kč</td>
                         {% endfor %}
                     </tr>
                 {% endfor %}
