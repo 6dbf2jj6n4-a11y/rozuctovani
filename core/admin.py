@@ -278,24 +278,32 @@ class AllocationKeyElectricityInline(AllocationKeyInlineBase):
     invoice_class = "electricity"
     verbose_name = "Klíč – Elektřina"
     verbose_name_plural = "Elektřina"
+    # Barevne pozadi sekce podle tridy (primo pres Django/Unfold
+    # "classes" na inline - zadne vlastni CSS, jen Unfoldovy Tailwind
+    # tridy) - vizualni orientace v Karte klienta, viz konverzace
+    # s Danielem.
+    classes = ("bg-yellow-50", "dark:bg-yellow-500/10")
 
 
 class AllocationKeyWaterInline(AllocationKeyInlineBase):
     invoice_class = "water"
     verbose_name = "Klíč – Voda"
     verbose_name_plural = "Voda"
+    classes = ("bg-blue-50", "dark:bg-blue-500/10")
 
 
 class AllocationKeyHeatInline(AllocationKeyInlineBase):
     invoice_class = "heat"
     verbose_name = "Klíč – Teplo"
     verbose_name_plural = "Teplo"
+    classes = ("bg-red-50", "dark:bg-red-500/10")
 
 
 class AllocationKeyOtherInline(AllocationKeyInlineBase):
     invoice_class = "other"
     verbose_name = "Klíč – Ostatní"
     verbose_name_plural = "Ostatní"
+    classes = ("bg-base-100", "dark:bg-base-800")
 
 
 class CardUnitInline(TabularInline):
