@@ -1005,6 +1005,26 @@ class PriceList(models.Model):
     def __str__(self):
         return f"{self.service_item} – {self.period}: {self.price_per_unit} Kč/j"
 
+    _tracked_fields = ("period_id", "price_per_unit", "note")
+
+    def clean(self):
+        if self.period_id and self.period.status == Period.Status.CLOSED and self._price_data_changed():
+            raise ValidationError("Období je uzavřené, ceník nejde přidat ani upravit.")
+
+    def _price_data_changed(self):
+        """Viz CostEntry._cost_data_changed - povoli ulozit nezmeneny radek
+        v uzavrenem obdobi, jen skutecnou zmenu zablokuje."""
+        if not self.pk:
+            return True
+        original = PriceList.objects.filter(pk=self.pk).values(*self._tracked_fields).first()
+        if original is None:
+            return True
+        return any(original[field] != getattr(self, field) for field in self._tracked_fields)
+
+    def save(self, *args, **kwargs):
+        self.clean()
+        super().save(*args, **kwargs)
+
     @classmethod
     def get_price_for_period(cls, service_item, period, price_cache=None):
         """
