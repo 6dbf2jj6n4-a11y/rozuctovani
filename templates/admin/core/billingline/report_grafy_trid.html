@@ -1,4 +1,5 @@
 {% extends "admin/base_site.html" %}
+{% load l10n %}
 
 {% block content %}
 <div class="viz-root">
@@ -72,6 +73,7 @@
         </div>
 
         <div style="overflow-x:auto; background:var(--surface-1); border-radius:8px; padding:8px;">
+        {% localize off %}
         <svg width="{{ chart_w }}" height="{{ chart_h }}" viewBox="0 0 {{ chart_w }} {{ chart_h }}" role="img" aria-label="Graf nákladů podle tříd">
             {% for g in gridlines %}
                 <line x1="{{ left_margin }}" y1="{{ g.y }}" x2="{{ chart_w }}" y2="{{ g.y }}" stroke="var(--gridline)" stroke-width="1" />
@@ -90,6 +92,7 @@
                 <text class="viz-period-label" x="{{ cluster.label_x }}" y="{{ cluster.period_label_y }}">{{ cluster.period }}</text>
             {% endfor %}
         </svg>
+        {% endlocalize %}
         </div>
 
         <div style="overflow-x:auto; margin-top:24px;">

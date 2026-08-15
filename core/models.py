@@ -829,8 +829,8 @@ class ServicePoolItem(models.Model):
     )
 
     class Meta:
-        verbose_name = "Položka zásobníku"
-        verbose_name_plural = "Zásobník"
+        verbose_name = "Položka zásobníku služeb"
+        verbose_name_plural = "Zásobník služeb"
         ordering = ["site", "invoice_class", "name"]
 
     def __str__(self):
