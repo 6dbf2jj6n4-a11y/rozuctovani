@@ -644,7 +644,15 @@ def calculate_period(period, site=None):
                     k for k in valid_keys if k.allocation_type not in ABSOLUTE_AMOUNT_TYPES
                 ]
                 shares = _weighted_shares(weight_keys, period)
-                if not shares and remaining_cost != 0:
+                # Hlásit "nerozpočítaná zbylá částka" jen když položku fakticky
+                # NIKDO neplatí - tj. nejsou ani vážené/měřené podíly, ani žádné
+                # pevné částky. U položek účtovaných čistě pevnou cenou (napr.
+                # srážkové vody: plocha × cena, deduct=False) zbývá zaznamenaný
+                # náklad "nerozpočítaný" schválně (rozdíl nese pronajímatel),
+                # klienti platí své pevné částky - to není chyba. Naopak položka
+                # bez jakýchkoli klíčů (napr. nově přidaný servis výtahů) hlásí
+                # dál. Viz konverzace s Danielem.
+                if not shares and remaining_cost != 0 and not fixed_amounts:
                     warnings.append(f"{service_item} / {period}: žádné klíče pro rozpočítání zbylé částky.")
 
             # Prumerna cena za jednotku namerene spotreby (celkovy naklad polozky /
