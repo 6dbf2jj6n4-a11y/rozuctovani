@@ -1075,6 +1075,8 @@ class CostEntry(models.Model):
             return f"{self.service_item} – {self.period}: {self.amount_units} j"
         return f"{self.service_item} – {self.period}: {self.amount_czk} Kč"
 
+    _tracked_fields = ("period_id", "amount_units", "amount_czk", "note")
+
     def clean(self):
         """0 v amount_units/amount_czk NENÍ totéž co prázdné pole -
         get_amount_czk() bere `is not None`, takže amount_czk=0 by se
@@ -1082,6 +1084,8 @@ class CostEntry(models.Model):
         se vůbec nepoužilo - položka by se klientům potichu vyúčtovala
         na 0 Kč. Kdo nemá pro tenhle záznam částku/množství, ať pole
         nechá prázdné, ne 0 (viz konverzace s Danielem)."""
+        if self.period_id and self.period.status == Period.Status.CLOSED and self._cost_data_changed():
+            raise ValidationError("Období je uzavřené, náklad nejde přidat ani upravit.")
         if self.amount_units == 0:
             raise ValidationError({
                 "amount_units": (
@@ -1098,12 +1102,26 @@ class CostEntry(models.Model):
                 )
             })
 
+    def _cost_data_changed(self):
+        """True pro novy naklad nebo pokud se u existujiciho zmenil nektery
+        ze sledovanych udaju (obdobi/mnozstvi/castka/poznamka). Diky tomu
+        jde v uzavrenem obdobi ulozit nezmeneny zaznam (napr. hromadny save
+        v adminu), jen skutecna zmena se zablokuje - stejny princip jako
+        MeterReading._reading_data_changed."""
+        if not self.pk:
+            return True
+        original = CostEntry.objects.filter(pk=self.pk).values(*self._tracked_fields).first()
+        if original is None:
+            return True
+        return any(original[field] != getattr(self, field) for field in self._tracked_fields)
+
     def save(self, *args, **kwargs):
         """Jakmile se doplni amount_units nebo amount_czk, sama zmizi
         znacka NOTE_K_DOPLNENI (viz core/admin.py
         PeriodAdmin.vygenerovat_chybejici_naklady) - jinak by v Poznamce
         zustavala navzdy, i kdyz uz zaznam neni "k doplneni", a matla by
         pozdejsi hledani/filtr Stav=Nevyplneno."""
+        self.clean()
         if self.note == self.NOTE_K_DOPLNENI and (self.amount_units is not None or self.amount_czk is not None):
             self.note = ""
         super().save(*args, **kwargs)
