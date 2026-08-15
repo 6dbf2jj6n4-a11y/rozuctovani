@@ -34,7 +34,7 @@ class _PeriodDefaultMarkerFilter(admin.SimpleListFilter):
     "admin/invalid_setup.html" ("Potíže s nainstalovanou databází...") -
     vypada to jako problem s DB, ale je to jen tohle. lookups() vraci
     prazdny seznam, takze has_output() je False a filtr se v bocnim
-    panelu vubec nezobrazi. Viz DefaultToLatestPeriodMixin."""
+    panelu vubec nezobrazi. Viz DefaultToCurrentPeriodMixin."""
     title = "výchozí období"
     parameter_name = "_pd"
 
@@ -45,12 +45,13 @@ class _PeriodDefaultMarkerFilter(admin.SimpleListFilter):
         return queryset
 
 
-class DefaultToLatestPeriodMixin:
+class DefaultToCurrentPeriodMixin:
     """Pri prvnim otevreni seznamu (bez explicitne zvoleneho Obdobi)
-    presmeruje na filtr podle nejnovejsiho Obdobi (Period.Meta.ordering =
-    ["-year", "-month"]) - stejna konvence uz existuje na custom admin
-    views core_billingline_detail_client/core_billingline_detail (viz
-    Period.objects.first() tam). Marker '_pd' v querystringu odlisi
+    presmeruje na filtr podle AKTUALNIHO Obdobi (Period.current(), tj.
+    dnesni kalendarni mesic) - stejna konvence plati na vsech custom
+    admin sestavach s vyberem Obdobi. Drive se bralo nejnovejsi obdobi
+    v DB, jenze od tlacitka "Generovat pro cely rok" jsou zalozene i
+    budouci mesice. Marker '_pd' v querystringu odlisi
     "cerstve otevreni" od situace, kdy uzivatel filtr na Obdobi vedome
     zrusil (klikl na 'Vše' u filtru) - jinak by ho to porad vracelo zpet
     na nejnovejsi obdobi a nedalo by se videt vic obdobi najednou.
@@ -62,7 +63,7 @@ class DefaultToLatestPeriodMixin:
 
     def changelist_view(self, request, extra_context=None):
         if self.default_period_filter_param not in request.GET and "_pd" not in request.GET:
-            latest = Period.objects.first()
+            latest = Period.current()
             if latest is not None:
                 from django.shortcuts import redirect
 
@@ -1382,7 +1383,7 @@ class MeterAdmin(DuplicateModelAdminMixin, ModelAdmin):
         site_id = request.GET.get("site")
 
         periods = Period.objects.all()
-        period = periods.filter(pk=period_id).first() if period_id else periods.first()
+        period = periods.filter(pk=period_id).first() if period_id else Period.current()
 
         sites = Site.objects.order_by("name")
         site = sites.filter(pk=site_id).first() if site_id else None
@@ -2290,7 +2291,7 @@ class SupplyPointAdmin(ModelAdmin):
 
 
 @admin.register(MeterReading)
-class MeterReadingAdmin(DefaultToLatestPeriodMixin, ModelAdmin):
+class MeterReadingAdmin(DefaultToCurrentPeriodMixin, ModelAdmin):
     list_display = ("meter", "period", "reading_date", "value", "reset_from_value")
     list_select_related = ("meter", "period")
     list_filter = ("meter__site", "meter__meter_type", "period", _PeriodDefaultMarkerFilter)
@@ -2489,7 +2490,7 @@ class AllocationKeyAdmin(ModelAdmin):
 
 
 @admin.register(PriceList)
-class PriceListAdmin(DefaultToLatestPeriodMixin, ModelAdmin):
+class PriceListAdmin(DefaultToCurrentPeriodMixin, ModelAdmin):
     list_display = ("service_item", "period", "price_per_unit_display", "note")
     list_select_related = ("service_item", "service_item__site", "period")
     list_filter = ("period", "service_item__site", _PeriodDefaultMarkerFilter)
@@ -2523,7 +2524,7 @@ class CostEntryVyplnenoFilter(admin.SimpleListFilter):
 
 
 @admin.register(CostEntry)
-class CostEntryAdmin(DefaultToLatestPeriodMixin, ModelAdmin):
+class CostEntryAdmin(DefaultToCurrentPeriodMixin, ModelAdmin):
     """list_editable u amount_units/amount_czk - primo v seznamu (po
     filtru na Obdobi) jde zadat cisla u vice polozek najednou a ulozit
     jednim tlacitkem, misto otevirani kazdeho zaznamu zvlast. Kvuli tomu
@@ -2661,7 +2662,7 @@ class CostEntryAdmin(DefaultToLatestPeriodMixin, ModelAdmin):
 
 
 @admin.register(BillingLine)
-class BillingLineAdmin(DefaultToLatestPeriodMixin, ModelAdmin):
+class BillingLineAdmin(DefaultToCurrentPeriodMixin, ModelAdmin):
     list_display = ("client_card_display", "service_item", "period", "amount_display", "share_display")
     list_select_related = ("client_card", "client_card__client", "service_item", "service_item__site", "period")
     list_filter = ("period", _PeriodDefaultMarkerFilter)
@@ -2934,7 +2935,7 @@ class BillingLineAdmin(DefaultToLatestPeriodMixin, ModelAdmin):
         period_id = request.GET.get("period")
 
         periods = Period.objects.all()
-        period = periods.filter(pk=period_id).first() if period_id else periods.first()
+        period = periods.filter(pk=period_id).first() if period_id else Period.current()
 
         items = ServicePoolItem.objects.select_related("site").order_by("site__name", "invoice_class", "name")
         item = items.filter(pk=item_id).first() if item_id else None
@@ -3014,7 +3015,7 @@ class BillingLineAdmin(DefaultToLatestPeriodMixin, ModelAdmin):
         periods = Period.objects.all()
         period = periods.filter(pk=period_id).first() if period_id else None
         if period is None:
-            period = periods.first()
+            period = Period.current()
 
         sites = Site.objects.order_by("name")
 
@@ -3076,7 +3077,7 @@ class BillingLineAdmin(DefaultToLatestPeriodMixin, ModelAdmin):
 
         client = get_object_or_404(Client, pk=client_id)
         period_id = request.GET.get("period")
-        period = Period.objects.filter(pk=period_id).first() if period_id else Period.objects.first()
+        period = Period.objects.filter(pk=period_id).first() if period_id else Period.current()
 
         groups = []
         warnings = []
@@ -3124,7 +3125,7 @@ class BillingLineAdmin(DefaultToLatestPeriodMixin, ModelAdmin):
         periods = Period.objects.all()
         period = periods.filter(pk=period_id).first() if period_id else None
         if period is None:
-            period = periods.first()
+            period = Period.current()
 
         sites = Site.objects.order_by("name")
 

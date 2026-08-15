@@ -35,7 +35,11 @@ def readings_entry(request):
     period_id = request.GET.get("period")
     period = Period.objects.filter(pk=period_id).first() if period_id else None
     if period is None:
-        period = Period.objects.filter(status=Period.Status.OPEN).first() or Period.objects.first()
+        # Aktualni mesic (Period.current) ma prednost pred "nejnovejsi
+        # otevrene" - od tlacitka "Generovat pro cely rok" jsou v DB i
+        # budouci obdobi, ktera jsou taky otevrena, takze zadavani odectu
+        # najizdelo napr. na prosinec. Viz konverzace s Danielem 2026-08-15.
+        period = Period.current() or Period.objects.filter(status=Period.Status.OPEN).first()
 
     meters_data = []
     if site and period:

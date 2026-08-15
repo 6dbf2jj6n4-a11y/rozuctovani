@@ -417,6 +417,33 @@ class Period(models.Model):
             prev_year, prev_month = self.year, self.month - 1
         return Period.objects.filter(year=prev_year, month=prev_month).first()
 
+    @classmethod
+    def current(cls):
+        """Období, které se má v sestavách předvyplnit - to odpovídající
+        dnešnímu kalendářnímu měsíci.
+
+        Dřív se všude používalo `Period.objects.first()` (= nejnovější
+        podle Meta.ordering). Jenže od zavedení tlačítka "Generovat pro
+        celý rok" jsou v DB založené i budoucí měsíce, takže sestavy
+        najížděly třeba na prosinec místo aktuálního srpna - viz
+        konverzace s Danielem 2026-08-15.
+
+        Když období pro dnešní měsíc ještě neexistuje, vezme se nejnovější
+        už začaté (ne budoucí); a kdyby v DB byla jen budoucí období, tak
+        prostě nejbližší z nich. Vrací None jen když není žádné období.
+        """
+        today = date.today()
+        exact = cls.objects.filter(year=today.year, month=today.month).first()
+        if exact is not None:
+            return exact
+        started = cls.objects.filter(
+            models.Q(year__lt=today.year)
+            | models.Q(year=today.year, month__lt=today.month)
+        ).first()
+        if started is not None:
+            return started
+        return cls.objects.order_by("year", "month").first()
+
 
 class InflationRate(models.Model):
     """Mira inflace pro dany rok - pouziva se pri hromadnem generovani
