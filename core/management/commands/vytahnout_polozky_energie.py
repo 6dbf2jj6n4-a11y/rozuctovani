@@ -108,7 +108,7 @@ class Command(BaseCommand):
 
             wb = openpyxl.Workbook()
             ws = wb.active
-            ws.title = popis[:31]
+            ws.title = popis.replace("/", "-")[:31]
 
             headers = ["Klient", "Faktura", "Kód položky", "Název položky", "Množství", "Kč bez DPH", "Kč s DPH"]
             ws.append(headers)
