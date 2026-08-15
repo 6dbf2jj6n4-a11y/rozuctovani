@@ -920,6 +920,11 @@ class ClientCardActiveFilter(admin.SimpleListFilter):
 
 @admin.register(ClientCard)
 class ClientCardAdmin(ModelAdmin):
+    # Unfoldova funkce warn_unsaved_form (zaplá globálně na ModelAdmin) rozbíjí
+    # na této stránce tlačítko "Přidat další" u inline klíčů - tady ji proto
+    # vypínáme, aby šly klíče přidávat. Varování o neuložených změnách tak na
+    # Kartě klienta není, jinde v adminu zůstává. Viz konverzace s Danielem.
+    warn_unsaved_form = False
     list_display = ("client", "description", "valid_from", "valid_to", "is_active")
     list_select_related = ("client",)
     list_filter = (ClientCardClientActiveFilter, ClientCardActiveFilter)
