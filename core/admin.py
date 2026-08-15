@@ -2331,6 +2331,27 @@ class AllocationKeyAdmin(ModelAdmin):
     list_filter = ("allocation_type", "deduct_from_pool", "is_billed")
     search_fields = ("meter__code", "meter__name", "client_card__client__name", "service_item__name")
     autocomplete_fields = ("client_card", "service_item", "meter", "unit")
+    actions = ["deduct_from_pool_on", "deduct_from_pool_off"]
+
+    @admin.action(description="Zapnout 'Odečíst z celkového nákladu'")
+    def deduct_from_pool_on(self, request, queryset):
+        n = queryset.update(deduct_from_pool=True)
+        self.message_user(
+            request,
+            f"Zapnuto 'Odečíst z celkového nákladu' u {n} klíčů "
+            f"(uplatní se jen u typů Pevná částka / Dle výměry).",
+            messages.SUCCESS,
+        )
+
+    @admin.action(description="Vypnout 'Odečíst z celkového nákladu' (paušál se neodečte)")
+    def deduct_from_pool_off(self, request, queryset):
+        n = queryset.update(deduct_from_pool=False)
+        self.message_user(
+            request,
+            f"Vypnuto u {n} klíčů - paušál se pak NEodečte od nákladu a "
+            f"celý náklad se rozpočítá ostatním kartám.",
+            messages.WARNING,
+        )
 
     @admin.display(description="Karta klienta", ordering="client_card")
     def client_card_display(self, obj):
