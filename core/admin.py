@@ -1769,6 +1769,14 @@ class PeriodAdmin(ModelAdmin):
         "spocitat_rozuctovani", "zkontrolovat_co_zadat", "vygenerovat_chybejici_naklady",
         "uzavrit_obdobi", "znovu_otevrit_obdobi",
     ]
+    # Tlacitko "Generovat pro celý rok" nad tabulkou - puvodne zkoušeno
+    # pres object-tools-items blok jako u change_form, ale na
+    # zmenovnem seznamu je "object-tools" soucast globalni horni
+    # listy (nav-global-side), ne radku nad tabulkou - rozbilo to
+    # layout (viz konverzace s Danielem). list_before_template je
+    # bezpecny Unfold hook primo nad tabulkou (stejny princip jako
+    # list_after_template u grafu inflace).
+    list_before_template = "admin/core/period/generovat_rok_button.html"
 
     def get_changeform_initial_data(self, request):
         # Pri pridavani noveho Obdobi predvyplnit rok aktualnim rokem
