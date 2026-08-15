@@ -1,7 +1,7 @@
 from decimal import Decimal
 
 from django.contrib import admin, messages
-from django.db.models import DecimalField, Q
+from django.db.models import Q
 from django.contrib.auth.models import Group
 
 admin.site.unregister(Group)
@@ -245,25 +245,12 @@ class UnitAdmin(DuplicateModelAdminMixin, ModelAdmin):
         return custom + urls
 
 
-class _TrimmedNumberInput(forms.NumberInput):
-    """NumberInput bez zbytečných koncových nul (550.0000 -> 550, 24.50 -> 24.5).
-    Hodnota u type=number je vždy s tečkou, takže ořez funguje nezávisle na
-    locale. Viz konverzace s Danielem - pole Hodnota/Cena v inline klíčů."""
-
-    def format_value(self, value):
-        value = super().format_value(value)
-        if value and "." in value:
-            value = value.rstrip("0").rstrip(".")
-        return value
-
-
 class AllocationKeyInlineBase(TabularInline):
     model = AllocationKey
     extra = 0
     collapsible = True
     fields = ("service_item", "allocation_type", "value", "unit_price", "meter", "unit", "deduct_from_pool", "is_billed")
     autocomplete_fields = ("service_item", "meter", "unit")
-    formfield_overrides = {DecimalField: {"widget": _TrimmedNumberInput}}
 
     class Media:
         css = {"all": ("core/css/select_width_fix.css",)}
