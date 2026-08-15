@@ -1242,7 +1242,7 @@ class MeterAdmin(DuplicateModelAdminMixin, ModelAdmin):
         (None, {
             "fields": (
                 ("site", "code", "name"),
-                ("meter_type", "unit_of_measure", "serial_number"),
+                ("meter_type", "unit_of_measure", "coefficient", "serial_number"),
                 "display_order",
             )
         }),

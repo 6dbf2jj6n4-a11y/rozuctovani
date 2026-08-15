@@ -459,6 +459,15 @@ class Meter(models.Model):
     name = models.CharField("Název / označení", max_length=200)
     meter_type = models.CharField("Typ", max_length=20, choices=MeterType.choices)
     unit_of_measure = models.CharField("Měrná jednotka", max_length=20, default="kWh")
+    coefficient = models.DecimalField(
+        "Koeficient (odečet × koef. = spotřeba)", max_digits=12, decimal_places=6, default=Decimal("1"),
+        help_text=(
+            "Násobitel odečtu pro převod na měrnou jednotku měřidla. Např. teplo "
+            "měřené v kWh, ale vykazované v GJ: koeficient = 0,0036 "
+            "(1 GJ = 277,778 kWh). Výchozí 1 = beze změny. Poměry mezi kartami "
+            "(a tím rozúčtované Kč) se nemění, mění se jen jednotky/čísla."
+        ),
+    )
     reading_mode = models.CharField(
         "Způsob zadávání odečtů", max_length=20, choices=ReadingMode.choices, default=ReadingMode.STATE,
         help_text=(
@@ -519,10 +528,24 @@ class Meter(models.Model):
         DB dotazu (aktualni + predchozi obdobi) na KAZDE meridlo se
         pouzije uz nacteny objekt z pameti. Bez cache (vychozi, vsechny
         ostatni volajici - admin, reporty, diagnosticke prikazy) se
-        chova uplne stejne jako drive."""
+        chova uplne stejne jako drive.
+
+        Vysledek REALNEHO meridla se nasobi polem `coefficient` (prevod
+        odectu na merenou jednotku, napr. teplo kWh -> GJ koeficient 0,0036).
+        U virtualniho meridla se koeficient neuplatnuje - jeho slozky uz
+        maji svuj koeficient zapocitany. Pomery mezi meridly se koeficientem
+        (stejnym pro celou tridu) nemeni, takze rozuctovane Kc zustavaji."""
         if self.is_virtual:
             return self._formula_consumption_for(period, readings_cache=readings_cache)
+        raw = self._raw_meter_consumption(period, readings_cache=readings_cache)
+        if raw is None:
+            return None
+        return raw * (self.coefficient if self.coefficient is not None else Decimal("1"))
 
+    def _raw_meter_consumption(self, period, readings_cache=None):
+        """Surova spotreba realneho meridla z odectu, JESTE bez koeficientu -
+        bud primo zadana Spotreba (reading_mode CONSUMPTION), nebo rozdil
+        stavu (vc. vymeny meridla pres reset_from_value). Viz consumption_for."""
         if readings_cache is not None:
             current = readings_cache.get((self.id, period.id))
         else:
