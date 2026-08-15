@@ -1863,8 +1863,54 @@ class PeriodAdmin(ModelAdmin):
                 self.admin_site.admin_view(self.vypocet_view),
                 name="core_period_vypocet",
             ),
+            path(
+                "generovat-rok/",
+                self.admin_site.admin_view(self.generovat_rok_view),
+                name="core_period_generovat_rok",
+            ),
         ]
         return custom + urls
+
+    def generovat_rok_view(self, request):
+        """Tlacitko "Generovat pro celý rok" (object-tools na zmenovnem
+        seznamu, viz templates/admin/core/period/change_list.html) -
+        misto zakladani vsech 12 Obdobi rocne rucne jedno po druhem.
+        Stejny osvedceny vzor jako ContractAdmin.generovat_karty_inflace
+        (GET = mezistrankaformular, POST s "apply" = provede se) - Unfold
+        samo o sobe modalni okno s vlastnim polem nema, tohle je bezna
+        Django admin akce/stranka, kterou Unfold jen automaticky styluje."""
+        from datetime import date
+        from django.shortcuts import render, redirect
+
+        if request.method == "POST":
+            try:
+                year = int(request.POST.get("year"))
+            except (TypeError, ValueError):
+                self.message_user(request, "Zadej platný rok.", level=messages.ERROR)
+                return redirect("admin:core_period_generovat_rok")
+            if not (2000 <= year <= 2100):
+                self.message_user(request, "Zadej rok mezi 2000 a 2100.", level=messages.ERROR)
+                return redirect("admin:core_period_generovat_rok")
+
+            created = 0
+            for month in range(1, 13):
+                _, was_created = Period.objects.get_or_create(year=year, month=month)
+                if was_created:
+                    created += 1
+            skipped = 12 - created
+            text = f"Vytvořeno {created} období pro rok {year}."
+            if skipped:
+                text += f" {skipped} už existovalo, přeskočeno."
+            self.message_user(request, text, level=messages.SUCCESS if created else messages.WARNING)
+            return redirect("admin:core_period_changelist")
+
+        context = {
+            **self.admin_site.each_context(request),
+            "title": "Generovat období pro celý rok",
+            "current_year": date.today().year,
+            "opts": self.model._meta,
+        }
+        return render(request, "admin/core/period/generovat_rok.html", context)
 
     def _redirect_back(self, request):
         from django.http import HttpResponseRedirect
