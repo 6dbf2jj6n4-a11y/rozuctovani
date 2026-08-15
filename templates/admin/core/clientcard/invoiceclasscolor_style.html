@@ -1,0 +1,9 @@
+<style>
+{% for c in invoice_class_colors %}
+    .key-section-{{ c.invoice_class }} { background-color: {{ c.color_light }}; }
+    @media (prefers-color-scheme: dark) {
+        :root:not([data-theme="light"]) .key-section-{{ c.invoice_class }} { background-color: {{ c.color_dark }}; }
+    }
+    :root[data-theme="dark"] .key-section-{{ c.invoice_class }} { background-color: {{ c.color_dark }}; }
+{% endfor %}
+</style>

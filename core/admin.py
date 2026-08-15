@@ -17,7 +17,7 @@ from .admin_mixins import ModelAdmin, TabularInline
 
 from .models import (
     Client, ClientCard, Contract, Site, Unit, CardUnit,
-    Meter, MeterReading, Period, InflationRate, SupplyPoint,
+    Meter, MeterReading, Period, InflationRate, SupplyPoint, InvoiceClassColor,
     ServicePoolItem, AllocationKey, PriceList, CostEntry, BillingLine, UnitService
 )
 
@@ -278,32 +278,35 @@ class AllocationKeyElectricityInline(AllocationKeyInlineBase):
     invoice_class = "electricity"
     verbose_name = "Klíč – Elektřina"
     verbose_name_plural = "Elektřina"
-    # Barevne pozadi sekce podle tridy (primo pres Django/Unfold
-    # "classes" na inline - zadne vlastni CSS, jen Unfoldovy Tailwind
-    # tridy) - vizualni orientace v Karte klienta, viz konverzace
-    # s Danielem.
-    classes = ("bg-yellow-50", "dark:bg-yellow-500/10")
+    # Stabilni CSS trida pro cilenou dynamickou barvu pozadi sekce -
+    # viz ClientCardAdmin.change_form_before_template
+    # (core_invoiceclasscolor_style.html), ktery podle aktualnich barev
+    # z InvoiceClassColor (editovatelne v Nastavení -> Barvy tříd)
+    # vygeneruje <style> pravidlo pro tuhle tridu. Samotna trida tu jen
+    # oznacuje KTEROU sekci to je, barvu uz nenese (ta je v DB, ne
+    # napevno v kodu) - viz konverzace s Danielem.
+    classes = ("key-section-electricity",)
 
 
 class AllocationKeyWaterInline(AllocationKeyInlineBase):
     invoice_class = "water"
     verbose_name = "Klíč – Voda"
     verbose_name_plural = "Voda"
-    classes = ("bg-blue-50", "dark:bg-blue-500/10")
+    classes = ("key-section-water",)
 
 
 class AllocationKeyHeatInline(AllocationKeyInlineBase):
     invoice_class = "heat"
     verbose_name = "Klíč – Teplo"
     verbose_name_plural = "Teplo"
-    classes = ("bg-red-50", "dark:bg-red-500/10")
+    classes = ("key-section-heat",)
 
 
 class AllocationKeyOtherInline(AllocationKeyInlineBase):
     invoice_class = "other"
     verbose_name = "Klíč – Ostatní"
     verbose_name_plural = "Ostatní"
-    classes = ("bg-base-100", "dark:bg-base-800")
+    classes = ("key-section-other",)
 
 
 class CardUnitInline(TabularInline):
@@ -934,6 +937,15 @@ class ClientCardAdmin(ModelAdmin):
     # "Přidat" nerozbíjí. Viz konverzace s Danielem.
     warn_unsaved_form = False
     list_display = ("client", "description", "valid_from", "valid_to", "is_active")
+    # Vygeneruje <style> pravidla pro barvy sekci Elektřina/Voda/Teplo/
+    # Ostatní podle aktualnich hodnot InvoiceClassColor (Nastavení ->
+    # Barvy tříd) - viz key-section-* tridy na
+    # AllocationKey*Inline.classes vyse. Tohle je jediny kousek, ktery
+    # NEJDE bez male dynamicke <style> sablony - barva je uzivatelsky
+    # editovatelna hodnota z DB, takze ji neni jak predem "zabudovat"
+    # do staticke Tailwind tridy (na rozdil od zbytku adminu, kde
+    # stacily hotove Unfold/Tailwind tridy).
+    change_form_before_template = "admin/core/clientcard/invoiceclasscolor_style.html"
 
     class Media:
         js = ("core/js/warn_unsaved.js",)
@@ -1168,6 +1180,7 @@ class ClientCardAdmin(ModelAdmin):
         extra_context = extra_context or {}
         extra_context["kopie_url"] = f"/admin/core/clientcard/kopie/{object_id}/"
         extra_context["kopie_klient_url"] = f"/admin/core/clientcard/kopie-klient/{object_id}/"
+        extra_context["invoice_class_colors"] = InvoiceClassColor.objects.all()
         return super().change_view(request, object_id, form_url, extra_context)
 
     def response_change(self, request, obj):
@@ -1757,6 +1770,14 @@ class PeriodAdmin(ModelAdmin):
         "uzavrit_obdobi", "znovu_otevrit_obdobi",
     ]
 
+    def get_changeform_initial_data(self, request):
+        # Pri pridavani noveho Obdobi predvyplnit rok aktualnim rokem
+        # (nejcasteji se zaklada obdobi letoska). Viz Daniel.
+        from datetime import date
+        initial = super().get_changeform_initial_data(request)
+        initial.setdefault("year", date.today().year)
+        return initial
+
     @display(
         description="Stav", ordering="status",
         label={Period.Status.OPEN.label: "success", Period.Status.CLOSED.label: "danger"},
@@ -2059,6 +2080,27 @@ class PeriodAdmin(ModelAdmin):
         self.message_user(
             request, f"Znovu otevřeno {updated} období - rozúčtování teď jde přepočítat.", level=messages.WARNING
         )
+
+
+@admin.register(InvoiceClassColor)
+class InvoiceClassColorAdmin(ModelAdmin):
+    """Radky se seeduji migraci (jeden na kazdou Tridu) - pridavani/mazani
+    tu nema smysl (Tridy jsou pevna sada), jen uprava barvy."""
+    list_display = ("invoice_class", "color_light", "color_dark")
+    ordering = ("invoice_class",)
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+    def formfield_for_dbfield(self, db_field, request, **kwargs):
+        formfield = super().formfield_for_dbfield(db_field, request, **kwargs)
+        if db_field.name in ("color_light", "color_dark"):
+            from unfold.widgets import UnfoldAdminColorInputWidget
+            formfield.widget = UnfoldAdminColorInputWidget()
+        return formfield
 
 
 @admin.register(InflationRate)

@@ -837,6 +837,34 @@ class ServicePoolItem(models.Model):
         return f"{self.name} ({self.site})"
 
 
+class InvoiceClassColor(models.Model):
+    """Vlastni barva pozadi pro kazdou Tridu (ServicePoolItem.InvoiceClass) -
+    pouziva se pro barevne odliseni sekci Elektrina/Voda/Teplo/Ostatni
+    v Karte klienta (core/admin.py ClientCardAdmin) misto napevno
+    zadanych barev v kodu. Radky se seeduji migraci (jeden na kazdou
+    Tridu) - v adminu jde jen upravovat barvu, ne pridavat/mazat radky
+    (viz core/admin.py InvoiceClassColorAdmin)."""
+    invoice_class = models.CharField(
+        "Třída", max_length=20, choices=ServicePoolItem.InvoiceClass.choices, unique=True
+    )
+    color_light = models.CharField(
+        "Barva pozadí (světlý motiv)", max_length=7, default="#f3f4f6",
+        help_text="Formát #rrggbb.",
+    )
+    color_dark = models.CharField(
+        "Barva pozadí (tmavý motiv)", max_length=7, default="#1f2937",
+        help_text="Formát #rrggbb.",
+    )
+
+    class Meta:
+        verbose_name = "Barva třídy"
+        verbose_name_plural = "Barvy tříd"
+        ordering = ["invoice_class"]
+
+    def __str__(self):
+        return self.get_invoice_class_display()
+
+
 class AllocationKey(models.Model):
     class AllocationType(models.TextChoices):
         SUBMETER = "submeter", "Podružné měřidlo (1:1)"
