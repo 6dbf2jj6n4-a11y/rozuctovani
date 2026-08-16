@@ -59,6 +59,9 @@
                     <tr style="border-bottom:1px solid #333;">
                         <td style="padding:6px 8px;">{{ row.site }}</td>
                         <td style="padding:6px 8px;">
+                            {% if row.meter_breakdown %}
+                                <span class="mb-toggle" data-target="mb-{{ forloop.parentloop.counter0 }}-{{ forloop.counter0 }}" onclick="toggleMeterBreakdown(this)" style="display:inline-block; width:14px; cursor:pointer; user-select:none; color:#999;">▸</span>
+                            {% endif %}
                             {{ row.service_item }}
                             {% if row.naklad_zdroj == "vychozi_castka" %}
                                 <span style="color:#999; font-size:11px;"> (výchozí částka)</span>
@@ -82,7 +85,7 @@
                         </td>
                     </tr>
                     {% for m in row.meter_breakdown %}
-                        <tr style="border-bottom:1px solid #333; color:#999; font-size:12px;">
+                        <tr class="mb-detail" data-parent="mb-{{ forloop.parentloop.parentloop.counter0 }}-{{ forloop.parentloop.counter0 }}" style="display:none; border-bottom:1px solid #333; color:#999; font-size:12px;">
                             <td style="padding:2px 8px;"></td>
                             <td style="padding:2px 8px 2px 24px;">
                                 {{ m.meter.code|default:m.meter.name }} — {{ m.cards|join:", " }}
@@ -135,4 +138,14 @@
         </div>
     {% endif %}
 </div>
+<script>
+function toggleMeterBreakdown(el) {
+    var target = el.getAttribute('data-target');
+    var rows = document.querySelectorAll('tr.mb-detail[data-parent="' + target + '"]');
+    if (!rows.length) return;
+    var opening = rows[0].style.display === 'none';
+    rows.forEach(function (r) { r.style.display = opening ? 'table-row' : 'none'; });
+    el.textContent = opening ? '▾' : '▸';
+}
+</script>
 {% endblock %}
