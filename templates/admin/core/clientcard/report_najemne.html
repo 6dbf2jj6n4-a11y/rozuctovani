@@ -2,9 +2,9 @@
 
 {% block content %}
 <div>
-    <form method="get" style="display:flex; gap:16px; align-items:flex-end; margin-bottom:20px; flex-wrap:wrap;">
+    <form method="get" class="rx-filters">
         <div>
-            <label for="id_site" style="display:block; font-weight:600; margin-bottom:6px;">Areál</label>
+            <label for="id_site">Areál</label>
             <select name="site" id="id_site" onchange="this.form.submit()" style="padding:8px; min-width:160px;">
                 <option value="">-- všechny --</option>
                 {% for s in sites %}

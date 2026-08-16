@@ -13,9 +13,9 @@
         Virtuální měřidla jsou šedě. Vše je proklik na kartu měřidla.
     </p>
 
-    <form method="get" style="display:flex; gap:16px; align-items:flex-end; margin-bottom:20px; flex-wrap:wrap;">
+    <form method="get" class="rx-filters">
         <div>
-            <label for="id_period" style="display:block; font-weight:600; margin-bottom:6px;">Období</label>
+            <label for="id_period">Období</label>
             <select name="period" id="id_period" onchange="this.form.submit()" style="padding:8px; min-width:160px;">
                 {% for p in periods %}
                     <option value="{{ p.pk }}" {% if selected_period and p.pk == selected_period.pk %}selected{% endif %}>{{ p }}</option>
@@ -23,7 +23,7 @@
             </select>
         </div>
         <div>
-            <label for="id_site" style="display:block; font-weight:600; margin-bottom:6px;">Areál</label>
+            <label for="id_site">Areál</label>
             <select name="site" id="id_site" onchange="this.form.submit()" style="padding:8px; min-width:180px;">
                 <option value="">-- všechny areály --</option>
                 {% for s in sites %}

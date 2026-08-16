@@ -25,3 +25,8 @@ def class_colors_css(request):
     """Dynamicky CSS s barvami textu podle Tridy - viz core.views."""
     from django.urls import reverse
     return reverse("class_colors_css")
+
+
+def report_filters_css(request):
+    from django.templatetags.static import static
+    return static("core/css/report_filters.css")

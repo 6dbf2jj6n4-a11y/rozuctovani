@@ -2584,6 +2584,7 @@ class PriceListAdmin(DefaultToCurrentPeriodMixin, ModelAdmin):
     list_filter = ("period", "service_item__site", _PeriodDefaultMarkerFilter)
     autocomplete_fields = ("service_item",)
     search_fields = ("service_item__name",)
+    list_after_template = "admin/core/pricelist/inherited_prices.html"
 
     @display(description="Položka", ordering="service_item__name")
     def service_item_colored(self, obj):
@@ -2592,6 +2593,65 @@ class PriceListAdmin(DefaultToCurrentPeriodMixin, ModelAdmin):
     @admin.display(description="Cena za jednotku (Kč)", ordering="price_per_unit")
     def price_per_unit_display(self, obj):
         return _format_kc(obj.price_per_unit, decimals=4)
+
+    def changelist_view(self, request, extra_context=None):
+        extra_context = extra_context or {}
+        extra_context["inherited_price_rows"] = self._inherited_price_rows(request)
+        return super().changelist_view(request, extra_context)
+
+    def _inherited_price_rows(self, request):
+        """Ceny, ktere ve vybranem Obdobi PLATI, ale nemaji tu vlastni
+        zaznam - PriceList.get_price_for_period bere posledni cenu k datu,
+        takze polozka bez zaznamu v 07/2026 dal jede za cenu z 06/2026.
+        V seznamu filtrovanem na 07/2026 pak nebylo videt vubec nic a
+        vypadalo to, ze ceny chybi. Viz konverzace s Danielem 2026-08-16.
+
+        Vraci i obdobi, ze ktereho se cena prebira, aby slo poznat, jak
+        je stara."""
+        period_id = request.GET.get("period__id__exact")
+        if not period_id:
+            return None
+        period = Period.objects.filter(pk=period_id).first()
+        if period is None:
+            return None
+
+        own_item_ids = set(
+            PriceList.objects.filter(period=period).values_list("service_item_id", flat=True)
+        )
+        earlier = (
+            PriceList.objects
+            .filter(
+                Q(period__year__lt=period.year)
+                | Q(period__year=period.year, period__month__lt=period.month)
+            )
+            .exclude(service_item_id__in=own_item_ids)
+            .select_related("service_item", "service_item__site", "period")
+            .order_by("service_item_id", "-period__year", "-period__month")
+        )
+        site_id = request.GET.get("service_item__site__id__exact")
+        if site_id:
+            earlier = earlier.filter(service_item__site_id=site_id)
+
+        # Za kazdou polozku jen NEJNOVEJSI drivejsi cena - stejne pravidlo
+        # jako get_price_for_period (razeni vyse to zaridi, staci vzit
+        # prvni vyskyt).
+        seen = set()
+        rows = []
+        for pl in earlier:
+            if pl.service_item_id in seen:
+                continue
+            seen.add(pl.service_item_id)
+            rows.append({
+                "item": pl.service_item,
+                "trida": colored_by_class(
+                    pl.service_item.get_invoice_class_display(), pl.service_item.invoice_class
+                ),
+                "price_html": _format_kc(pl.price_per_unit, decimals=4),
+                "from_period": pl.period,
+                "pk": pl.pk,
+            })
+        rows.sort(key=lambda r: (r["item"].invoice_class, r["item"].site.name, r["item"].name))
+        return {"period": period, "rows": rows}
 
 
 class CostEntryVyplnenoFilter(admin.SimpleListFilter):

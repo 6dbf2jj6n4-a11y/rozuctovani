@@ -1,0 +1,46 @@
+{% if inherited_price_rows %}
+<div style="margin-top:28px;">
+    <h2 style="font-size:14px; font-weight:600; margin:0 0 4px;">
+        Ceny převzaté z dřívějších období ({{ inherited_price_rows.period }})
+    </h2>
+    <p style="color:#999; font-size:13px; margin:0 0 14px;">
+        Tyhle položky nemají pro toto Období vlastní záznam v Ceníku, přesto se s nimi počítá -
+        platí poslední cena zadaná dřív a drží se, dokud ji někdo nezmění. Proto tu nejde nic
+        editovat: buď se cena nechá být, nebo se pro tohle Období založí nový záznam.
+    </p>
+
+    {% if inherited_price_rows.rows %}
+        <div style="overflow-x:auto;">
+        <table style="width:100%; border-collapse:collapse; font-size:13px;">
+            <thead>
+                <tr style="border-bottom:2px solid #666; text-align:left;">
+                    <th style="padding:6px 8px;">Třída</th>
+                    <th style="padding:6px 8px;">Položka zásobníku</th>
+                    <th style="padding:6px 8px;">Areál</th>
+                    <th style="padding:6px 8px; text-align:right;">Cena za jednotku (Kč)</th>
+                    <th style="padding:6px 8px;">Převzato z období</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in inherited_price_rows.rows %}
+                    <tr style="border-bottom:1px solid #333;">
+                        <td style="padding:6px 8px;">{{ row.trida }}</td>
+                        <td style="padding:6px 8px;">
+                            <a href="/admin/core/servicepoolitem/{{ row.item.pk }}/change/">{{ row.item.name }}</a>
+                        </td>
+                        <td style="padding:6px 8px;">{{ row.item.site }}</td>
+                        <td style="padding:6px 8px;">{{ row.price_html }}</td>
+                        <td style="padding:6px 8px;">
+                            <a href="/admin/core/pricelist/{{ row.pk }}/change/">{{ row.from_period }}</a>
+                            <span class="inline-block font-semibold h-6 leading-6 px-2 rounded-default text-[11px] uppercase whitespace-nowrap bg-orange-100 text-orange-700 dark:bg-orange-500/20 dark:text-orange-400" style="margin-left:8px;">Převzato</span>
+                        </td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        </div>
+    {% else %}
+        <p style="color:#999; font-size:13px;">Žádné takové položky - všechny ceny mají pro toto období vlastní záznam.</p>
+    {% endif %}
+</div>
+{% endif %}

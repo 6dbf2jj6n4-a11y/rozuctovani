@@ -1,0 +1,32 @@
+/* Panel s filtry (Období/Areál/...) nad sestavami - bez odděleného
+   pozadí splýval se samotnou sestavou pod ním a nebylo poznat, kde
+   končí ovládání a začínají data. Viz konverzace s Danielem 2026-08-16.
+
+   Barvy zvlášť pro světlý a tmavý motiv: Unfold nasazuje třídu "dark"
+   na <html> (i v režimu "auto"), viz core/views.py class_colors_css. */
+.rx-filters {
+    display: flex;
+    gap: 16px;
+    align-items: flex-end;
+    flex-wrap: wrap;
+    margin-bottom: 20px;
+    padding: 14px 16px;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    background: #f9fafb;
+}
+
+html.dark .rx-filters {
+    border-color: #374151;
+    background: rgba(255, 255, 255, 0.025);
+}
+
+/* Popisky uvnitř panelu - o něco tlumenější než text sestavy, ať je
+   panel čitelný jako ovládání, ne jako další data. */
+.rx-filters label {
+    display: block;
+    font-weight: 600;
+    font-size: 12px;
+    margin-bottom: 6px;
+    opacity: 0.75;
+}

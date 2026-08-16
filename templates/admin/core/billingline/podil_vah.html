@@ -3,9 +3,9 @@
 
 {% block content %}
 <div>
-    <form method="get" style="display:flex; gap:16px; align-items:flex-end; margin-bottom:20px; flex-wrap:wrap;">
+    <form method="get" class="rx-filters">
         <div>
-            <label for="id_period" style="display:block; font-weight:600; margin-bottom:6px;">Období</label>
+            <label for="id_period">Období</label>
             <select name="period" id="id_period" onchange="this.form.submit()" style="padding:8px; min-width:160px;">
                 {% for p in periods %}
                     <option value="{{ p.pk }}" {% if selected_period and p.pk == selected_period.pk %}selected{% endif %}>{{ p }}</option>
@@ -13,7 +13,7 @@
             </select>
         </div>
         <div>
-            <label for="id_item" style="display:block; font-weight:600; margin-bottom:6px;">Položka zásobníku</label>
+            <label for="id_item">Položka zásobníku</label>
             <select name="item" id="id_item" onchange="document.getElementById('id_meter').value=''; this.form.submit()" style="padding:8px; min-width:320px;">
                 <option value="">-- vyber položku --</option>
                 {% for group in item_groups %}
@@ -26,7 +26,7 @@
             </select>
         </div>
         <div>
-            <label for="id_meter" style="display:block; font-weight:600; margin-bottom:6px;">...nebo měřidlo</label>
+            <label for="id_meter">...nebo měřidlo</label>
             <select name="meter" id="id_meter" onchange="document.getElementById('id_item').value=''; this.form.submit()" style="padding:8px; min-width:220px;">
                 <option value="">-- vyber měřidlo --</option>
                 {% for group in meter_groups %}
