@@ -2,6 +2,7 @@
 Konfigurace Django projektu "rozuctovani".
 """
 import os
+from datetime import date
 from pathlib import Path
 
 from django.urls import reverse_lazy
@@ -146,12 +147,20 @@ CSRF_TRUSTED_ORIGINS = [
     "https://rentex-eu-production.up.railway.app",
     "https://rozuctovani.calamarise.eu",
 ]
-# Verze zobrazena v hlavicce adminu - zvysuje se o +1 po kazdem commitu
-# a pushi (dohoda s Danielem 2026-08-09), format RRRR.poradove_cislo,
-# napr. 2026.1 -> 2026.2 -> 2026.3... Kdyz prejde kalendarni rok (napr.
-# na 2027), poradove cislo se NEPOKRACUJE - zacina znovu od 0, tedy
-# 2026.87 -> 2027.0 -> 2027.1... (dohoda s Danielem 2026-08-15).
-APP_VERSION = "2026.75"
+# Verze zobrazena v hlavicce adminu - APP_VERSION_SEQUENCE se zvysuje
+# o +1 po kazdem commitu a pushi (dohoda s Danielem 2026-08-09), format
+# RRRR.poradove_cislo, napr. 2026.1 -> 2026.2 -> 2026.3... Rok se BERE
+# AUTOMATICKY (date.today().year), takze pri prechodu na dalsi
+# kalendarni rok se poradove cislo samo restartuje na 0 (2026.87 ->
+# 2027.0), i kdyby se nekdo zapomnel APP_VERSION_YEAR rucne prepsat -
+# dohoda s Danielem 2026-08-15.
+APP_VERSION_YEAR = 2026
+APP_VERSION_SEQUENCE = 76
+APP_VERSION = (
+    f"{APP_VERSION_YEAR}.{APP_VERSION_SEQUENCE}"
+    if date.today().year == APP_VERSION_YEAR
+    else f"{date.today().year}.0"
+)
 
 UNFOLD = {
     "SITE_TITLE": "RENTE)(",
