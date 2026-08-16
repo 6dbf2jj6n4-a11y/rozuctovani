@@ -28,6 +28,45 @@ class Command(BaseCommand):
         parser.add_argument("--site", help="Jen tenhle areál (část názvu, např. NJ).")
         parser.add_argument("--period", help="Období MM/RRRR - dopočítá i spotřeby.")
 
+    @staticmethod
+    def _namereno(members, period):
+        """Vraci (podmery, merena_spolecna) - stejny vypocet jako report
+        Spotřeby měřidel, jinak cisla nesedi.
+
+        Dve pasti, na obe se tu uz jednou naletelo (Daniel 2026-08-16,
+        NJ ukazovalo 1360 misto 1345):
+        1. u meridla s podruznymi se musi odecist jejich spotreba, jinak
+           se deti pocitaji dvakrat (E_AB1_10 vs E_AB1_11/E_AB1_12),
+        2. virtualni meridlo (E_SPOL) je jen agregace uz zapocitanych
+           realnych meridel - vykazuje se zvlast jako "merena spolecna" a
+           jeho slozky se do podmeru nepricitaji podruhe.
+        """
+        member_ids = {m.id for m in members}
+        spolecne = Decimal("0")
+        slozky = set()
+        for m in members:
+            if not m.is_virtual:
+                continue
+            val = m.consumption_for(period)
+            if val is not None:
+                spolecne += val
+            for leaf, _sign in m.consumption_leaves():
+                slozky.add(leaf.id)
+
+        podmery = Decimal("0")
+        for m in members:
+            if m.is_virtual or m.id in slozky:
+                continue
+            raw = m.consumption_for(period)
+            if raw is None:
+                continue
+            deti = sum(
+                (child.consumption_for(period) or Decimal("0"))
+                for child in m.children.all() if child.id in member_ids
+            )
+            podmery += raw - deti
+        return podmery, spolecne
+
     def handle(self, *args, **options):
         period = None
         if options.get("period"):
@@ -91,13 +130,11 @@ class Command(BaseCommand):
                         dodano = (
                             sp.main_meter.consumption_for(period) if sp.main_meter else None
                         )
-                        namereno = sum(
-                            (m.consumption_for(period) or Decimal("0"))
-                            for m in members if not m.is_virtual
-                        )
+                        podmery, spolecne = self._namereno(members, period)
                         self.stdout.write(
                             f"        dodáno {dodano if dodano is not None else '—'} / "
-                            f"naměřeno {namereno}"
+                            f"naměřeno {podmery + spolecne} "
+                            f"(podměry {podmery} + měřená společná {spolecne})"
                         )
 
                 unassigned = [
