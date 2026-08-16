@@ -115,9 +115,30 @@ class UnitInline(TabularInline):
 
 @admin.register(Site)
 class SiteAdmin(ModelAdmin):
-    list_display = ("name", "address")
+    list_display = ("name", "address", "aktivnich_klientu")
     search_fields = ("name",)
     inlines = [UnitInline]
+
+    def get_queryset(self, request):
+        """Pocet RUZNYCH klientu, kteri maji v arealu aspon jednu aktivni
+        Kartu. Vazba karta -> areal jde pres plochy (card_units__unit__site),
+        stejne jako jinde v projektu (billing/engine.py, filtry v adminu) -
+        karta muze mit ploch vic, proto distinct. Pocita se anotaci v
+        dotazu, ne per radek, aby seznam Arealu nedelal dotaz navic za
+        kazdy areal. Viz konverzace s Danielem 2026-08-16."""
+        from django.db.models import Count
+
+        return super().get_queryset(request).annotate(
+            _aktivnich_klientu=Count(
+                "units__card_units__card__client",
+                filter=Q(units__card_units__card__is_active=True),
+                distinct=True,
+            )
+        )
+
+    @display(description="Aktivních klientů", ordering="_aktivnich_klientu")
+    def aktivnich_klientu(self, obj):
+        return obj._aktivnich_klientu
 
 
 class UnitServiceInlineBase(TabularInline):
@@ -2753,27 +2774,81 @@ class BillingLineAdmin(DefaultToCurrentPeriodMixin, ModelAdmin):
         current_year = timezone.localdate().year
         periods = Period.objects.filter(year=current_year).order_by("year", "month")
 
+        class_labels = dict(ServicePoolItem.InvoiceClass.choices)
+
+        def card_vynos(card):
+            """Skutecny najem karty - stejny vypocet jako "Přehled nájemného"
+            vc. zaokrouhleni nahoru (viz docstring vyse)."""
+            raw_monthly = sum(
+                (cu.monthly_rent or Decimal("0") for cu in card.card_units.all()), Decimal("0")
+            )
+            return raw_monthly.quantize(Decimal("1"), rounding=ROUND_CEILING)
+
         rows = []
         total_naklad = Decimal("0")
         total_vynos = Decimal("0")
+        # Rozpad po KARTACH za cely rok - souhrnna tabulka pod prehledem
+        # obdobi, aby slo videt, ktera karta je dlouhodobe ztratova (a cim),
+        # ne jen ze v nejakem mesici vysel zaporny rozdil.
+        # Viz konverzace s Danielem 2026-08-16.
+        year_by_card = {}
+        used_classes = set()
         for period in periods:
-            card_ids_pausal = set(
+            pausal_lines = list(
                 BillingLine.objects.filter(period=period, is_billed=False)
-                .values_list("client_card_id", flat=True)
+                .select_related("client_card__client", "service_item")
             )
-            if not card_ids_pausal:
+            if not pausal_lines:
                 continue
-            naklad = BillingLine.objects.filter(
-                period=period, is_billed=False, client_card_id__in=card_ids_pausal,
-            ).aggregate(s=Sum("amount"))["s"] or Decimal("0")
+            card_ids_pausal = {line.client_card_id for line in pausal_lines}
+
+            naklad = sum((line.amount for line in pausal_lines), Decimal("0"))
+
+            cards = {
+                card.id: card
+                for card in ClientCard.objects.filter(id__in=card_ids_pausal)
+                .select_related("client").prefetch_related("card_units")
+            }
+
+            # Rozpad obdobi po kartach, naklad clenene na Tridy zasobniku -
+            # typicky duvod zaporneho rozdilu je teplo v zime.
+            by_card = {}
+            for line in pausal_lines:
+                card = cards.get(line.client_card_id)
+                if card is None:
+                    continue
+                detail = by_card.setdefault(line.client_card_id, {
+                    "card": card, "by_class": {}, "naklad": Decimal("0"),
+                })
+                cls = line.service_item.invoice_class
+                detail["by_class"][cls] = detail["by_class"].get(cls, Decimal("0")) + line.amount
+                detail["naklad"] += line.amount
+                used_classes.add(cls)
 
             vynos = Decimal("0")
-            cards = ClientCard.objects.filter(id__in=card_ids_pausal).prefetch_related("card_units")
-            for card in cards:
-                raw_monthly = sum(
-                    (cu.monthly_rent or Decimal("0") for cu in card.card_units.all()), Decimal("0")
-                )
-                vynos += raw_monthly.quantize(Decimal("1"), rounding=ROUND_CEILING)
+            card_rows = []
+            for detail in by_card.values():
+                card_vynos_amount = card_vynos(detail["card"])
+                vynos += card_vynos_amount
+                card_rows.append({
+                    "card": detail["card"],
+                    "by_class": detail["by_class"],
+                    "naklad": detail["naklad"],
+                    "vynos": card_vynos_amount,
+                    "rozdil": card_vynos_amount - detail["naklad"],
+                })
+
+                year_row = year_by_card.setdefault(detail["card"].id, {
+                    "card": detail["card"], "by_class": {},
+                    "naklad": Decimal("0"), "vynos": Decimal("0"), "mesicu": 0,
+                })
+                for cls, amount in detail["by_class"].items():
+                    year_row["by_class"][cls] = year_row["by_class"].get(cls, Decimal("0")) + amount
+                year_row["naklad"] += detail["naklad"]
+                year_row["vynos"] += card_vynos_amount
+                year_row["mesicu"] += 1
+
+            card_rows.sort(key=lambda r: r["rozdil"])
 
             rows.append({
                 "period": period,
@@ -2781,15 +2856,43 @@ class BillingLineAdmin(DefaultToCurrentPeriodMixin, ModelAdmin):
                 "naklad": naklad,
                 "vynos": vynos,
                 "rozdil": vynos - naklad,
+                "card_rows": card_rows,
             })
             total_naklad += naklad
             total_vynos += vynos
+
+        # Sloupce jen pro Tridy, ktere se v pausalnich radcich fakticky
+        # objevily - jinak by tabulka mela pul tuctu prazdnych sloupcu.
+        classes = [
+            {"key": code, "label": class_labels[code]}
+            for code, _ in ServicePoolItem.InvoiceClass.choices
+            if code in used_classes
+        ]
+        year_rows = sorted(
+            year_by_card.values(), key=lambda r: r["vynos"] - r["naklad"]
+        )
+        for year_row in year_rows:
+            year_row["rozdil"] = year_row["vynos"] - year_row["naklad"]
+
+        # Castky po Tridach jako SEZNAM v poradi sloupcu - sablona se do
+        # dictu klicem ze smycky dostat neumi.
+        for row in rows:
+            for card_row in row["card_rows"]:
+                card_row["class_amounts"] = [
+                    card_row["by_class"].get(c["key"]) for c in classes
+                ]
+        for year_row in year_rows:
+            year_row["class_amounts"] = [
+                year_row["by_class"].get(c["key"]) for c in classes
+            ]
 
         context = {
             **self.admin_site.each_context(request),
             "title": f"Paušální klienti - náklad vs výnos ({current_year})",
             "year": current_year,
             "rows": rows,
+            "classes": classes,
+            "year_rows": year_rows,
             "total_naklad": total_naklad,
             "total_vynos": total_vynos,
             "total_rozdil": total_vynos - total_naklad,

@@ -33,6 +33,44 @@
                             {{ row.rozdil|floatformat:2 }} Kč
                         </td>
                     </tr>
+                    <tr>
+                        <td colspan="5" style="padding:0 8px 8px;">
+                            <details>
+                                <summary style="cursor:pointer; color:#888; font-size:12px; padding:2px 0;">
+                                    Rozpad po kartách ({{ row.card_rows|length }})
+                                </summary>
+                                <table style="width:100%; border-collapse:collapse; font-size:12px; margin:6px 0 4px;">
+                                    <thead>
+                                        <tr style="border-bottom:1px solid #555; text-align:left; color:#888;">
+                                            <th style="padding:4px 8px;">Klient / karta</th>
+                                            {% for c in classes %}
+                                                <th style="padding:4px 8px; text-align:right;">{{ c.label }}</th>
+                                            {% endfor %}
+                                            <th style="padding:4px 8px; text-align:right;">Náklad</th>
+                                            <th style="padding:4px 8px; text-align:right;">Výnos</th>
+                                            <th style="padding:4px 8px; text-align:right;">Rozdíl</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {% for cr in row.card_rows %}
+                                            <tr style="border-bottom:1px solid #2a2a2a;">
+                                                <td style="padding:3px 8px;">
+                                                    <a href="/admin/core/clientcard/{{ cr.card.pk }}/change/">{{ cr.card.client.name }}</a>
+                                                    {% if cr.card.description %} <span style="color:#888;">– {{ cr.card.description }}</span>{% endif %}
+                                                </td>
+                                                {% for amount in cr.class_amounts %}
+                                                    <td style="padding:3px 8px; text-align:right;">{% if amount != None %}{{ amount|floatformat:2 }}{% else %}<span style="color:#555;">—</span>{% endif %}</td>
+                                                {% endfor %}
+                                                <td style="padding:3px 8px; text-align:right;">{{ cr.naklad|floatformat:2 }}</td>
+                                                <td style="padding:3px 8px; text-align:right;">{{ cr.vynos|floatformat:2 }}</td>
+                                                <td style="padding:3px 8px; text-align:right; font-weight:600; {% if cr.rozdil < 0 %}color:#c0392b;{% endif %}">{{ cr.rozdil|floatformat:2 }}</td>
+                                            </tr>
+                                        {% endfor %}
+                                    </tbody>
+                                </table>
+                            </details>
+                        </td>
+                    </tr>
                 {% endfor %}
                 <tr style="border-top:2px solid #666; font-weight:700;">
                     <td colspan="2" style="padding:8px; text-align:right;">Celkem {{ year }}</td>
@@ -42,6 +80,48 @@
                         {{ total_rozdil|floatformat:2 }} Kč
                     </td>
                 </tr>
+            </tbody>
+        </table>
+        </div>
+
+        <h2 style="margin:28px 0 4px;">Souhrn po kartách za rok {{ year }}</h2>
+        <p style="color:#888; font-size:12px; margin-bottom:10px;">
+            Seřazeno od nejztrátovější karty. „Měsíců“ = v kolika obdobích roku měla karta
+            něco v paušálu - u karty, která nabíhala v průběhu roku, je součet za méně měsíců
+            než u ostatních.
+        </p>
+        <div style="overflow-x:auto;">
+        <table style="width:100%; border-collapse:collapse; font-size:13px;">
+            <thead>
+                <tr style="border-bottom:2px solid #666; text-align:left;">
+                    <th style="padding:6px 8px;">Klient / karta</th>
+                    <th style="padding:6px 8px; text-align:right;">Měsíců</th>
+                    {% for c in classes %}
+                        <th style="padding:6px 8px; text-align:right;">{{ c.label }}</th>
+                    {% endfor %}
+                    <th style="padding:6px 8px; text-align:right;">Náklad</th>
+                    <th style="padding:6px 8px; text-align:right;">Výnos</th>
+                    <th style="padding:6px 8px; text-align:right;">Rozdíl</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for yr in year_rows %}
+                    <tr style="border-bottom:1px solid #333;">
+                        <td style="padding:6px 8px;">
+                            <a href="/admin/core/clientcard/{{ yr.card.pk }}/change/">{{ yr.card.client.name }}</a>
+                            {% if yr.card.description %} <span style="color:#888;">– {{ yr.card.description }}</span>{% endif %}
+                        </td>
+                        <td style="padding:6px 8px; text-align:right; color:#888;">{{ yr.mesicu }}</td>
+                        {% for amount in yr.class_amounts %}
+                            <td style="padding:6px 8px; text-align:right;">{% if amount != None %}{{ amount|floatformat:2 }}{% else %}<span style="color:#555;">—</span>{% endif %}</td>
+                        {% endfor %}
+                        <td style="padding:6px 8px; text-align:right;">{{ yr.naklad|floatformat:2 }}</td>
+                        <td style="padding:6px 8px; text-align:right;">{{ yr.vynos|floatformat:2 }}</td>
+                        <td style="padding:6px 8px; text-align:right; font-weight:600; {% if yr.rozdil < 0 %}color:#c0392b;{% endif %}">
+                            {{ yr.rozdil|floatformat:2 }} Kč
+                        </td>
+                    </tr>
+                {% endfor %}
             </tbody>
         </table>
         </div>
