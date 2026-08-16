@@ -117,6 +117,10 @@ LANGUAGE_CODE = "cs"
 TIME_ZONE = "Europe/Prague"
 USE_I18N = True
 USE_TZ = True
+# Oddelovac tisicu v cislech (35 938,85 misto 35938.85) - ceske locale
+# pouziva nezlomitelnou mezeru, stejne jako se to nastavuje v Excelu.
+# Plati na cely admin i sablony. Viz konverzace s Danielem 2026-08-16.
+USE_THOUSAND_SEPARATOR = True
 
 
 STATIC_URL = "static/"
@@ -145,7 +149,7 @@ CSRF_TRUSTED_ORIGINS = [
 # Verze zobrazena v hlavicce adminu - zvysuje se o +1 po kazdem commitu
 # a pushi (dohoda s Danielem 2026-08-09), format RRRR.poradove_cislo,
 # napr. 2026.1 -> 2026.2 -> 2026.3...
-APP_VERSION = "2026.67"
+APP_VERSION = "2026.68"
 
 UNFOLD = {
     "SITE_TITLE": "RENTE)(",
@@ -215,6 +219,11 @@ UNFOLD = {
                         "icon": "bolt",
                         "link": reverse_lazy("admin:core_supplypoint_changelist"),
                     },
+                    {
+                        "title": _("Zásobník služeb"),
+                        "icon": "inventory_2",
+                        "link": reverse_lazy("admin:core_servicepoolitem_changelist"),
+                    },
                 ],
             },
             {
@@ -251,11 +260,6 @@ UNFOLD = {
                         "title": _("Položky"),
                         "icon": "receipt_long",
                         "link": reverse_lazy("admin:core_billingline_changelist"),
-                    },
-                    {
-                        "title": _("Zásobník služeb"),
-                        "icon": "inventory_2",
-                        "link": reverse_lazy("admin:core_servicepoolitem_changelist"),
                     },
                     {
                         "title": _("Detail"),
