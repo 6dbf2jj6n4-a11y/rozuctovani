@@ -2594,6 +2594,70 @@ class PriceListAdmin(DefaultToCurrentPeriodMixin, ModelAdmin):
     def price_per_unit_display(self, obj):
         return _format_kc(obj.price_per_unit, decimals=4)
 
+    def get_urls(self):
+        from django.urls import path
+
+        urls = super().get_urls()
+        custom = [
+            path(
+                "prevzit/<int:pricelist_id>/<int:period_id>/",
+                self.admin_site.admin_view(self.prevzit_do_obdobi),
+                name="core_pricelist_prevzit",
+            ),
+        ]
+        return custom + urls
+
+    def prevzit_do_obdobi(self, request, pricelist_id, period_id):
+        """Zalozi pro vybrane Obdobi vlastni zaznam v Ceniku se stejnou
+        cenou, jaka se do nej dosud prebirala z drivejska - aby slo cenu
+        "zhmotnit" a pak upravit, bez rucniho prepisovani. Viz konverzace
+        s Danielem 2026-08-16.
+
+        Zmena dat = jen POST (GET by sel vyvolat i obyc. odkazem)."""
+        from django.core.exceptions import ValidationError
+        from django.shortcuts import redirect
+        from django.urls import reverse
+
+        redirect_to = (
+            request.META.get("HTTP_REFERER")
+            or reverse("admin:core_pricelist_changelist")
+        )
+        if request.method != "POST":
+            return redirect(redirect_to)
+
+        source = PriceList.objects.filter(pk=pricelist_id).select_related("service_item").first()
+        period = Period.objects.filter(pk=period_id).first()
+        if source is None or period is None:
+            self.message_user(request, "Zdrojová cena nebo období už neexistuje.", messages.ERROR)
+            return redirect(redirect_to)
+
+        if PriceList.objects.filter(service_item=source.service_item, period=period).exists():
+            self.message_user(
+                request,
+                f"{source.service_item} už pro {period} vlastní cenu má.",
+                messages.WARNING,
+            )
+            return redirect(redirect_to)
+
+        new = PriceList(
+            service_item=source.service_item, period=period,
+            price_per_unit=source.price_per_unit,
+            note=f"Převzato z období {source.period}",
+        )
+        try:
+            new.full_clean()
+        except ValidationError as exc:
+            # Typicky uzavrene obdobi (PriceList.clean) - radeji hlaska nez 500.
+            self.message_user(request, "; ".join(exc.messages), messages.ERROR)
+            return redirect(redirect_to)
+        new.save()
+        self.message_user(
+            request,
+            f"{source.service_item}: cena {source.price_per_unit} převzata z {source.period} do {period}.",
+            messages.SUCCESS,
+        )
+        return redirect(redirect_to)
+
     def changelist_view(self, request, extra_context=None):
         extra_context = extra_context or {}
         extra_context["inherited_price_rows"] = self._inherited_price_rows(request)
@@ -2608,6 +2672,8 @@ class PriceListAdmin(DefaultToCurrentPeriodMixin, ModelAdmin):
 
         Vraci i obdobi, ze ktereho se cena prebira, aby slo poznat, jak
         je stara."""
+        from django.urls import reverse
+
         period_id = request.GET.get("period__id__exact")
         if not period_id:
             return None
@@ -2649,6 +2715,9 @@ class PriceListAdmin(DefaultToCurrentPeriodMixin, ModelAdmin):
                 "price_html": _format_kc(pl.price_per_unit, decimals=4),
                 "from_period": pl.period,
                 "pk": pl.pk,
+                "prevzit_url": reverse(
+                    "admin:core_pricelist_prevzit", args=[pl.pk, period.pk]
+                ),
             })
         rows.sort(key=lambda r: (r["item"].invoice_class, r["item"].site.name, r["item"].name))
         return {"period": period, "rows": rows}

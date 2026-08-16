@@ -19,6 +19,7 @@
                     <th style="padding:6px 8px;">Areál</th>
                     <th style="padding:6px 8px; text-align:right;">Cena za jednotku (Kč)</th>
                     <th style="padding:6px 8px;">Převzato z období</th>
+                    <th style="padding:6px 8px;"></th>
                 </tr>
             </thead>
             <tbody>
@@ -33,6 +34,18 @@
                         <td style="padding:6px 8px;">
                             <a href="/admin/core/pricelist/{{ row.pk }}/change/">{{ row.from_period }}</a>
                             <span class="inline-block font-semibold h-6 leading-6 px-2 rounded-default text-[11px] uppercase whitespace-nowrap bg-orange-100 text-orange-700 dark:bg-orange-500/20 dark:text-orange-400" style="margin-left:8px;">Převzato</span>
+                        </td>
+                        <td style="padding:6px 8px; text-align:right;">
+                            {# Zalozi pro tohle obdobi vlastni zaznam se stejnou cenou, aby sla upravit. #}
+                            <form method="post" action="{{ row.prevzit_url }}" style="display:inline;">
+                                {% csrf_token %}
+                                <button type="submit"
+                                        style="padding:4px 10px; border-radius:6px; border:none; color:white;
+                                               font-weight:600; font-size:12px; cursor:pointer; white-space:nowrap;
+                                               background:#2563eb;">
+                                    Převzít do {{ inherited_price_rows.period }}
+                                </button>
+                            </form>
                         </td>
                     </tr>
                 {% endfor %}
