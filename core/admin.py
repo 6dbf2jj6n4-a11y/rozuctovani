@@ -45,6 +45,32 @@ class _PeriodDefaultMarkerFilter(admin.SimpleListFilter):
         return queryset
 
 
+def colored_text(text, css_class):
+    """Text obarveny podle Tridy - jen prida CSS tridu, konkretni barvy
+    resi core.views.class_colors_css z Nastavení -> Barvy tříd (zvlast
+    pro svetly a tmavy motiv). Pouziva se v seznamech, kde by barevne
+    POZADI celeho radku bylo prilis - obarvi se jen kod/nazev.
+    Viz konverzace s Danielem 2026-08-16."""
+    from django.utils.html import format_html
+
+    if text in (None, ""):
+        return "—"
+    if not css_class:
+        return text
+    return format_html('<span class="{}">{}</span>', css_class, text)
+
+
+def colored_by_class(text, invoice_class):
+    """Obarvi podle Tridy zasobniku (ServicePoolItem.InvoiceClass)."""
+    return colored_text(text, InvoiceClassColor.css_class_for(invoice_class))
+
+
+def colored_by_meter_type(text, meter_type):
+    """Obarvi podle typu meridla (Meter.MeterType) - mapuje se na Tridu,
+    aby byly barvy na jednom miste (viz InvoiceClassColor)."""
+    return colored_text(text, InvoiceClassColor.css_class_for_meter_type(meter_type))
+
+
 class DefaultToCurrentPeriodMixin:
     """Pri prvnim otevreni seznamu (bez explicitne zvoleneho Obdobi)
     presmeruje na filtr podle AKTUALNIHO Obdobi (Period.current(), tj.
@@ -1227,7 +1253,7 @@ class MeterReadingInline(TabularInline):
 @admin.register(Meter)
 class MeterAdmin(DuplicateModelAdminMixin, ModelAdmin):
     list_display = (
-        "code", "name", "site", "meter_type", "parent_meter", "supply_point",
+        "code_colored", "name", "site", "meter_type", "parent_meter", "supply_point",
         "reading_mode", "is_virtual", "unit_of_measure", "weight_unit_label",
     )
     list_select_related = ("site", "parent_meter", "supply_point")
@@ -1236,6 +1262,10 @@ class MeterAdmin(DuplicateModelAdminMixin, ModelAdmin):
     autocomplete_fields = ("parent_meter", "supply_point")
     actions = ["duplicate_selected", "assign_supply_point"]
     inlines = [MeterReadingInline]
+
+    @display(description="Kód", ordering="code")
+    def code_colored(self, obj):
+        return colored_by_meter_type(obj.code, obj.meter_type)
 
     @admin.action(description="Přiřadit vybraná měřidla k odběrnému místu…")
     def assign_supply_point(self, request, queryset):
@@ -2193,8 +2223,17 @@ class PeriodAdmin(ModelAdmin):
 class InvoiceClassColorAdmin(ModelAdmin):
     """Radky se seeduji migraci (jeden na kazdou Tridu) - pridavani/mazani
     tu nema smysl (Tridy jsou pevna sada), jen uprava barvy."""
-    list_display = ("invoice_class", "color_light", "color_dark")
+    list_display = (
+        "invoice_class", "color_light", "color_dark",
+        "text_color_light", "text_color_dark", "ukazka_textu",
+    )
     ordering = ("invoice_class",)
+
+    @display(description="Ukázka")
+    def ukazka_textu(self, obj):
+        """Nahled barvy textu primo v seznamu - stejnou CSS tridou, jakou
+        pouzivaji Měřidla/Odečty/Ceníky, takze se meni i s motivem."""
+        return colored_by_class(obj.get_invoice_class_display(), obj.invoice_class)
 
     def has_add_permission(self, request):
         return False
@@ -2204,7 +2243,9 @@ class InvoiceClassColorAdmin(ModelAdmin):
 
     def formfield_for_dbfield(self, db_field, request, **kwargs):
         formfield = super().formfield_for_dbfield(db_field, request, **kwargs)
-        if db_field.name in ("color_light", "color_dark"):
+        if db_field.name in (
+            "color_light", "color_dark", "text_color_light", "text_color_dark",
+        ):
             from unfold.widgets import UnfoldAdminColorInputWidget
             formfield.widget = UnfoldAdminColorInputWidget()
         return formfield
@@ -2299,11 +2340,16 @@ class InflationRateAdmin(ModelAdmin):
 
 @admin.register(SupplyPoint)
 class SupplyPointAdmin(ModelAdmin):
-    list_display = ("name", "code", "site", "meter_type", "main_meter", "legal_loss_pct", "member_count")
+    list_display = ("name_colored", "code", "site", "meter_type", "main_meter", "legal_loss_pct", "member_count")
     list_select_related = ("site", "main_meter")
     list_filter = ("site", "meter_type")
     search_fields = ("name", "code")
     autocomplete_fields = ("main_meter",)
+
+    @display(description="Název", ordering="name")
+    def name_colored(self, obj):
+        return colored_by_meter_type(obj.name, obj.meter_type)
+
     fieldsets = (
         (None, {
             "fields": (
@@ -2330,12 +2376,16 @@ class SupplyPointAdmin(ModelAdmin):
 
 @admin.register(MeterReading)
 class MeterReadingAdmin(DefaultToCurrentPeriodMixin, ModelAdmin):
-    list_display = ("meter", "period", "reading_date", "value", "reset_from_value")
+    list_display = ("meter_colored", "period", "reading_date", "value", "reset_from_value")
     list_select_related = ("meter", "period")
     list_filter = ("meter__site", "meter__meter_type", "period", _PeriodDefaultMarkerFilter)
     search_fields = ("meter__code", "meter__name")
     autocomplete_fields = ("meter",)
     ordering = ("meter__code", "-period")
+
+    @display(description="Měřidlo", ordering="meter__code")
+    def meter_colored(self, obj):
+        return colored_by_meter_type(str(obj.meter), obj.meter.meter_type)
 
 
 def _jednotka_polozky(item):
@@ -2529,11 +2579,15 @@ class AllocationKeyAdmin(ModelAdmin):
 
 @admin.register(PriceList)
 class PriceListAdmin(DefaultToCurrentPeriodMixin, ModelAdmin):
-    list_display = ("service_item", "period", "price_per_unit_display", "note")
+    list_display = ("service_item_colored", "period", "price_per_unit_display", "note")
     list_select_related = ("service_item", "service_item__site", "period")
     list_filter = ("period", "service_item__site", _PeriodDefaultMarkerFilter)
     autocomplete_fields = ("service_item",)
     search_fields = ("service_item__name",)
+
+    @display(description="Položka", ordering="service_item__name")
+    def service_item_colored(self, obj):
+        return colored_by_class(str(obj.service_item), obj.service_item.invoice_class)
 
     @admin.display(description="Cena za jednotku (Kč)", ordering="price_per_unit")
     def price_per_unit_display(self, obj):
@@ -2663,9 +2717,11 @@ class CostEntryAdmin(DefaultToCurrentPeriodMixin, ModelAdmin):
             "_trida_poradi", "service_item__site", "service_item__name", "-period__year", "-period__month"
         )
 
-    @admin.display(description="Třída")
+    @admin.display(description="Třída", ordering="service_item__invoice_class")
     def trida(self, obj):
-        return obj.service_item.get_invoice_class_display()
+        return colored_by_class(
+            obj.service_item.get_invoice_class_display(), obj.service_item.invoice_class
+        )
 
     @admin.display(description="Jednotka")
     def jednotka(self, obj):

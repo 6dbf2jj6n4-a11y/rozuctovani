@@ -6,6 +6,8 @@ from django.shortcuts import redirect
 from django.urls import include, path
 from django.views.static import serve as static_serve
 
+from core.views import class_colors_css
+
 
 @login_required
 def home(request):
@@ -34,6 +36,11 @@ def protected_media(request, path):
 
 urlpatterns = [
     path("", home, name="home"),
+    # Zamerne MIMO /admin/ - NonStaffAdminRedirectMiddleware presmerovava
+    # vsechny /admin/... adresy neprihlasenych na login, coz by u <link
+    # rel=stylesheet> znamenalo 302 misto CSS. Barvy tříd nejsou citlivy
+    # udaj, takze nemusi byt za prihlasenim.
+    path("barvy-trid.css", class_colors_css, name="class_colors_css"),
     path("admin/", admin.site.urls),
     path("api/", include("billing.api_urls")),
     path("accounts/", include("django.contrib.auth.urls")),

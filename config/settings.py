@@ -145,14 +145,17 @@ CSRF_TRUSTED_ORIGINS = [
 # Verze zobrazena v hlavicce adminu - zvysuje se o +1 po kazdem commitu
 # a pushi (dohoda s Danielem 2026-08-09), format RRRR.poradove_cislo,
 # napr. 2026.1 -> 2026.2 -> 2026.3...
-APP_VERSION = "2026.66"
+APP_VERSION = "2026.67"
 
 UNFOLD = {
     "SITE_TITLE": "RENTE)(",
     "SITE_HEADER": f"Rente )( {APP_VERSION}",
     "SITE_ICON": "core.admin_branding.site_icon",
     "SITE_SUBHEADER": "core.admin_branding.site_subheader",
-    "STYLES": ["core.admin_branding.inline_date_width_fix_css"],
+    "STYLES": [
+        "core.admin_branding.inline_date_width_fix_css",
+        "core.admin_branding.class_colors_css",
+    ],
     "SIDEBAR": {
         "show_search": True,
         "show_all_applications": False,

@@ -903,11 +903,45 @@ class InvoiceClassColor(models.Model):
         "Barva pozadí (tmavý motiv)", max_length=7, default="#1f2937",
         help_text="Formát #rrggbb.",
     )
+    # Barva TEXTU se pouziva v seznamech, kde by cele barevne pozadi radku
+    # bylo prilis (Měřidla, Odběrná místa, Odečty, Ceníky, Náklady) -
+    # obarvi se jen kod/nazev. Dve varianty, protoze jeden odstin necte
+    # dobre v obou motivech: na bilem pozadi je potreba tmavsi, na tmavem
+    # svetlejsi. Viz konverzace s Danielem 2026-08-16.
+    text_color_light = models.CharField(
+        "Barva textu (světlý motiv)", max_length=7, default="#374151",
+        help_text="Formát #rrggbb. Použije se v seznamech Měřidla, Odečty, Ceníky…",
+    )
+    text_color_dark = models.CharField(
+        "Barva textu (tmavý motiv)", max_length=7, default="#d1d5db",
+        help_text="Formát #rrggbb.",
+    )
 
     class Meta:
         verbose_name = "Barva třídy"
         verbose_name_plural = "Barvy tříd"
         ordering = ["invoice_class"]
+
+    # Typ meridla (Meter.MeterType) na Tridu (InvoiceClass) - barvy se
+    # drzi na jednom miste, i kdyz meridla maji vlastni sadu typu
+    # (navic "Plyn", chybi "Nájemné"). Plyn se veze s "Ostatní".
+    METER_TYPE_TO_CLASS = {
+        "electricity": "electricity",
+        "water": "water",
+        "heat": "heat",
+        "gas": "other",
+        "other": "other",
+    }
+
+    @classmethod
+    def css_class_for(cls, invoice_class):
+        """Nazev CSS tridy, kterou generuje core.views.class_colors_css."""
+        return f"rx-class-{invoice_class}" if invoice_class else ""
+
+    @classmethod
+    def css_class_for_meter_type(cls, meter_type):
+        mapped = cls.METER_TYPE_TO_CLASS.get(meter_type)
+        return cls.css_class_for(mapped) if mapped else ""
 
     def __str__(self):
         return self.get_invoice_class_display()

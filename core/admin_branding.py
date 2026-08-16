@@ -19,3 +19,9 @@ def inline_date_width_fix_css(request):
 def site_icon(request):
     from django.templatetags.static import static
     return static("core/img/logo.svg")
+
+
+def class_colors_css(request):
+    """Dynamicky CSS s barvami textu podle Tridy - viz core.views."""
+    from django.urls import reverse
+    return reverse("class_colors_css")
