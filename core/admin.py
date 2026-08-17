@@ -2107,13 +2107,19 @@ class PeriodAdmin(ModelAdmin):
             stale_price = []
 
             for item in ServicePoolItem.objects.select_related("site").all():
-                cost_entry = CostEntry.objects.filter(service_item=item, period=period).first()
-                if cost_entry is None:
+                item_costs = list(CostEntry.objects.filter(service_item=item, period=period))
+                if not item_costs:
                     if item.default_amount_czk is None:
                         missing_cost.append(item)
                     continue
 
-                if cost_entry.amount_czk is not None or cost_entry.amount_units is None:
+                # Cenik je potreba jen u faktur zadanych v jednotkach, ktere
+                # nemaji vlastni cenu primo na sobe.
+                if not any(
+                    ce.amount_czk is None and ce.amount_units is not None
+                    and ce.price_per_unit is None
+                    for ce in item_costs
+                ):
                     continue
 
                 price_entry = (
@@ -2222,6 +2228,8 @@ class PeriodAdmin(ModelAdmin):
             for item in ServicePoolItem.objects.all():
                 if item.default_amount_czk is not None:
                     continue
+                # Uz aspon jednu fakturu ma - dalsi (od jineho dodavatele) si
+                # Daniel prida sam, generovat prazdne stuby by je jen mnozilo.
                 if CostEntry.objects.filter(service_item=item, period=period).exists():
                     continue
                 CostEntry.objects.create(service_item=item, period=period, note=CostEntry.NOTE_K_DOPLNENI)
@@ -2793,8 +2801,8 @@ class CostEntryAdmin(DefaultToCurrentPeriodMixin, ModelAdmin):
     (napr. kvuli kontrolnim polim). Poznamka se v seznamu nezobrazuje
     (jen ve formulari zaznamu) - viz konverzace s Danielem."""
     list_display = (
-        "trida", "service_item", "period", "amount_units", "amount_czk", "jednotka", "kc_za_jednotku",
-        "amount_czk_display",
+        "trida", "service_item", "supplier", "period", "amount_units", "amount_czk",
+        "jednotka", "kc_za_jednotku", "amount_czk_display",
     )
     list_select_related = ("service_item", "service_item__meter", "service_item__site", "period")
     list_display_links = ("service_item",)
@@ -2900,7 +2908,9 @@ class CostEntryAdmin(DefaultToCurrentPeriodMixin, ModelAdmin):
 
     @admin.display(description="Jednotka")
     def jednotka(self, obj):
-        return _jednotka_polozky(obj.service_item)
+        # Jednotka zadana primo na nakladu ma prednost - u polozky s vic
+        # fakturami se muzou lisit (pelety v kg vs elektrokotel v kWh).
+        return obj.unit_of_measure or _jednotka_polozky(obj.service_item)
 
     @admin.display(description="Kč/jednotka")
     def kc_za_jednotku(self, obj):
