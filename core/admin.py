@@ -2861,9 +2861,16 @@ class CostEntryAdmin(DefaultToCurrentPeriodMixin, ModelAdmin):
         formfield = super().formfield_for_dbfield(db_field, request, **kwargs)
         if db_field.name in ("amount_units", "amount_czk"):
             from unfold.widgets import INPUT_CLASSES, UnfoldAdminTextInputWidget
-            attrs = {"class": " ".join([*INPUT_CLASSES, "text-right"]), "inputmode": "decimal"}
+            classes = [*INPUT_CLASSES, "text-right"]
+            attrs = {"class": " ".join(classes), "inputmode": "decimal"}
             if db_field.name == "amount_czk":
+                # "suffix" (na rozdil od "suffix_icon") sam o sobe
+                # nerezervuje misto - napravo je jen absolutne
+                # umisteny popisek "Kč" prekryvajici se s pravo
+                # zarovnanym textem pole. pr-9 (stejna hodnota, jakou
+                # by pouzil Unfold sam pro suffix_icon) mu udela misto.
                 attrs["suffix"] = "Kč"
+                attrs["class"] += " pr-9"
             formfield.widget = UnfoldAdminTextInputWidget(attrs=attrs)
             formfield.localize = True
         return formfield
