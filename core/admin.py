@@ -1660,18 +1660,22 @@ class MeterAdmin(DuplicateModelAdminMixin, ModelAdmin):
                     # pripocita 4 %), takze realne = faktura / (1 + %/100),
                     # ne faktura x (1 - %/100). Viz oprava Daniel 2026-08-12
                     # (7436 kWh se 4 % => 7436/1,04 = 7150, ne 0,96x7436).
+                    # Dve RUZNE ztraty, ktere se nesmi michat dohromady
+                    # (Daniel 2026-08-16):
+                    #  - ZAKONNA ztrata (4 %, jen odbery TEDOM): dodavatel ji
+                    #    uctuje vzdy, neni to zadny strop ani rezerva. Vzdy
+                    #    kladna.
+                    #  - ZTRATA MERENI: rozdil mezi tim, co po odectu zakonne
+                    #    ztraty realne doslo, a tim, co nametrily nase podmery.
+                    #    Muze vyjit i ZAPORNE (namerili jsme vic) - typicky
+                    #    casovym posunem mezi nasim odectem a odectem
+                    #    dodavatele; priste to vyjde opacne. Zaporna hodnota
+                    #    jde ve prospech klientu a NENI chyba, proto se
+                    #    zobrazuje se svym skutecnym znamenkem, ne prebarvena
+                    #    na "vejde se do rezervy" (to drivejsi zneni rozpor
+                    #    jen zamaskovalo).
                     zakonne = realne = vahou = skutecne = None
-                    # Realne ztraty se merí vuci FAKTUROVANEMU mnozstvi, ne
-                    # vuci "realne dodanemu" - je to ta cast dodavky, kterou
-                    # nezachytil ani podmer najemnika, ani merena spolecna
-                    # (= zakonna rezerva + skutecne ztraty dohromady). Vnitrni
-                    # "skutecne" muze vyjit zaporne (namerene je vyssi nez
-                    # dodano po odectu 4 % rezervy), coz samo o sobe vypada
-                    # jako chyba, i kdyz je to v poradku - proto se stav
-                    # posuzuje az tímto souhrnnym radkem: X kWh / Y %, a jestli
-                    # se to vejde do zakonne rezervy. Viz Daniel 2026-08-15.
-                    realne_ztraty = realne_ztraty_pct = None
-                    ztraty_ok = None
+                    skutecne_pct = None
                     if dodano is not None:
                         pct = sp.legal_loss_pct or Decimal("0")
                         realne = dodano / (Decimal("1") + pct / Decimal("100"))
@@ -1679,19 +1683,14 @@ class MeterAdmin(DuplicateModelAdminMixin, ModelAdmin):
                         vahou = realne - podmery
                         skutecne = vahou - spolecne
                         total_dodano = (total_dodano or Decimal("0")) + dodano
-                        realne_ztraty = dodano - podmery - spolecne
-                        if dodano:
-                            realne_ztraty_pct = realne_ztraty / dodano * Decimal("100")
-                            if pct:
-                                ztraty_ok = realne_ztraty_pct <= pct
+                        if realne:
+                            skutecne_pct = skutecne / realne * Decimal("100")
 
                     supply_blocks.append({
                         "supply": sp, "dodano": dodano, "zakonne": zakonne,
                         "realne": realne, "podmery": podmery, "spolecne": spolecne,
                         "vahou": vahou, "skutecne": skutecne,
-                        "realne_ztraty": realne_ztraty,
-                        "realne_ztraty_pct": realne_ztraty_pct,
-                        "ztraty_ok": ztraty_ok,
+                        "skutecne_pct": skutecne_pct,
                         "namereno": namereno, "pct": sp.legal_loss_pct,
                         "rows": bucket_rows, "main_meter": sp.main_meter,
                         "main_leaves": main_leaves,

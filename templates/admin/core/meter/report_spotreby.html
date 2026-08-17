@@ -6,10 +6,11 @@
         Spotřeba měřidel za období, členěná podle <strong>odběrných míst (EAN)</strong>. U každého odběru:
         <strong>Dodáno</strong> (přívodní měřidlo / faktura) − <strong>zákonná ztráta %</strong> = <strong>reálně dodané</strong>;
         z toho jdou <strong>podměry</strong> nájemníkům a zbytek se <strong>rozpočítá vahou</strong> (z něj je část
-        <strong>měřená společná</strong> = E_SPOL a zbytek <strong>neměřené</strong>).
-        Poslední řádek <strong>Reálné ztráty</strong> je souhrn vůči faktuře (dodáno − podměry − měřená společná),
-        tedy zákonná rezerva i skutečné ztráty dohromady — u odběru se zákonnou ztrátou se rovnou vyhodnotí,
-        jestli se vejdou do rezervy.
+        <strong>měřená společná</strong> = E_SPOL a zbytek je <strong>ztráta měření</strong>).
+        Pozor, jde o dvě různé věci: <strong>zákonná ztráta</strong> (4 %, jen odběry TEDOM) je vždy kladná,
+        dodavatel ji účtuje pokaždé; <strong>ztráta měření</strong> je rozdíl mezi tím, co reálně došlo, a tím,
+        co naměřila naše měřidla — může vyjít i <strong>záporně</strong> (naměřili jsme víc, typicky posunem
+        odečtů oproti dodavateli), a to jde ve prospěch klientů. V dalším období bývá odchylka opačná.
         Virtuální měřidla jsou šedě. Vše je proklik na kartu měřidla.
     </p>
 
@@ -105,29 +106,22 @@
                                 <td style="padding:1px 8px 1px 40px; text-align:right;">z toho měřená společná (E_SPOL)</td>
                                 <td style="padding:1px 8px; text-align:right;">{{ block.spolecne|floatformat:3 }} {{ group.unit }}</td>
                             </tr>
-                            <tr style="color:#888; font-size:12px;">
-                                <td style="padding:1px 8px 1px 40px; text-align:right;">z toho neměřené (dopočet)</td>
-                                <td style="padding:1px 8px; text-align:right;">{{ block.skutecne|floatformat:3 }} {{ group.unit }}</td>
+                            {# Ztrata mereni - se svym skutecnym znamenkem. Zaporna =
+                               namerili jsme vic nez dodavatel fakturoval, typicky
+                               posunem odectu; jde ve prospech klientu. #}
+                            <tr style="font-size:12px;{% if block.skutecne < 0 %} color:#3a3;{% else %} color:#888;{% endif %}">
+                                <td style="padding:1px 8px 8px 40px; text-align:right;">
+                                    z toho ztráta měření <span style="opacity:.75;">(rozdíl vůči dodavateli)</span>
+                                    {% if block.skutecne < 0 %} – naměřeno víc, ve prospěch klientů{% endif %}
+                                </td>
+                                <td style="padding:1px 8px 8px; text-align:right;">
+                                    {{ block.skutecne|floatformat:3 }} {{ group.unit }}{% if block.skutecne_pct != None %} <span style="opacity:.75;">· {{ block.skutecne_pct|floatformat:1 }} %</span>{% endif %}
+                                </td>
                             </tr>
                         {% else %}
                             <tr style="color:#888; font-size:12px;">
-                                <td style="padding:1px 8px; text-align:right;">z toho měřená společná (E_SPOL)</td>
-                                <td style="padding:1px 8px; text-align:right;">{{ block.spolecne|floatformat:3 }} {{ group.unit }}</td>
-                            </tr>
-                        {% endif %}
-
-                        {# ---- verdikt: realne ztraty vuci fakture ---- #}
-                        {% if block.realne_ztraty != None %}
-                            <tr style="font-size:12px;{% if block.ztraty_ok %} color:#3a3;{% elif block.ztraty_ok == False %} color:#c33;{% else %} color:#888;{% endif %}">
-                                <td style="padding:4px 8px 8px; text-align:right; font-weight:600;">
-                                    Reálné ztráty <span style="font-weight:400;">(dodáno − podměry − měřená společná)</span>
-                                    {% if block.ztraty_ok %} – v rámci {{ block.pct|floatformat:0 }}% zákonné rezervy ✅
-                                    {% elif block.ztraty_ok == False %} – NAD {{ block.pct|floatformat:0 }}% zákonnou rezervu ⚠️
-                                    {% endif %}
-                                </td>
-                                <td style="padding:4px 8px 8px; text-align:right; font-weight:600;">
-                                    {{ block.realne_ztraty|floatformat:3 }} {{ group.unit }}{% if block.realne_ztraty_pct != None %} <span style="font-weight:400;">· {{ block.realne_ztraty_pct|floatformat:1 }} %</span>{% endif %}
-                                </td>
+                                <td style="padding:1px 8px 8px; text-align:right;">z toho měřená společná (E_SPOL)</td>
+                                <td style="padding:1px 8px 8px; text-align:right;">{{ block.spolecne|floatformat:3 }} {{ group.unit }}</td>
                             </tr>
                         {% endif %}
                     {% endfor %}
