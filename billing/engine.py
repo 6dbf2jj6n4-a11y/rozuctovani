@@ -548,10 +548,13 @@ def calculate_period(period, site=None):
         # dotazu na CostEntry pro kazdou polozku zvlast, ~90 dotazu jen
         # na tohle) - viz konverzace s Danielem, vypocet za obdobi byl
         # strasne pomaly.
-        cost_entries_by_item = {
-            ce.service_item_id: ce
-            for ce in CostEntry.objects.filter(period=period)
-        }
+        # Polozka muze mit vic faktur od ruznych dodavatelu (elektrina FM =
+        # TEDOM + SZYPKA, teplo NJ = pelety + zalozni elektrokotel), proto
+        # SEZNAM, ne jeden zaznam - rozuctuje se jejich soucet, viz
+        # CostEntry.totals_for.
+        cost_entries_by_item = {}
+        for ce in CostEntry.objects.filter(period=period):
+            cost_entries_by_item.setdefault(ce.service_item_id, []).append(ce)
 
         # Sdileny cache pro _meter_provides_consumption napric CELYM
         # vypoctem obdobi (vsechny polozky) - viz docstring te funkce.
@@ -586,10 +589,14 @@ def calculate_period(period, site=None):
             price_cache.setdefault(pl.service_item_id, []).append(pl)
 
         for service_item in service_items:
-            cost_entry = cost_entries_by_item.get(service_item.id)
+            item_costs = cost_entries_by_item.get(service_item.id) or []
+            cost_entry = item_costs[0] if item_costs else None
+            cost_totals = CostEntry.totals_for(
+                service_item, period, price_cache=price_cache, entries=item_costs,
+            )
             cost_source = None
-            if cost_entry is not None:
-                total_cost = cost_entry.get_amount_czk(period, price_cache=price_cache)
+            if item_costs:
+                total_cost = cost_totals["czk"]
                 if total_cost is None:
                     warnings.append(
                         f"{service_item} / {period}: náklad je zadaný v jednotkách, ale chybí "
@@ -740,8 +747,7 @@ def calculate_period(period, site=None):
                     # surcharge_split.
                     split = surcharge_split(
                         share, units, remaining_cost,
-                        cost_entry.amount_units if cost_entry is not None else None,
-                        total_consumption,
+                        cost_totals["units"], total_consumption,
                     )
 
                 to_create.append(BillingLine(

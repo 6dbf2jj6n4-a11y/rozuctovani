@@ -1177,18 +1177,87 @@ class CostEntry(models.Model):
         null=True, blank=True,
         help_text="Pro neměřené služby: přímá fakturovaná částka v Kč.",
     )
+    supplier = models.CharField(
+        "Dodavatel / zdroj", max_length=100, blank=True,
+        help_text=(
+            "Vyplň jen když má položka za období VÍC faktur od různých "
+            "dodavatelů (např. elektřina FM: TEDOM EAN 240 + SZYPKA EAN, "
+            "nebo teplo NJ: pelety + záložní elektrokotel). Náklady se "
+            "sečtou a rozúčtují jako jeden celek."
+        ),
+    )
+    price_per_unit = models.DecimalField(
+        "Cena za jednotku (Kč)", max_digits=12, decimal_places=4,
+        null=True, blank=True,
+        help_text=(
+            "Přebíjí Ceník. Vyplň, když má tenhle dodavatel jinou cenu než "
+            "ostatní - jinak nech prázdné a cena se vezme z Ceníku."
+        ),
+    )
+    unit_of_measure = models.CharField(
+        "Jednotka", max_length=20, blank=True,
+        help_text=(
+            "kWh, m³, GJ, kg… Použije se jen k rozlišení, jestli jdou "
+            "množství z více faktur sečíst. Když se jednotky liší (pelety "
+            "v kg vs elektrokotel v kWh), rozúčtuje se pouze v Kč a "
+            "množství se nikde neukazuje."
+        ),
+    )
     note = models.CharField("Poznámka", max_length=300, blank=True)
 
     class Meta:
         verbose_name = "Náklad za období"
         verbose_name_plural = "Náklady za období"
-        unique_together = ("service_item", "period")
         ordering = ["-period", "service_item"]
 
     def __str__(self):
+        popis = f" ({self.supplier})" if self.supplier else ""
         if self.amount_units is not None:
-            return f"{self.service_item} – {self.period}: {self.amount_units} j"
-        return f"{self.service_item} – {self.period}: {self.amount_czk} Kč"
+            return f"{self.service_item} – {self.period}{popis}: {self.amount_units} j"
+        return f"{self.service_item} – {self.period}{popis}: {self.amount_czk} Kč"
+
+    @classmethod
+    def totals_for(cls, service_item, period, price_cache=None, entries=None):
+        """Souhrn VSECH nakladu polozky za obdobi - jedno misto pravdy pro
+        engine, sestavy i kontroly.
+
+        Polozka muze mit vic faktur od ruznych dodavatelu (elektrina FM =
+        TEDOM + SZYPKA, teplo NJ = pelety + zalozni elektrokotel). Rozuctuje
+        se jejich SOUCET jako jeden celek - fyzicky jde o jednu dodavku do
+        stejne site, jen fakturovanou nadvakrat.
+
+        Vraci dict:
+          czk    - soucet castek (None, kdyz zadnou nelze urcit)
+          units  - soucet mnozstvi, ale JEN kdyz maji vsechny faktury
+                   stejnou jednotku; pri ruznych jednotkach None, protoze
+                   kg pelet a kWh elektriny secist nejde (Daniel 2026-08-16:
+                   "budeme resit pouze rozuctovani v Kc, nebudeme ukazovat
+                   primo jednotky")
+          unit   - ta spolecna jednotka, nebo ""
+          count  - kolik faktur se seclo
+
+        `entries`: uz nactene naklady (aby se nedotazovalo znovu v cyklu).
+        """
+        if entries is None:
+            entries = list(cls.objects.filter(service_item=service_item, period=period))
+        if not entries:
+            return {"czk": None, "units": None, "unit": "", "count": 0}
+
+        czk = None
+        for ce in entries:
+            castka = ce.get_amount_czk(period, price_cache=price_cache)
+            if castka is not None:
+                czk = (czk or Decimal("0")) + castka
+
+        jednotky = {(ce.unit_of_measure or "").strip() for ce in entries}
+        units = None
+        if len(jednotky) == 1 and all(ce.amount_units is not None for ce in entries):
+            units = sum((ce.amount_units for ce in entries), Decimal("0"))
+        return {
+            "czk": czk, "units": units,
+            "unit": jednotky.pop() if len(jednotky) == 1 else "",
+            "count": len(entries),
+        }
 
     _tracked_fields = ("period_id", "amount_units", "amount_czk", "note")
 
@@ -1249,6 +1318,11 @@ class CostEntry(models.Model):
         if self.amount_czk is not None:
             return self.amount_czk
         if self.amount_units is not None:
+            # Cena primo na nakladu ma prednost pred Cenikem - dodavatele
+            # jedne polozky mivaji ruzne ceny (elektrina FM: TEDOM vs
+            # SZYPKA), takze jedna cena v Ceniku by nestacila.
+            if self.price_per_unit is not None:
+                return self.amount_units * self.price_per_unit
             p = period or self.period
             price = PriceList.get_price_for_period(self.service_item, p, price_cache=price_cache)
             if price:

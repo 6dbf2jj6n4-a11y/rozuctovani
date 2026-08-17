@@ -42,7 +42,11 @@ def get_item_summary_rows(period, site=None, with_meters=False):
     # samostatne PRO KAZDOU POLOZKU zvlast - u vetsiho poctu polozek to
     # delalo desitky az stovky dotazu navic a stranka se nacitala i
     # kolem minuty. Viz konverzace s Danielem.
-    cost_entries_by_item = {ce.service_item_id: ce for ce in CostEntry.objects.filter(period=period)}
+    # Polozka muze mit vic faktur od ruznych dodavatelu - rozuctuje se
+    # jejich soucet, viz CostEntry.totals_for.
+    cost_entries_by_item = {}
+    for ce in CostEntry.objects.filter(period=period):
+        cost_entries_by_item.setdefault(ce.service_item_id, []).append(ce)
     lines_by_item = {}
     for line in BillingLine.objects.filter(period=period):
         lines_by_item.setdefault(line.service_item_id, []).append(line)
@@ -63,9 +67,12 @@ def get_item_summary_rows(period, site=None, with_meters=False):
 
     rows = []
     for item in items:
-        cost_entry = cost_entries_by_item.get(item.id)
-        if cost_entry is not None:
-            naklad = cost_entry.get_amount_czk(period, price_cache=price_cache)
+        item_costs = cost_entries_by_item.get(item.id) or []
+        cost_totals = CostEntry.totals_for(
+            item, period, price_cache=price_cache, entries=item_costs,
+        )
+        if item_costs:
+            naklad = cost_totals["czk"]
             naklad_zdroj = "naklad_za_obdobi" if naklad is not None else "chybi_cenik"
         elif item.default_amount_czk is not None:
             naklad = item.default_amount_czk
@@ -86,7 +93,9 @@ def get_item_summary_rows(period, site=None, with_meters=False):
         # Jednotky - fakturovano dodavatelem vs. co nascitala nase
         # podruzna meridla (stejny princip jako billing/key_detail.py
         # item_losses, tady jen na urovni cele polozky za obdobi).
-        reported_units = cost_entry.amount_units if cost_entry else None
+        # Jen kdyz jdou mnozstvi z jednotlivych faktur secist (stejna
+        # jednotka) - pelety v kg a elektrokotel v kWh secist nejde.
+        reported_units = cost_totals["units"]
         measured_units = None
         unit_of_measure = item.meter.unit_of_measure if item.meter else ""
         meter_breakdown = [] if with_meters else None
@@ -160,10 +169,9 @@ def get_naklad_by_class(periods, site=None):
         items = [i for i in items if i.site_id == site.id]
 
     period_ids = [p.id for p in periods]
-    cost_entries = {
-        (ce.service_item_id, ce.period_id): ce
-        for ce in CostEntry.objects.filter(period_id__in=period_ids)
-    }
+    cost_entries = {}
+    for ce in CostEntry.objects.filter(period_id__in=period_ids):
+        cost_entries.setdefault((ce.service_item_id, ce.period_id), []).append(ce)
 
     # Cenikove zaznamy relevantnich polozek nactene JEDNOU - "posledni
     # platny k datu" se pak resolvuje rucne v Pythonu (bez dalsich
@@ -188,15 +196,19 @@ def get_naklad_by_class(periods, site=None):
     for period in periods:
         totals = {code: Decimal("0") for code in class_codes}
         for item in items:
-            cost_entry = cost_entries.get((item.id, period.id))
-            if cost_entry is not None:
-                if cost_entry.amount_czk is not None:
-                    naklad = cost_entry.amount_czk
-                elif cost_entry.amount_units is not None:
-                    price = _price_for(item.id, period)
-                    naklad = cost_entry.amount_units * price if price else None
-                else:
-                    naklad = None
+            item_costs = cost_entries.get((item.id, period.id)) or []
+            if item_costs:
+                naklad = None
+                for ce in item_costs:
+                    if ce.amount_czk is not None:
+                        castka = ce.amount_czk
+                    elif ce.amount_units is not None:
+                        cena = ce.price_per_unit or _price_for(item.id, period)
+                        castka = ce.amount_units * cena if cena else None
+                    else:
+                        castka = None
+                    if castka is not None:
+                        naklad = (naklad or Decimal("0")) + castka
             elif item.default_amount_czk is not None:
                 naklad = item.default_amount_czk
             else:

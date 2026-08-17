@@ -93,12 +93,11 @@ def get_key_rows_for_client(client, period):
         # prehled ztrat (nize), tak pro rozpad castky na vlastni spotrebu
         # a priplatek za spolecne/ztraty (viz surcharge_split). Cachuje se
         # po polozce, aby se stejny dotaz neopakoval za kazdou kartu.
-        if si.id in cost_entries_by_item:
-            cost_entry = cost_entries_by_item[si.id]
-        else:
-            cost_entry = CostEntry.objects.filter(service_item=si, period=period).first()
-            cost_entries_by_item[si.id] = cost_entry
-        reported_units = cost_entry.amount_units if cost_entry else None
+        if si.id not in cost_entries_by_item:
+            cost_entries_by_item[si.id] = CostEntry.totals_for(si, period)
+        # Jen kdyz jdou mnozstvi z jednotlivych faktur secist (stejna
+        # jednotka) - polozka jich muze mit vic od ruznych dodavatelu.
+        reported_units = cost_entries_by_item[si.id]["units"]
 
         if (
             not si.meter and has_meter_keys and total_consumption is not None

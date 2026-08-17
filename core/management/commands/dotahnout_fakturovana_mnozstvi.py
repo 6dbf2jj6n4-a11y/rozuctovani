@@ -40,9 +40,20 @@ def dotahnout(period, write=False):
     )
     for sp in supplies:
         radek = {"supply": sp, "meter": sp.main_meter, "item": sp.cost_item}
-        cost = CostEntry.objects.filter(service_item=sp.cost_item, period=period).first()
-        if cost is None or cost.amount_units is None:
+        # Polozka muze mit vic faktur od ruznych dodavatelu - do privodniho
+        # meridla patri jejich SOUCET, ale jen kdyz jdou secist (stejna
+        # jednotka). Pri ruznych jednotkach (pelety v kg vs elektrokotel
+        # v kWh) neni co zapsat.
+        totals = CostEntry.totals_for(sp.cost_item, period)
+        if totals["count"] == 0:
             radek["stav"] = "bez fakturovaného množství"
+            vysledek.append(radek)
+            continue
+        if totals["units"] is None:
+            radek["stav"] = (
+                f"{totals['count']}× faktura s různými jednotkami - množství nelze sečíst"
+                if totals["count"] > 1 else "bez fakturovaného množství"
+            )
             vysledek.append(radek)
             continue
 
@@ -52,9 +63,10 @@ def dotahnout(period, write=False):
         # pri prvnim ostrem spusteni srazil T_FM_CELKEM z 1666,667 na 6, cimz se
         # spotreba propadla na 0,0216 GJ. Viz 2026-08-16.
         koef = sp.main_meter.coefficient or Decimal("1")
-        hodnota = (cost.amount_units / koef).quantize(Decimal("0.001")) if koef != 1 else cost.amount_units
+        fakturovano = totals["units"]
+        hodnota = (fakturovano / koef).quantize(Decimal("0.001")) if koef != 1 else fakturovano
         radek["hodnota"] = hodnota
-        radek["fakturovano"] = cost.amount_units
+        radek["fakturovano"] = fakturovano
         radek["koeficient"] = koef
 
         stavajici = MeterReading.objects.filter(meter=sp.main_meter, period=period).first()
