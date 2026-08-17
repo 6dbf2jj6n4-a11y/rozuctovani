@@ -761,6 +761,19 @@ class SupplyPoint(models.Model):
             "(např. EAN 668, kde čteme vlastní měřidla)."
         ),
     )
+    cost_item = models.ForeignKey(
+        "ServicePoolItem", null=True, blank=True, on_delete=models.SET_NULL,
+        related_name="supplies_as_cost_source", verbose_name="Náklad, ze kterého brát fakturované množství",
+        help_text=(
+            "Položka zásobníku, jejíž Fakturované množství se má přepisovat "
+            "do Přívodního měřidla (akce „Dotáhnout fakturovaná množství“ "
+            "u Období). Nastav jen u odběrů, kde se dodané množství bere "
+            "z faktury, ne z vlastního měřidla - jinak nech prázdné. "
+            "Hádat to podle areálu a třídy nejde: teplo NJ má dvě položky "
+            "(pelety a záložní elektrokotel) a u vody by se do toho připletly "
+            "srážkové vody, které v jednotkách nesou m² plochy, ne m³."
+        ),
+    )
     note = models.CharField("Poznámka", max_length=300, blank=True)
 
     class Meta:

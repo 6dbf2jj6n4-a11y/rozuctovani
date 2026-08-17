@@ -1832,6 +1832,7 @@ class PeriodAdmin(ModelAdmin):
     ordering = ("-year", "-month")
     actions = [
         "spocitat_rozuctovani", "zkontrolovat_co_zadat", "vygenerovat_chybejici_naklady",
+        "dotahnout_fakturovana_mnozstvi",
         "nastavit_jako_aktualni", "uzavrit_obdobi", "znovu_otevrit_obdobi",
     ]
     # Tlacitko "Generovat pro celý rok" nad tabulkou - puvodne zkoušeno
@@ -2162,6 +2163,44 @@ class PeriodAdmin(ModelAdmin):
                     request, f"{label}: vše zadané, nic nechybí.", level=messages.SUCCESS
                 )
 
+    @admin.action(description="Dotáhnout fakturovaná množství do přívodních měřidel")
+    def dotahnout_fakturovana_mnozstvi(self, request, queryset):
+        """Prepise Fakturovane mnozstvi z Nakladu do Privodnich meridel
+        odbernych mist, aby se "dodáno" v reportu Spotřeby měřidel
+        nemuselo zadavat dvakrat. Bere jen z polozky, kterou ma odberne
+        misto vyslovene nastavenou (SupplyPoint.cost_item) - hadat ji
+        podle arealu a tridy nejde, viz help_text toho pole. Sdili logiku
+        s prikazem dotahnout_fakturovana_mnozstvi. Viz konverzace
+        s Danielem 2026-08-16."""
+        from core.management.commands.dotahnout_fakturovana_mnozstvi import dotahnout
+
+        for period in queryset:
+            radky = dotahnout(period, write=True)
+            if not radky:
+                self.message_user(
+                    request,
+                    f"{period}: žádné odběrné místo nemá vyplněný „Náklad, ze kterého "
+                    f"brát fakturované množství“.",
+                    messages.WARNING,
+                )
+                continue
+            zapsano = [r for r in radky if r["stav"].startswith(("zapsat", "přepsat"))]
+            preskoceno = [r for r in radky if not r["stav"].startswith(("zapsat", "přepsat", "sedí"))]
+            if zapsano:
+                self.message_user(
+                    request,
+                    f"{period}: doplněno " + ", ".join(
+                        f"{r['meter'].code} = {r['hodnota']}" for r in zapsano
+                    ),
+                    messages.SUCCESS,
+                )
+            else:
+                self.message_user(request, f"{period}: nebylo co doplnit.", messages.INFO)
+            for r in preskoceno:
+                self.message_user(
+                    request, f"{period}: {r['meter'].code} - {r['stav']}", messages.WARNING
+                )
+
     @admin.action(description="Vygenerovat chybějící Náklady za období (prázdné, k doplnění)")
     def vygenerovat_chybejici_naklady(self, request, queryset):
         """Pro vybrana Obdobi vytvori PRAZDNY CostEntry (bez amount_units
@@ -2343,7 +2382,7 @@ class SupplyPointAdmin(ModelAdmin):
     list_select_related = ("site", "main_meter")
     list_filter = ("site", "meter_type")
     search_fields = ("name", "code")
-    autocomplete_fields = ("main_meter",)
+    autocomplete_fields = ("main_meter", "cost_item")
 
     @display(description="Název", ordering="name")
     def name_colored(self, obj):
@@ -2355,6 +2394,7 @@ class SupplyPointAdmin(ModelAdmin):
                 ("site", "meter_type"),
                 ("name", "code"),
                 "main_meter",
+                "cost_item",
                 "legal_loss_pct",
                 "note",
             ),
