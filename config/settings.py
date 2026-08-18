@@ -155,7 +155,7 @@ CSRF_TRUSTED_ORIGINS = [
 # 2027.0), i kdyby se nekdo zapomnel APP_VERSION_YEAR rucne prepsat -
 # dohoda s Danielem 2026-08-15.
 APP_VERSION_YEAR = 2026
-APP_VERSION_SEQUENCE = 99
+APP_VERSION_SEQUENCE = 100
 APP_VERSION = (
     f"{APP_VERSION_YEAR}.{APP_VERSION_SEQUENCE}"
     if date.today().year == APP_VERSION_YEAR
@@ -360,6 +360,11 @@ UNFOLD = {
                         "title": _("Třídy (barvy a paušály)"),
                         "icon": "palette",
                         "link": reverse_lazy("admin:core_invoiceclasscolor_changelist"),
+                    },
+                    {
+                        "title": _("Typy měřidel"),
+                        "icon": "speed",
+                        "link": reverse_lazy("admin:core_metertypeconfig_changelist"),
                     },
                 ],
             },

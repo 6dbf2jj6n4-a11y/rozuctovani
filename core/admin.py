@@ -18,7 +18,8 @@ from .admin_mixins import ModelAdmin, TabularInline
 from .models import (
     Client, ClientCard, Contract, Site, Unit, CardUnit,
     Meter, MeterReading, Period, InflationRate, SupplyPoint, InvoiceClassColor,
-    ServicePoolItem, AllocationKey, PriceList, CostEntry, BillingLine, UnitService
+    ServicePoolItem, AllocationKey, PriceList, CostEntry, BillingLine, UnitService,
+    MeterTypeConfig
 )
 
 
@@ -69,6 +70,23 @@ def colored_by_meter_type(text, meter_type):
     """Obarvi podle typu meridla (Meter.MeterType) - mapuje se na Tridu,
     aby byly barvy na jednom miste (viz InvoiceClassColor)."""
     return colored_text(text, InvoiceClassColor.css_class_for_meter_type(meter_type))
+
+
+def meter_type_choice_field(db_field):
+    """Formfield pro Meter.meter_type / SupplyPoint.meter_type - pole uz
+    nema choices= (viz MeterTypeConfig, Nastavení -> Typy měřidel), takze
+    volby pro select se musi sestavit rucne z aktualnich radku v DB."""
+    from django import forms
+    from unfold.widgets import UnfoldAdminSelectWidget
+
+    choices = list(MeterTypeConfig.objects.order_by("sort_order").values_list("code", "label"))
+    if db_field.blank:
+        choices = [("", "---------")] + choices
+    return forms.ChoiceField(
+        choices=choices, required=not db_field.blank,
+        label=db_field.verbose_name.capitalize() if db_field.verbose_name else None,
+        help_text=db_field.help_text, widget=UnfoldAdminSelectWidget(choices=choices),
+    )
 
 
 class DefaultToCurrentPeriodMixin:
@@ -1293,6 +1311,11 @@ class MeterAdmin(DuplicateModelAdminMixin, ModelAdmin):
     actions = ["duplicate_selected", "assign_supply_point"]
     inlines = [MeterReadingInline]
 
+    def formfield_for_dbfield(self, db_field, request, **kwargs):
+        if db_field.name == "meter_type":
+            return meter_type_choice_field(db_field)
+        return super().formfield_for_dbfield(db_field, request, **kwargs)
+
     @display(description="Kód", ordering="code")
     def code_colored(self, obj):
         return colored_by_meter_type(obj.code, obj.meter_type)
@@ -1643,7 +1666,8 @@ class MeterAdmin(DuplicateModelAdminMixin, ModelAdmin):
                 else:
                     unassigned_by_type.setdefault(m.meter_type, []).append(m)
 
-            for type_code, type_label in Meter.MeterType.choices:
+            unit_defaults = MeterTypeConfig.default_unit_map()
+            for type_code, type_label in MeterTypeConfig.objects.order_by("sort_order").values_list("code", "label"):
                 type_supplies = supplies_by_type.get(type_code, [])
                 type_unassigned = unassigned_by_type.get(type_code, [])
                 if not type_supplies and not type_unassigned:
@@ -1750,7 +1774,7 @@ class MeterAdmin(DuplicateModelAdminMixin, ModelAdmin):
                 type_unit = next(
                     (m.unit_of_measure for m in meters
                      if m.meter_type == type_code and m.unit_of_measure),
-                    {"electricity": "kWh", "heat": "GJ", "water": "m³", "gas": "m³"}.get(type_code, ""),
+                    unit_defaults.get(type_code, ""),
                 )
                 groups.append({
                     "label": type_label,
@@ -2340,6 +2364,48 @@ class InvoiceClassColorAdmin(ModelAdmin):
         return formfield
 
 
+@admin.register(MeterTypeConfig)
+class MeterTypeConfigAdmin(ModelAdmin):
+    """Samoobsluzny seznam Typu meridla (Nastavení -> Typy měřidel) - na
+    rozdil od InvoiceClassColor (Tridy - viz vyse) tu jde radky pridavat
+    i mazat, protoze typ meridla nema zadne napevno zapsane admin sekce
+    zavisle na konkretnim kodu. Mazani/hromadne mazani je presto
+    blokovane, pokud typ jeste pouziva nejake Meridlo nebo Odberne misto
+    (jinak by na nich osirel neplatny kod). Viz konverzace s Danielem
+    2026-08-18 (filtr "Plyn" bez pouziti v datech)."""
+    list_display = ("code", "label", "default_unit_of_measure", "invoice_class", "sort_order", "pocet_pouziti")
+    list_editable = ("label", "default_unit_of_measure", "invoice_class", "sort_order")
+    ordering = ("sort_order", "code")
+    actions = None
+
+    @display(description="Použito u")
+    def pocet_pouziti(self, obj):
+        pocet_meridel = Meter.objects.filter(meter_type=obj.code).count()
+        pocet_odberu = SupplyPoint.objects.filter(meter_type=obj.code).count()
+        casti = []
+        if pocet_meridel:
+            casti.append(f"{pocet_meridel} měřidel")
+        if pocet_odberu:
+            casti.append(f"{pocet_odberu} odběrných míst")
+        return " + ".join(casti) if casti else "—"
+
+    def get_readonly_fields(self, request, obj=None):
+        """Kod (slug) jde zadat jen pri zalozeni - zmena existujiciho by
+        odpojila Meridla/Odberna mista, ktera na nej odkazuji obycejnym
+        textem (neni to FK)."""
+        if obj is not None:
+            return ("code",)
+        return ()
+
+    def has_delete_permission(self, request, obj=None):
+        if obj is None:
+            return True
+        return not (
+            Meter.objects.filter(meter_type=obj.code).exists()
+            or SupplyPoint.objects.filter(meter_type=obj.code).exists()
+        )
+
+
 @admin.register(InflationRate)
 class InflationRateAdmin(ModelAdmin):
     list_display = ("year", "percent")
@@ -2434,6 +2500,11 @@ class SupplyPointAdmin(ModelAdmin):
     list_filter = ("site", "meter_type")
     search_fields = ("name", "code")
     autocomplete_fields = ("main_meter", "cost_item")
+
+    def formfield_for_dbfield(self, db_field, request, **kwargs):
+        if db_field.name == "meter_type":
+            return meter_type_choice_field(db_field)
+        return super().formfield_for_dbfield(db_field, request, **kwargs)
 
     @display(description="Název", ordering="name")
     def name_colored(self, obj):
