@@ -155,7 +155,7 @@ CSRF_TRUSTED_ORIGINS = [
 # 2027.0), i kdyby se nekdo zapomnel APP_VERSION_YEAR rucne prepsat -
 # dohoda s Danielem 2026-08-15.
 APP_VERSION_YEAR = 2026
-APP_VERSION_SEQUENCE = 109
+APP_VERSION_SEQUENCE = 110
 APP_VERSION = (
     f"{APP_VERSION_YEAR}.{APP_VERSION_SEQUENCE}"
     if date.today().year == APP_VERSION_YEAR
@@ -171,6 +171,7 @@ UNFOLD = {
         "core.admin_branding.inline_date_width_fix_css",
         "core.admin_branding.class_colors_css",
         "core.admin_branding.report_filters_css",
+        "core.admin_branding.changelist_header_wrap_css",
     ],
     "SIDEBAR": {
         "show_search": True,

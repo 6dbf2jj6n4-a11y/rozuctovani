@@ -1,0 +1,14 @@
+/*
+Zahlavi sloupcu v beznych zmenovych seznamech (ne inline tabulkach)
+maji v Unfoldu natvrdo "whitespace-nowrap" (admin/change_list_results.html),
+takze dlouhy nazev sloupce (napr. "Barva pozadí (světlý motiv)") drzi
+celou tabulku zbytecne sirokou, i kdyz je text jen jednou. Zahlavi
+se objevuje jednou za tabulku, takze zalomeni na vic radku nevadi a
+udela vysledny sloupec uzsi. #result_list je ID tabulky z Unfoldova
+change_list_results.html - ID selector prebije Tailwindovu utilitu
+bez potreby !important. Viz konverzace s Danielem 2026-08-18.
+*/
+#result_list thead th {
+    white-space: normal !important;
+    min-width: 90px;
+}

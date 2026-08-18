@@ -30,3 +30,8 @@ def class_colors_css(request):
 def report_filters_css(request):
     from django.templatetags.static import static
     return static("core/css/report_filters.css")
+
+
+def changelist_header_wrap_css(request):
+    from django.templatetags.static import static
+    return static("core/css/changelist_header_wrap.css")
