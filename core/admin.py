@@ -1461,6 +1461,9 @@ class MeterAdmin(DuplicateModelAdminMixin, ModelAdmin):
                     roots.append(m)
 
             owned_cache = {}
+            # {meter_id: o kolik podruzna meridla prevysila nadrazene} - v
+            # sablone se u takoveho radku ukaze upozorneni.
+            orezana_meridla = {}
 
             def owned_consumption(meter):
                 """Vlastni spotreba meridla = surovy odecet minus VLASTNI
@@ -1508,6 +1511,14 @@ class MeterAdmin(DuplicateModelAdminMixin, ModelAdmin):
                     for child in children_by_parent.get(meter.id, [])
                 )
                 result = raw - deduction
+                if result < 0:
+                    # Podruzna meridla namerila vic nez nadrazene - orezat na
+                    # nulu (spotreba nemuze byt zaporna) a poznamenat si to,
+                    # aby to v reportu neproslo bez povsimnuti. Stejne pravidlo
+                    # jako v billing/engine.py _owned_consumption. Viz Daniel
+                    # 2026-08-17.
+                    orezana_meridla[meter.id] = -result
+                    result = Decimal("0")
                 owned_cache[meter.id] = result
                 return result
 
@@ -1535,6 +1546,7 @@ class MeterAdmin(DuplicateModelAdminMixin, ModelAdmin):
                 rows.append({
                     "meter": meter, "depth": depth, "consumption": consumption,
                     "indent_px": indent_px, "leaves": leaves, "is_virtual": meter.is_virtual,
+                    "orezano": orezana_meridla.get(meter.id),
                 })
                 for child in children_by_parent.get(meter.id, []):
                     if child.id in allowed_ids:

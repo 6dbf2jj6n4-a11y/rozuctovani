@@ -81,7 +81,7 @@
                         <tr><td colspan="2" style="padding:6px 8px 2px 24px; color:#888; font-size:12px;">Členská měřidla:</td></tr>
                         {% for row in block.rows %}
                             <tr style="border-bottom:1px solid #2a2a2a;{% if row.is_virtual %} color:#999;{% endif %}">
-                                <td style="padding:3px 8px 3px {{ row.indent_px }}px;"><a href="/admin/core/meter/{{ row.meter.pk }}/change/">{{ row.meter.code|default:row.meter.name }}</a>{% if row.meter.code %} – {{ row.meter.name }}{% endif %}</td>
+                                <td style="padding:3px 8px 3px {{ row.indent_px }}px;"><a href="/admin/core/meter/{{ row.meter.pk }}/change/">{{ row.meter.code|default:row.meter.name }}</a>{% if row.meter.code %} – {{ row.meter.name }}{% endif %}{% if row.orezano %} <span style="color:#c33; font-size:11px;" title="Podružná měřidla naměřila víc než nadřazené - spotřeba oříznuta na 0, zkontroluj odečty.">⚠️ podměry o {{ row.orezano|floatformat:3 }} víc</span>{% endif %}</td>
                                 <td style="padding:3px 8px; text-align:right;{% if not row.is_virtual %} font-weight:600;{% endif %}">{% if row.consumption != None %}{{ row.consumption|floatformat:3 }}{% else %}—{% endif %}</td>
                             </tr>
                             {% for leaf in row.leaves %}
@@ -132,7 +132,7 @@
                         </tr>
                         {% for row in group.unassigned.rows %}
                             <tr style="border-bottom:1px solid #2a2a2a;{% if row.is_virtual %} color:#999;{% endif %}">
-                                <td style="padding:3px 8px 3px {{ row.indent_px }}px;"><a href="/admin/core/meter/{{ row.meter.pk }}/change/">{{ row.meter.code|default:row.meter.name }}</a>{% if row.meter.code %} – {{ row.meter.name }}{% endif %}</td>
+                                <td style="padding:3px 8px 3px {{ row.indent_px }}px;"><a href="/admin/core/meter/{{ row.meter.pk }}/change/">{{ row.meter.code|default:row.meter.name }}</a>{% if row.meter.code %} – {{ row.meter.name }}{% endif %}{% if row.orezano %} <span style="color:#c33; font-size:11px;" title="Podružná měřidla naměřila víc než nadřazené - spotřeba oříznuta na 0, zkontroluj odečty.">⚠️ podměry o {{ row.orezano|floatformat:3 }} víc</span>{% endif %}</td>
                                 <td style="padding:3px 8px; text-align:right;{% if not row.is_virtual %} font-weight:600;{% endif %}">{% if row.consumption != None %}{{ row.consumption|floatformat:3 }}{% else %}—{% endif %}</td>
                             </tr>
                         {% endfor %}

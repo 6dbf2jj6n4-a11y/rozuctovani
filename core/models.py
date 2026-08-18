@@ -700,7 +700,13 @@ class Meter(models.Model):
             child_consumption = child.consumption_for(period, readings_cache=readings_cache)
             if child_consumption is not None:
                 deduction += child_consumption
-        return raw - deduction
+        # Spotreba nikdy nesmi jit do zaporu - kdyz podruzna meridla
+        # namerila vic nez nadrazene (proměření, ruzne dny odectu, vadne
+        # meridlo), orizne se na nulu. Rozdil se rozpusti do celku:
+        # rozdeluje se NAKLAD v Kc, ne kWh, takze celkova castka zustava
+        # a ostatnim se jen nepatrne zmeni podil. Viz konverzace
+        # s Danielem 2026-08-17 (E_D1 18 kWh vs bojler 22 kWh).
+        return max(raw - deduction, Decimal("0"))
 
     def consumption_leaves(self, sign=1):
         """Rekurzivne rozbali virtualni meridlo (vcetne vnorenych vzorcu) az

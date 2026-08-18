@@ -174,7 +174,7 @@ def _weighted_shares(keys, period, by_key_out=None):
     return {card_id: weight / total for card_id, weight in raw_weights.items()}
 
 
-def _owned_consumption(meter, period, billed_meter_ids, cache, readings_cache=None):
+def _owned_consumption(meter, period, billed_meter_ids, cache, readings_cache=None, warnings=None):
     """Vrati "vlastni" spotrebu meridla za obdobi - jeho surovy odecet minus
     spotreba prime podrizenych meridel (Meter.parent_meter/children), ktera
     jsou SAMA O SOBE take samostatne uctovana (meter.id je v
@@ -210,6 +210,23 @@ def _owned_consumption(meter, period, billed_meter_ids, cache, readings_cache=No
             if child_consumption is not None:
                 deduction += child_consumption
     result = raw - deduction
+    if result < 0:
+        # Podruzna meridla namerila vic nez nadrazene - fyzikalne nemozne,
+        # v praxi proměření / ruzne dny odectu / vadne meridlo. Zaporna
+        # spotreba by dala klientovi zaporny podil (dobropis), proto se
+        # orezava na nulu; rozdil se rozpusti do celku, protoze se
+        # rozdeluje NAKLAD v Kc, ne kWh. Hlasi se, aby chyba mereni
+        # nezustala schovana. Viz konverzace s Danielem 2026-08-17.
+        if warnings is not None:
+            deti = ", ".join(
+                c.code or c.name for c in meter.children.all() if c.id in billed_meter_ids
+            )
+            warnings.append(
+                f"{meter.code or meter.name}: podružná měřidla ({deti}) naměřila o "
+                f"{-result} víc než nadřazené měřidlo - vlastní spotřeba oříznuta na 0. "
+                f"Zkontroluj odečty."
+            )
+        result = Decimal("0")
     cache[meter.id] = result
     return result
 
@@ -324,7 +341,7 @@ def _consumption_shares(
         group_meter = group_keys[0].meter
         group_consumption = _owned_consumption(
             group_meter, period, keys_by_meter.keys(), owned_consumption_cache,
-            readings_cache=readings_cache,
+            readings_cache=readings_cache, warnings=warnings,
         )
         if group_consumption is None:
             cards = ", ".join(str(k.client_card) for k in group_keys)
