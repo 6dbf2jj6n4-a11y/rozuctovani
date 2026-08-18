@@ -1119,6 +1119,14 @@ class ClientCardAdmin(ModelAdmin):
         site_id = request.GET.get("site")
         sites = Site.objects.order_by("name")
 
+        # Prehled je vztazeny k OBDOBI: ukazuje karty, ktere v nem aspon
+        # den plati, a najem zkraceny podle poctu aktivnich dni - jinak by
+        # se rozchazel s vyuctovanim, kde se pausaly i sluzby uz kratí.
+        # Viz konverzace s Danielem 2026-08-17.
+        periods = Period.objects.all()
+        period_id = request.GET.get("period")
+        period = periods.filter(pk=period_id).first() if period_id else Period.current()
+
         cards = (
             ClientCard.objects.filter(is_active=True)
             .select_related("client")
@@ -1129,13 +1137,27 @@ class ClientCardAdmin(ModelAdmin):
             cards = cards.filter(card_units__unit__site_id=site_id).distinct()
 
         rows = []
+        period_start, period_end = period.date_range() if period else (None, None)
         for card in cards:
             card_units = list(card.card_units.all())
             if not card_units:
                 continue
+            aktivnich_dnu = None
+            if period is not None:
+                aktivnich_dnu = card.active_days_in_period(period_start, period_end)
+                if aktivnich_dnu <= 0:
+                    continue  # karta v tomhle obdobi vubec neplati
             total_area = sum((cu.area_m2 or Decimal("0")) for cu in card_units)
-            raw_monthly = sum((cu.monthly_rent or Decimal("0") for cu in card_units), Decimal("0"))
-            total_monthly = raw_monthly.quantize(Decimal("1"), rounding=ROUND_CEILING)
+            if period is not None:
+                total_monthly = card.rent_for_period(period)
+            else:
+                raw_monthly = sum((cu.monthly_rent or Decimal("0") for cu in card_units), Decimal("0"))
+                total_monthly = raw_monthly.quantize(Decimal("1"), rounding=ROUND_CEILING)
+            # Plna mesicni sazba (nezkracena) - aby slo poznat, o kolik se
+            # castka u castecne platne karty lisi.
+            plny_mesic = sum(
+                (cu.monthly_rent or Decimal("0") for cu in card_units), Decimal("0")
+            ).quantize(Decimal("1"), rounding=ROUND_CEILING)
             sites_of_card = {cu.unit.site for cu in card_units}
             rows.append({
                 "client": card.client,
@@ -1143,7 +1165,11 @@ class ClientCardAdmin(ModelAdmin):
                 "sites": sites_of_card,
                 "area_m2": total_area,
                 "monthly_rent": total_monthly,
-                "yearly_rent": total_monthly * 12,
+                "plny_mesic": plny_mesic,
+                "aktivnich_dnu": aktivnich_dnu,
+                "dnu_v_obdobi": period.days_in_period if period else None,
+                "castecne": period is not None and aktivnich_dnu < period.days_in_period,
+                "yearly_rent": plny_mesic * 12,
             })
 
         rows.sort(key=lambda r: r["client"].name)
@@ -1154,6 +1180,8 @@ class ClientCardAdmin(ModelAdmin):
             "title": "Přehled nájemného",
             "sites": sites,
             "selected_site_id": int(site_id) if site_id else None,
+            "periods": periods,
+            "selected_period": period,
             "rows": rows,
             "total_monthly": total_monthly,
             "total_yearly": total_monthly * 12,

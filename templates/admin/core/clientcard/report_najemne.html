@@ -2,7 +2,22 @@
 
 {% block content %}
 <div>
+    <p style="color:#999; font-size:13px;">
+        Nájemné za vybrané období. U karty, která v období neplatí celý měsíc
+        (nástup nebo odchod uprostřed), je částka <strong>zkrácená podle počtu
+        aktivních dnů</strong> - stejně jako se krátí paušály a služby ve vyúčtování.
+        Sloupec „Nájemné/rok" počítá vždy s plným měsícem.
+    </p>
+
     <form method="get" class="rx-filters">
+        <div>
+            <label for="id_period">Období</label>
+            <select name="period" id="id_period" onchange="this.form.submit()" style="padding:8px; min-width:160px;">
+                {% for p in periods %}
+                    <option value="{{ p.pk }}" {% if selected_period and p.pk == selected_period.pk %}selected{% endif %}>{{ p }}</option>
+                {% endfor %}
+            </select>
+        </div>
         <div>
             <label for="id_site">Areál</label>
             <select name="site" id="id_site" onchange="this.form.submit()" style="padding:8px; min-width:160px;">
@@ -25,7 +40,8 @@
                     <th style="padding:6px 8px;">Karta</th>
                     <th style="padding:6px 8px;">Areál</th>
                     <th style="padding:6px 8px; text-align:right;">Výměra (m²)</th>
-                    <th style="padding:6px 8px; text-align:right;">Nájemné/měsíc</th>
+                    <th style="padding:6px 8px; text-align:right;">Dnů</th>
+                    <th style="padding:6px 8px; text-align:right;">Nájemné za období</th>
                     <th style="padding:6px 8px; text-align:right;">Nájemné/rok</th>
                 </tr>
             </thead>
@@ -40,12 +56,18 @@
                             {% for s in row.sites %}{{ s.name }}{% if not forloop.last %}, {% endif %}{% endfor %}
                         </td>
                         <td style="padding:6px 8px; text-align:right;">{{ row.area_m2|floatformat:2 }} m²</td>
-                        <td style="padding:6px 8px; text-align:right;">{{ row.monthly_rent|floatformat:2 }} Kč</td>
+                        <td style="padding:6px 8px; text-align:right;{% if row.castecne %} color:#d97706; font-weight:600;{% else %} color:#888;{% endif %}">
+                            {% if row.aktivnich_dnu != None %}{{ row.aktivnich_dnu }}/{{ row.dnu_v_obdobi }}{% else %}—{% endif %}
+                        </td>
+                        <td style="padding:6px 8px; text-align:right;{% if row.castecne %} color:#d97706;{% endif %}">
+                            {{ row.monthly_rent|floatformat:2 }} Kč
+                            {% if row.castecne %}<br><span style="font-size:11px; color:#888;">plný měsíc {{ row.plny_mesic|floatformat:2 }}</span>{% endif %}
+                        </td>
                         <td style="padding:6px 8px; text-align:right; font-weight:600;">{{ row.yearly_rent|floatformat:2 }} Kč</td>
                     </tr>
                 {% endfor %}
                 <tr style="border-top:2px solid #666; font-weight:700;">
-                    <td colspan="4" style="padding:8px; text-align:right;">Celkem</td>
+                    <td colspan="5" style="padding:8px; text-align:right;">Celkem za {{ selected_period }}</td>
                     <td style="padding:8px; text-align:right;">{{ total_monthly|floatformat:2 }} Kč</td>
                     <td style="padding:8px; text-align:right;">{{ total_yearly|floatformat:2 }} Kč</td>
                 </tr>
