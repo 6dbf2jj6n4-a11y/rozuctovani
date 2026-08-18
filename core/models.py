@@ -996,23 +996,21 @@ class InvoiceClassColor(models.Model):
         help_text="Formát #rrggbb.",
     )
     deduct_fixed_from_pool = models.BooleanField(
-        "OzN", default=True,
+        "Odečítat paušály z celkového nákladu", default=True,
         help_text=(
-            "Odečítat paušály z celkového nákladu. Zapnuto: paušály (Pevná "
-            "částka / Dle výměry) se nejdřív odečtou z nákladu a mezi ostatní "
-            "se dělí jen zbytek - klienti s měřidlem tak platí méně. Vypnuto: "
-            "paušály jdou navíc a celý náklad se dělí mezi ostatní, jako to "
-            "dělal starý systém. Platí pro celou třídu; jednotlivý klíč může "
-            "odečítání vypnout i tak, zapnout ale ne."
+            "Zapnuto: paušály (Pevná částka / Dle výměry) se nejdřív odečtou "
+            "z nákladu a mezi ostatní se dělí jen zbytek - klienti s měřidlem "
+            "tak platí méně. Vypnuto: paušály jdou navíc a celý náklad se dělí "
+            "mezi ostatní, jako to dělal starý systém. Platí pro celou třídu; "
+            "jednotlivý klíč může odečítání vypnout i tak, zapnout ale ne."
         ),
     )
     ma_sekci_klicu = models.BooleanField(
-        "Sekce?", default=True,
+        "Vlastní sekce v Kartě klienta a na Ploše", default=True,
         help_text=(
-            "Vlastní sekce v Kartě klienta a na Ploše. Zapnuto: Třída má "
-            "v Kartě klienta vlastní sekci Klíčů a na Ploše sekci Výchozích "
-            "služeb. Vypni u Tříd, které se nerozúčtovávají klíči - typicky "
-            "Nájemné, to se zadává v sekci Plochy a nájemné."
+            "Zapnuto: Třída má v Kartě klienta vlastní sekci Klíčů a na Ploše "
+            "sekci Výchozích služeb. Vypni u Tříd, které se nerozúčtovávají "
+            "klíči - typicky Nájemné, to se zadává v sekci Plochy a nájemné."
         ),
     )
 
