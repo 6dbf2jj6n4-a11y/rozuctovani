@@ -18,10 +18,9 @@ from reportlab.lib.styles import ParagraphStyle
 from reportlab.lib.units import mm
 from reportlab.platypus import Paragraph, SimpleDocTemplate, Table, TableStyle
 
-from core.models import BillingLine, ServicePoolItem
+from core.models import BillingLine, InvoiceClassColor, ServicePoolItem
 from core.pdf_fonts import FONT_BOLD, FONT_REGULAR
 
-_CLASS_ORDER = [code for code, _ in ServicePoolItem.InvoiceClass.choices]
 
 _STYLE_TITLE = ParagraphStyle("StatementTitle", fontName=FONT_BOLD, fontSize=16, spaceAfter=4 * mm)
 _STYLE_SUB = ParagraphStyle("StatementSub", fontName=FONT_REGULAR, fontSize=11, spaceAfter=6 * mm, leading=15)
@@ -71,7 +70,9 @@ def build_statement_data(client, period):
         .select_related("service_item", "client_card")
         .order_by("service_item__invoice_class", "service_item__name")
     )
-    class_labels = dict(ServicePoolItem.InvoiceClass.choices)
+    # Poradi i nazvy Trid z DB az za behu - viz client_card_generator.
+    class_labels = InvoiceClassColor.label_map()
+    class_order = [code for code, _ in InvoiceClassColor.choices()]
 
     def _dec(calc_detail, field):
         raw = calc_detail.get(field)
@@ -81,7 +82,7 @@ def build_statement_data(client, period):
     grand_total = Decimal("0")
     any_unbilled = False
     any_surcharge = False
-    for class_code in _CLASS_ORDER:
+    for class_code in class_order:
         class_lines = [line for line in lines if line.service_item.invoice_class == class_code]
         if not class_lines:
             continue

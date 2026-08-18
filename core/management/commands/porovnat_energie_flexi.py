@@ -27,7 +27,7 @@ from decimal import Decimal
 from django.core.management.base import BaseCommand, CommandError
 
 from core.flexi_client import FlexiAPIError, FlexiClient
-from core.models import BillingLine, Period, ServicePoolItem, Site
+from core.models import BillingLine, InvoiceClassColor, Period, ServicePoolItem, Site
 
 KOD_TO_CLASS = {
     "ELEKTRO": ServicePoolItem.InvoiceClass.ELECTRICITY,
@@ -146,7 +146,7 @@ class Command(BaseCommand):
             our_names[key_client] = client.name
             our_amounts[(key_client, line.service_item.invoice_class)] += line.amount
 
-        class_labels = dict(ServicePoolItem.InvoiceClass.choices)
+        class_labels = InvoiceClassColor.label_map()
         all_client_keys = sorted(
             set(flexi_names) | set(our_names),
             key=lambda k: (our_names.get(k) or flexi_names.get(k)),

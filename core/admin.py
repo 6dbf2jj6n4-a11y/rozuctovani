@@ -18,8 +18,7 @@ from .admin_mixins import ModelAdmin, TabularInline
 from .models import (
     Client, ClientCard, Contract, Site, Unit, CardUnit,
     Meter, MeterReading, Period, InflationRate, SupplyPoint, InvoiceClassColor,
-    ServicePoolItem, AllocationKey, PriceList, CostEntry, BillingLine, UnitService,
-    MeterTypeConfig
+    ServicePoolItem, AllocationKey, PriceList, CostEntry, BillingLine, UnitService
 )
 
 
@@ -72,14 +71,15 @@ def colored_by_meter_type(text, meter_type):
     return colored_text(text, InvoiceClassColor.css_class_for_meter_type(meter_type))
 
 
-def meter_type_choice_field(db_field):
-    """Formfield pro Meter.meter_type / SupplyPoint.meter_type - pole uz
-    nema choices= (viz MeterTypeConfig, Nastavení -> Typy měřidel), takze
-    volby pro select se musi sestavit rucne z aktualnich radku v DB."""
+def invoice_class_choice_field(db_field):
+    """Formfield pro pole, ktera drzi kod Tridy (Meter.meter_type,
+    SupplyPoint.meter_type, ServicePoolItem.invoice_class) - pole uz
+    nemaji choices=, protoze zivy seznam Trid je v InvoiceClassColor
+    (Nastavení -> Třídy), takze volby se sestavuji z aktualnich radku."""
     from django import forms
     from unfold.widgets import UnfoldAdminSelectWidget
 
-    choices = list(MeterTypeConfig.objects.order_by("sort_order").values_list("code", "label"))
+    choices = InvoiceClassColor.choices()
     if db_field.blank:
         choices = [("", "---------")] + choices
     return forms.ChoiceField(
@@ -1313,7 +1313,7 @@ class MeterAdmin(DuplicateModelAdminMixin, ModelAdmin):
 
     def formfield_for_dbfield(self, db_field, request, **kwargs):
         if db_field.name == "meter_type":
-            return meter_type_choice_field(db_field)
+            return invoice_class_choice_field(db_field)
         return super().formfield_for_dbfield(db_field, request, **kwargs)
 
     @display(description="Kód", ordering="code")
@@ -1666,8 +1666,8 @@ class MeterAdmin(DuplicateModelAdminMixin, ModelAdmin):
                 else:
                     unassigned_by_type.setdefault(m.meter_type, []).append(m)
 
-            unit_defaults = MeterTypeConfig.default_unit_map()
-            for type_code, type_label in MeterTypeConfig.objects.order_by("sort_order").values_list("code", "label"):
+            unit_defaults = InvoiceClassColor.default_unit_map()
+            for type_code, type_label in InvoiceClassColor.choices():
                 type_supplies = supplies_by_type.get(type_code, [])
                 type_unassigned = unassigned_by_type.get(type_code, [])
                 if not type_supplies and not type_unassigned:
@@ -2333,26 +2333,70 @@ class PeriodAdmin(ModelAdmin):
 
 @admin.register(InvoiceClassColor)
 class InvoiceClassColorAdmin(ModelAdmin):
-    """Radky se seeduji migraci (jeden na kazdou Tridu) - pridavani/mazani
-    tu nema smysl (Tridy jsou pevna sada), jen uprava barvy."""
+    """Trida je JEDINY seznam, do ktereho se radi Polozky zasobniku,
+    Meridla i Odberna mista (drive na to byly dva nezavisle vycty, viz
+    docstring modelu). Radky jdou pridavat, prejmenovat i mazat.
+
+    Mazani je blokovane ve dvou pripadech: kdyz Tridu jeste neco pouziva
+    (osirel by na nem neplatny kod - neni to FK, jen text), nebo kdyz jde
+    o jednu ze ctyr Trid, na ktere jsou navazane napevno zapsane sekce v
+    Karte klienta (CHRANENE_TRIDY) - ty by po smazani zustaly prazdne."""
+
+    # Sekce v Karte klienta / na Plose jsou zatim ctyri samostatne tridy
+    # v kodu (AllocationKey*Inline, UnitService*Inline), navazane na tyhle
+    # kody. Dokud se negeneruji dynamicky, nesmi ty Tridy zmizet.
+    CHRANENE_TRIDY = ("electricity", "water", "heat", "other")
+
     list_display = (
-        "invoice_class", "deduct_fixed_from_pool", "ukazka_textu",
+        "nazev", "invoice_class", "default_unit_of_measure", "sort_order",
+        "deduct_fixed_from_pool", "ukazka_textu", "pocet_pouziti",
         "color_light", "color_dark", "text_color_light", "text_color_dark",
     )
-    list_editable = ("deduct_fixed_from_pool",)
-    ordering = ("invoice_class",)
+    list_editable = ("default_unit_of_measure", "sort_order", "deduct_fixed_from_pool")
+    ordering = ("sort_order", "invoice_class")
+
+    @display(description="Název", ordering="label")
+    def nazev(self, obj):
+        return obj.label or obj.invoice_class
 
     @display(description="Ukázka")
     def ukazka_textu(self, obj):
         """Nahled barvy textu primo v seznamu - stejnou CSS tridou, jakou
         pouzivaji Měřidla/Odečty/Ceníky, takze se meni i s motivem."""
-        return colored_by_class(obj.get_invoice_class_display(), obj.invoice_class)
+        return colored_by_class(obj.label or obj.invoice_class, obj.invoice_class)
 
-    def has_add_permission(self, request):
-        return False
+    @display(description="Použito u")
+    def pocet_pouziti(self, obj):
+        casti = []
+        for model, popis in (
+            (ServicePoolItem.objects.filter(invoice_class=obj.invoice_class), "položek"),
+            (Meter.objects.filter(meter_type=obj.invoice_class), "měřidel"),
+            (SupplyPoint.objects.filter(meter_type=obj.invoice_class), "odběrných míst"),
+        ):
+            pocet = model.count()
+            if pocet:
+                casti.append(f"{pocet} {popis}")
+        return " + ".join(casti) if casti else "—"
+
+    def get_readonly_fields(self, request, obj=None):
+        """Kod jde zadat jen pri zalozeni - zmena existujiciho by odpojila
+        Polozky/Meridla/Odberna mista, ktera na nej odkazuji obycejnym
+        textem (neni to FK). Prejmenovat jde Nazev, ten je jen na
+        zobrazeni."""
+        if obj is not None:
+            return ("invoice_class",)
+        return ()
 
     def has_delete_permission(self, request, obj=None):
-        return False
+        if obj is None:
+            return True
+        if obj.invoice_class in self.CHRANENE_TRIDY:
+            return False
+        return not (
+            ServicePoolItem.objects.filter(invoice_class=obj.invoice_class).exists()
+            or Meter.objects.filter(meter_type=obj.invoice_class).exists()
+            or SupplyPoint.objects.filter(meter_type=obj.invoice_class).exists()
+        )
 
     def formfield_for_dbfield(self, db_field, request, **kwargs):
         formfield = super().formfield_for_dbfield(db_field, request, **kwargs)
@@ -2362,48 +2406,6 @@ class InvoiceClassColorAdmin(ModelAdmin):
             from unfold.widgets import UnfoldAdminColorInputWidget
             formfield.widget = UnfoldAdminColorInputWidget()
         return formfield
-
-
-@admin.register(MeterTypeConfig)
-class MeterTypeConfigAdmin(ModelAdmin):
-    """Samoobsluzny seznam Typu meridla (Nastavení -> Typy měřidel) - na
-    rozdil od InvoiceClassColor (Tridy - viz vyse) tu jde radky pridavat
-    i mazat, protoze typ meridla nema zadne napevno zapsane admin sekce
-    zavisle na konkretnim kodu. Mazani/hromadne mazani je presto
-    blokovane, pokud typ jeste pouziva nejake Meridlo nebo Odberne misto
-    (jinak by na nich osirel neplatny kod). Viz konverzace s Danielem
-    2026-08-18 (filtr "Plyn" bez pouziti v datech)."""
-    list_display = ("code", "label", "default_unit_of_measure", "invoice_class", "sort_order", "pocet_pouziti")
-    list_editable = ("label", "default_unit_of_measure", "invoice_class", "sort_order")
-    ordering = ("sort_order", "code")
-    actions = None
-
-    @display(description="Použito u")
-    def pocet_pouziti(self, obj):
-        pocet_meridel = Meter.objects.filter(meter_type=obj.code).count()
-        pocet_odberu = SupplyPoint.objects.filter(meter_type=obj.code).count()
-        casti = []
-        if pocet_meridel:
-            casti.append(f"{pocet_meridel} měřidel")
-        if pocet_odberu:
-            casti.append(f"{pocet_odberu} odběrných míst")
-        return " + ".join(casti) if casti else "—"
-
-    def get_readonly_fields(self, request, obj=None):
-        """Kod (slug) jde zadat jen pri zalozeni - zmena existujiciho by
-        odpojila Meridla/Odberna mista, ktera na nej odkazuji obycejnym
-        textem (neni to FK)."""
-        if obj is not None:
-            return ("code",)
-        return ()
-
-    def has_delete_permission(self, request, obj=None):
-        if obj is None:
-            return True
-        return not (
-            Meter.objects.filter(meter_type=obj.code).exists()
-            or SupplyPoint.objects.filter(meter_type=obj.code).exists()
-        )
 
 
 @admin.register(InflationRate)
@@ -2503,7 +2505,7 @@ class SupplyPointAdmin(ModelAdmin):
 
     def formfield_for_dbfield(self, db_field, request, **kwargs):
         if db_field.name == "meter_type":
-            return meter_type_choice_field(db_field)
+            return invoice_class_choice_field(db_field)
         return super().formfield_for_dbfield(db_field, request, **kwargs)
 
     @display(description="Název", ordering="name")
@@ -2599,6 +2601,11 @@ class ServicePoolItemAdmin(ModelAdmin):
     search_fields = ("name",)
     autocomplete_fields = ("unit", "meter")
     readonly_fields = ("meridla_prehled",)
+
+    def formfield_for_dbfield(self, db_field, request, **kwargs):
+        if db_field.name == "invoice_class":
+            return invoice_class_choice_field(db_field)
+        return super().formfield_for_dbfield(db_field, request, **kwargs)
 
     @admin.display(description="Jednotka")
     def jednotka(self, obj):
@@ -2958,7 +2965,7 @@ class CostEntryAdmin(DefaultToCurrentPeriodMixin, ModelAdmin):
             items = items.filter(invoice_class=invoice_class)
         items = items.exclude(cost_entries__period=period).order_by("invoice_class", "site__name", "name")
 
-        class_labels = dict(ServicePoolItem.InvoiceClass.choices)
+        class_labels = InvoiceClassColor.label_map()
         rows = [
             {
                 "trida": class_labels[item.invoice_class],
@@ -3007,7 +3014,7 @@ class CostEntryAdmin(DefaultToCurrentPeriodMixin, ModelAdmin):
         typu."""
         from django.db.models import Case, IntegerField, When
 
-        class_order = {code: i for i, (code, _) in enumerate(ServicePoolItem.InvoiceClass.choices)}
+        class_order = {code: i for i, (code, _) in enumerate(InvoiceClassColor.choices())}
         whens = [When(service_item__invoice_class=code, then=i) for code, i in class_order.items()]
         qs = super().get_queryset(request)
         return qs.annotate(_trida_poradi=Case(*whens, output_field=IntegerField())).order_by(
@@ -3129,7 +3136,7 @@ class BillingLineAdmin(DefaultToCurrentPeriodMixin, ModelAdmin):
         current_year = timezone.localdate().year
         periods = Period.objects.filter(year=current_year).order_by("year", "month")
 
-        class_labels = dict(ServicePoolItem.InvoiceClass.choices)
+        class_labels = InvoiceClassColor.label_map()
 
         def card_vynos(card, obdobi):
             """Skutecny najem karty za dane obdobi - zkraceny podle aktivnich
@@ -3219,7 +3226,7 @@ class BillingLineAdmin(DefaultToCurrentPeriodMixin, ModelAdmin):
         # objevily - jinak by tabulka mela pul tuctu prazdnych sloupcu.
         classes = [
             {"key": code, "label": class_labels[code]}
-            for code, _ in ServicePoolItem.InvoiceClass.choices
+            for code, _ in InvoiceClassColor.choices()
             if code in used_classes
         ]
         year_rows = sorted(
@@ -3290,10 +3297,10 @@ class BillingLineAdmin(DefaultToCurrentPeriodMixin, ModelAdmin):
         periods = list(qs[:n])
         periods.reverse()  # chronologicky pro graf
 
-        class_labels = dict(ServicePoolItem.InvoiceClass.choices)
+        class_labels = InvoiceClassColor.label_map()
         # Najemne se do grafu nekresli - neuctuje se jako spolecny Naklad
         # (CostEntry), ale per Karta, takze by byla cara vzdy na nule.
-        class_order = [c for c, _ in ServicePoolItem.InvoiceClass.choices if c != "rent"]
+        class_order = [c for c, _ in InvoiceClassColor.choices() if c != "rent"]
         # Barvy se berou z Nastavení -> Třídy (InvoiceClassColor), aby graf
         # drzel stejnou konvenci jako zbytek aplikace (Měřidla, Odečty,
         # Ceníky...). Do SVG se nevklada konkretni odstin, ale CSS trida +
@@ -3301,7 +3308,7 @@ class BillingLineAdmin(DefaultToCurrentPeriodMixin, ModelAdmin):
         # / tmavym motivem a zmena v Nastavení se projevi bez zasahu do kodu
         # (viz core/views.py class_colors_css). Viz Daniel 2026-08-17.
         class_css = {
-            code: InvoiceClassColor.css_class_for(code) for code, _ in ServicePoolItem.InvoiceClass.choices
+            code: InvoiceClassColor.css_class_for(code) for code, _ in InvoiceClassColor.choices()
         }
 
         # get_naklad_by_class dela jen par dotazu CELKEM (bez ohledu na pocet
@@ -3440,7 +3447,7 @@ class BillingLineAdmin(DefaultToCurrentPeriodMixin, ModelAdmin):
             elif len(matches) > 1:
                 meter_choice_items = matches
 
-        class_labels = dict(ServicePoolItem.InvoiceClass.choices)
+        class_labels = InvoiceClassColor.label_map()
         item_groups = {}
         for it in items:
             key = (it.site.name, class_labels[it.invoice_class])
@@ -3510,8 +3517,8 @@ class BillingLineAdmin(DefaultToCurrentPeriodMixin, ModelAdmin):
 
         sites = Site.objects.order_by("name")
 
-        class_labels = dict(ServicePoolItem.InvoiceClass.choices)
-        groups_by_class = {key: [] for key, _ in ServicePoolItem.InvoiceClass.choices}
+        class_labels = InvoiceClassColor.label_map()
+        groups_by_class = {key: [] for key, _ in InvoiceClassColor.choices()}
         totals = {
             "naklad": Decimal("0"), "vynos_fakturovano": Decimal("0"), "vynos_vcetne_pausalu": Decimal("0"),
         }
@@ -3575,9 +3582,9 @@ class BillingLineAdmin(DefaultToCurrentPeriodMixin, ModelAdmin):
         grand_total = Decimal("0")
         if period is not None:
             rows, warnings, item_losses = get_key_rows_for_client(client, period)
-            class_labels = dict(ServicePoolItem.InvoiceClass.choices)
-            groups_by_class = {key: [] for key, _ in ServicePoolItem.InvoiceClass.choices}
-            losses_by_class = {key: [] for key, _ in ServicePoolItem.InvoiceClass.choices}
+            class_labels = InvoiceClassColor.label_map()
+            groups_by_class = {key: [] for key, _ in InvoiceClassColor.choices()}
+            losses_by_class = {key: [] for key, _ in InvoiceClassColor.choices()}
             for row in rows:
                 groups_by_class.setdefault(row["invoice_class_key"], []).append(row)
                 grand_total += row["amount"]
@@ -3620,7 +3627,7 @@ class BillingLineAdmin(DefaultToCurrentPeriodMixin, ModelAdmin):
 
         sites = Site.objects.order_by("name")
 
-        groups_by_class = {key: [] for key, _ in ServicePoolItem.InvoiceClass.choices}
+        groups_by_class = {key: [] for key, _ in InvoiceClassColor.choices()}
         grand_total = Decimal("0")
 
         if period is not None:
@@ -3679,7 +3686,7 @@ class BillingLineAdmin(DefaultToCurrentPeriodMixin, ModelAdmin):
                 groups_by_class.setdefault(si.invoice_class, []).append(row)
                 grand_total += line.amount
 
-        class_labels = dict(ServicePoolItem.InvoiceClass.choices)
+        class_labels = InvoiceClassColor.label_map()
         groups = [
             {
                 "label": class_labels[key],

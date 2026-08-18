@@ -18,11 +18,10 @@ from reportlab.pdfgen import canvas as _canvas
 from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
 from core.contract_generator import format_date_cz, get_landlord
-from core.models import AllocationKey, ServicePoolItem
+from core.models import AllocationKey, InvoiceClassColor, ServicePoolItem
 from core.pdf_fonts import FONT_CARD_BOLD as FONT_BOLD
 from core.pdf_fonts import FONT_CARD_REGULAR as FONT_REGULAR
 
-_CLASS_ORDER = [code for code, _ in ServicePoolItem.InvoiceClass.choices]
 _FONT_SIZE = 8
 
 
@@ -178,13 +177,16 @@ def generate_client_card_document(card, output_path):
         .select_related("service_item", "meter")
         .order_by("service_item__invoice_class", "service_item__name")
     )
-    class_labels = dict(ServicePoolItem.InvoiceClass.choices)
+    # Poradi i nazvy Trid se berou z DB (Nastaveni -> Tridy) az za behu -
+    # na urovni modulu by to byl dotaz uz pri importu (pada pri migrate).
+    class_labels = InvoiceClassColor.label_map()
+    class_order = [code for code, _ in InvoiceClassColor.choices()]
 
     key_rows = [["Položka", "Měřidlo", "Typ výpočtu", "Hodnota", "Fakturovat"]]
     type_labels = dict(AllocationKey.AllocationType.choices)
     class_header_rows = []  # indexy radku s nazvem tridy - pro silnejsi linku/tucne pismo
 
-    for class_code in _CLASS_ORDER:
+    for class_code in class_order:
         class_keys = [k for k in keys if k.service_item.invoice_class == class_code]
         if not class_keys:
             continue

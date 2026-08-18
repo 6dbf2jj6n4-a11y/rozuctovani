@@ -14,7 +14,9 @@ jinde) - Daniel chtel videt obe najednou, ne prepinat.
 """
 from decimal import Decimal
 
-from core.models import BillingLine, CostEntry, MeterReading, PriceList, ServicePoolItem
+from core.models import (
+    BillingLine, CostEntry, InvoiceClassColor, MeterReading, PriceList, ServicePoolItem,
+)
 
 from .engine import ABSOLUTE_AMOUNT_TYPES, _consumption_shares, _meter_provides_consumption
 
@@ -191,7 +193,7 @@ def get_naklad_by_class(periods, site=None):
                 return pl.price_per_unit
         return None
 
-    class_codes = [code for code, _ in ServicePoolItem.InvoiceClass.choices]
+    class_codes = [code for code, _ in InvoiceClassColor.choices()]
     result = {}
     for period in periods:
         totals = {code: Decimal("0") for code in class_codes}

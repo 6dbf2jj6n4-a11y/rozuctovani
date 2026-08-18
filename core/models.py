@@ -513,60 +513,13 @@ class InflationRate(models.Model):
         return f"{self.year}: {self.percent} %"
 
 
-class MeterTypeConfig(models.Model):
-    """Samoobsluzny seznam Typu meridla (Nastaveni -> Typy meridel) -
-    drive napevno v kodu jako Meter.MeterType (Python enum), ted radky
-    v databazi, aby slo typy pridavat/mazat/prejmenovavat bez zasahu do
-    kodu. Meter.MeterType enum ZUSTAVA (viz nize) - pouziva se dal jako
-    konstanty ve starsich jednorazovych prikazech (bootstrap_odberna_mista*,
-    diag_odberna_mista) a jako vychozi hodnota pole, jen uz neurcuje
-    povolene volby (field uz nema choices=). Jmeno "Config" misto proste
-    "MeterType", aby nekolidovalo s Meter.MeterType. Viz konverzace
-    s Danielem 2026-08-18 (filtr "Plyn" bez pouziti v datech)."""
-    code = models.CharField(
-        "Kód", max_length=20, unique=True,
-        help_text="Interní kód (např. 'electricity') - používá se v datech měřidel. Needitovatelné po založení.",
-    )
-    label = models.CharField("Název", max_length=50)
-    default_unit_of_measure = models.CharField(
-        "Výchozí měrná jednotka", max_length=20, blank=True,
-        help_text="Návrh jednotky pro měřidla tohoto typu, která nemají vlastní jednotku vyplněnou.",
-    )
-    invoice_class = models.CharField(
-        "Třída fakturace", max_length=20, blank=True,
-        help_text=(
-            "Do které Třídy (Nastavení -> Třídy - barvy, paušály) se měřidla "
-            "tohoto typu počítají. Prázdné = nepočítá se do žádné."
-        ),
-    )
-    sort_order = models.PositiveIntegerField("Pořadí", default=0)
-
-    class Meta:
-        verbose_name = "Typ měřidla"
-        verbose_name_plural = "Typy měřidel"
-        ordering = ["sort_order", "code"]
-
-    def __str__(self):
-        return self.label
-
-    @classmethod
-    def default_unit_map(cls):
-        """{code: default_unit_of_measure} - napr. pro fallback jednotky
-        v prehledu spotreb (core.admin report_spotreby)."""
-        return dict(cls.objects.exclude(default_unit_of_measure="").values_list("code", "default_unit_of_measure"))
-
-    @classmethod
-    def invoice_class_map(cls):
-        """{code: invoice_class} - nahrazuje drive napevno zapsany
-        InvoiceClassColor.METER_TYPE_TO_CLASS slovnik."""
-        return dict(cls.objects.exclude(invoice_class="").values_list("code", "invoice_class"))
-
-
 class Meter(models.Model):
     class MeterType(models.TextChoices):
-        """Ponecháno kvůli starším jednorázovým příkazům (bootstrap_odberna_mista*,
-        diag_odberna_mista) a jako zdroj výchozí hodnoty pole - živé
-        volby teď dává MeterTypeConfig (Nastavení -> Typy měřidel)."""
+        """Ponecháno kvůli starším jednorázovým příkazům
+        (bootstrap_odberna_mista*, diag_odberna_mista) a jako zdroj
+        výchozí hodnoty pole. Samostatný pojem "Typ měřidla" už
+        neexistuje - měřidlo si volí přímo Třídu (InvoiceClassColor,
+        Nastavení -> Třídy). Viz konverzace s Danielem 2026-08-18."""
         ELECTRICITY = "electricity", "Elektřina"
         WATER = "water", "Voda"
         GAS = "gas", "Plyn"
@@ -587,7 +540,11 @@ class Meter(models.Model):
         help_text="Krátký kód pro odkazování ve vzorcích virtuálních měřičů (např. E_A1).",
     )
     name = models.CharField("Název / označení", max_length=200)
-    meter_type = models.CharField("Typ", max_length=20)
+    # Drzi KOD Tridy (InvoiceClassColor.invoice_class). Nazev pole
+    # zustava "meter_type" kvuli zpetne kompatibilite dat a starsich
+    # prikazu - prejmenovani sloupce by znamenalo migraci a upravu
+    # desitek mist bez uzitku.
+    meter_type = models.CharField("Třída", max_length=20)
     unit_of_measure = models.CharField("Měrná jednotka", max_length=20, default="kWh")
     coefficient = models.DecimalField(
         "Koeficient (odečet × koef. = spotřeba)", max_digits=12, decimal_places=6, default=Decimal("1"),
@@ -823,8 +780,9 @@ class SupplyPoint(models.Model):
         help_text="Např. 'EAN 668' nebo 'Hlavní odběr elektro FM'.",
     )
     code = models.CharField("Kód / EAN", max_length=50, blank=True)
+    # Stejne jako u Meter.meter_type - drzi KOD Tridy.
     meter_type = models.CharField(
-        "Typ energie", max_length=20, default=Meter.MeterType.ELECTRICITY,
+        "Třída", max_length=20, default=Meter.MeterType.ELECTRICITY,
     )
     main_meter = models.ForeignKey(
         Meter, null=True, blank=True, on_delete=models.SET_NULL,
@@ -930,6 +888,10 @@ class MeterReading(models.Model):
 
 class ServicePoolItem(models.Model):
     class InvoiceClass(models.TextChoices):
+        """Ponecháno jako zdroj výchozí hodnoty pole a kvůli starším
+        jednorázovým příkazům - živý seznam Tříd je v InvoiceClassColor
+        (Nastavení -> Třídy), takže tenhle výčet už neurčuje povolené
+        volby ani popisky."""
         RENT = "rent", "Nájemné"
         ELECTRICITY = "electricity", "Elektřina"
         WATER = "water", "Voda"
@@ -947,7 +909,7 @@ class ServicePoolItem(models.Model):
     )
     name = models.CharField("Název", max_length=200)
     invoice_class = models.CharField(
-        "Třída", max_length=20, choices=InvoiceClass.choices, default=InvoiceClass.OTHER
+        "Třída", max_length=20, default=InvoiceClass.OTHER
     )
     default_allocation_type = models.CharField(
         "Výchozí typ rozpočtu", max_length=20, choices=ALLOCATION_TYPE_CHOICES, blank=True,
@@ -984,16 +946,43 @@ class ServicePoolItem(models.Model):
     def __str__(self):
         return f"{self.name} ({self.site})"
 
+    def get_invoice_class_display(self):
+        """Django tuhle metodu generuje samo jen u poli s choices= - to uz
+        pole nema (zivy seznam Trid je v InvoiceClassColor), takze ji
+        dodavame rucne, aby vsechna volani dal fungovala a zaroven
+        respektovala prejmenovani Tridy v adminu."""
+        return InvoiceClassColor.label_map().get(self.invoice_class, self.invoice_class)
+
 
 class InvoiceClassColor(models.Model):
-    """Vlastni barva pozadi pro kazdou Tridu (ServicePoolItem.InvoiceClass) -
-    pouziva se pro barevne odliseni sekci Elektrina/Voda/Teplo/Ostatni
-    v Karte klienta (core/admin.py ClientCardAdmin) misto napevno
-    zadanych barev v kodu. Radky se seeduji migraci (jeden na kazdou
-    Tridu) - v adminu jde jen upravovat barvu, ne pridavat/mazat radky
-    (viz core/admin.py InvoiceClassColorAdmin)."""
+    """Trida (Elektrina/Voda/Teplo/Ostatni/Najemne) - JEDINY seznam, do
+    ktereho se radi jak polozky zasobniku sluzeb, tak Meridla a Odberna
+    mista. Drive byly dva nezavisle vycty: Meter.MeterType (Typ meridla)
+    a ServicePoolItem.InvoiceClass (Trida) - vznikly v jine dobe pro jiny
+    ucel a nikdy se nesjednotily, i kdyz slo temer o totez (lisil se jen
+    "Plyn" bez vlastni tridy a "Nájemné" bez meridel). Daniel na tu
+    duplicitu upozornil 2026-08-18 a Typy meridel jsme zrusili uplne -
+    meridlo si vybira primo Tridu.
+
+    Radky jdou v adminu pridavat, prejmenovat i mazat (viz
+    core/admin.py InvoiceClassColorAdmin). Kod (invoice_class) je jen
+    interni odkaz - Polozky/Meridla/Odberna mista na nej odkazuji
+    obycejnym textem (neni to FK), proto se po zalozeni needituje."""
     invoice_class = models.CharField(
-        "Třída", max_length=20, choices=ServicePoolItem.InvoiceClass.choices, unique=True
+        "Kód", max_length=20, unique=True,
+        help_text="Interní kód - odkazují na něj Položky, Měřidla i Odběrná místa. Needitovatelný po založení.",
+    )
+    label = models.CharField(
+        "Název", max_length=50, blank=True,
+        help_text="Jak se Třída zobrazuje v adminu. Prázdné = použije se Kód.",
+    )
+    default_unit_of_measure = models.CharField(
+        "Výchozí měrná jednotka", max_length=20, blank=True,
+        help_text="Např. kWh, m³, GJ. Použije se v přehledu spotřeb u měřidel bez vlastní jednotky.",
+    )
+    sort_order = models.PositiveIntegerField(
+        "Pořadí", default=0,
+        help_text="Určuje pořadí Tříd v sestavách a nabídkách.",
     )
     color_light = models.CharField(
         "Barva pozadí (světlý motiv)", max_length=7, default="#f3f4f6",
@@ -1028,9 +1017,9 @@ class InvoiceClassColor(models.Model):
     )
 
     class Meta:
-        verbose_name = "Nastavení třídy"
+        verbose_name = "Třída"
         verbose_name_plural = "Třídy (barvy a paušály)"
-        ordering = ["invoice_class"]
+        ordering = ["sort_order", "invoice_class"]
 
     @classmethod
     def deduct_fixed_map(cls):
@@ -1040,20 +1029,42 @@ class InvoiceClassColor(models.Model):
         return dict(cls.objects.values_list("invoice_class", "deduct_fixed_from_pool"))
 
     @classmethod
+    def choices(cls):
+        """[(kod, nazev)] ve zvolenem poradi - nahrazuje drive napevno
+        zapsany ServicePoolItem.InvoiceClass.choices vsude, kde se staví
+        nabidky a skupiny sestav."""
+        return [
+            (code, label or code)
+            for code, label in cls.objects.values_list("invoice_class", "label")
+        ]
+
+    @classmethod
+    def label_map(cls):
+        """{kod: nazev} - pro zobrazeni Tridy tam, kde je po ruce jen kod."""
+        return {code: (label or code) for code, label in cls.objects.values_list("invoice_class", "label")}
+
+    @classmethod
+    def default_unit_map(cls):
+        """{kod: vychozi jednotka} - fallback jednotky v prehledu spotreb."""
+        return dict(
+            cls.objects.exclude(default_unit_of_measure="")
+            .values_list("invoice_class", "default_unit_of_measure")
+        )
+
+    @classmethod
     def css_class_for(cls, invoice_class):
         """Nazev CSS tridy, kterou generuje core.views.class_colors_css."""
         return f"rx-class-{invoice_class}" if invoice_class else ""
 
     @classmethod
     def css_class_for_meter_type(cls, meter_type):
-        """Typ meridla na Tridu - drive napevno zapsany slovnik
-        METER_TYPE_TO_CLASS, ted MeterTypeConfig.invoice_class (Nastaveni
-        -> Typy meridel), aby barvy sedely i pro nove pridane typy."""
-        mapped = MeterTypeConfig.invoice_class_map().get(meter_type)
-        return cls.css_class_for(mapped) if mapped else ""
+        """Meridlo uz drzi primo kod Tridy (drive samostatny Typ meridla,
+        ktery se na Tridu teprve mapoval) - zustava jako tenka obalka,
+        aby se nemusela prepisovat vsechna volani v adminu."""
+        return cls.css_class_for(meter_type)
 
     def __str__(self):
-        return self.get_invoice_class_display()
+        return self.label or self.invoice_class
 
 
 class AllocationKey(models.Model):
