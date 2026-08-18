@@ -32,6 +32,39 @@
     {% if not rows %}
         <p>Žádné aktivní karty s plochami nenalezeny.</p>
     {% else %}
+        {% if koeficient != None %}
+            <div style="border:1px solid #444; border-radius:8px; padding:14px 16px; margin-bottom:18px; max-width:760px;">
+                <div style="font-weight:600; margin-bottom:10px;">Koeficient DPH za {{ selected_period }}</div>
+                <table style="border-collapse:collapse; font-size:13px; width:100%;">
+                    <tr>
+                        <td style="padding:4px 8px;">Nájem <strong>s DPH</strong> (zdanitelné plnění)</td>
+                        <td style="padding:4px 8px; text-align:right;">{{ pocet_s_dph }}&times;</td>
+                        <td style="padding:4px 8px; text-align:right; font-weight:600;">{{ total_s_dph|floatformat:2 }} Kč</td>
+                    </tr>
+                    <tr>
+                        <td style="padding:4px 8px;">Nájem <strong>bez DPH</strong> (osvobozeno dle §56a)</td>
+                        <td style="padding:4px 8px; text-align:right;">{{ pocet_bez_dph }}&times;</td>
+                        <td style="padding:4px 8px; text-align:right; font-weight:600;">{{ total_bez_dph|floatformat:2 }} Kč</td>
+                    </tr>
+                    <tr style="border-top:1px solid #555;">
+                        <td style="padding:6px 8px;">Celkem</td>
+                        <td style="padding:6px 8px;"></td>
+                        <td style="padding:6px 8px; text-align:right; font-weight:600;">{{ total_monthly|floatformat:2 }} Kč</td>
+                    </tr>
+                    <tr>
+                        <td style="padding:8px; font-weight:700;">Koeficient (zaokrouhleno nahoru)</td>
+                        <td style="padding:8px;"></td>
+                        <td style="padding:8px; text-align:right; font-weight:700; font-size:18px;">{{ koeficient }} %</td>
+                    </tr>
+                </table>
+                <p style="color:#999; font-size:12px; margin:10px 0 0;">
+                    Podíl zdanitelného nájmu na celkovém nájmu (§76 ZDPH), zaokrouhleno nahoru
+                    na celé procento. Nájem je dle §56a osvobozený bez nároku na odpočet;
+                    zdanit ho lze jen u nájemce, který je plátce DPH - rozhoduje proto příznak
+                    <strong>Plátce DPH</strong> u klienta.
+                </p>
+            </div>
+        {% endif %}
         <div style="overflow-x:auto;">
         <table style="width:100%; border-collapse:collapse; font-size:13px;">
             <thead>
@@ -39,6 +72,7 @@
                     <th style="padding:6px 8px;">Klient</th>
                     <th style="padding:6px 8px;">Karta</th>
                     <th style="padding:6px 8px;">Areál</th>
+                    <th style="padding:6px 8px;">DPH</th>
                     <th style="padding:6px 8px; text-align:right;">Výměra (m²)</th>
                     <th style="padding:6px 8px; text-align:right;">Dnů</th>
                     <th style="padding:6px 8px; text-align:right;">Nájemné za období</th>
@@ -55,6 +89,13 @@
                         <td style="padding:6px 8px;">
                             {% for s in row.sites %}{{ s.name }}{% if not forloop.last %}, {% endif %}{% endfor %}
                         </td>
+                        <td style="padding:6px 8px;">
+                            {% if row.s_dph %}
+                                <span style="font-size:11px; padding:2px 7px; border-radius:4px; background:#dcfce7; color:#15803d;">s DPH</span>
+                            {% else %}
+                                <span style="font-size:11px; padding:2px 7px; border-radius:4px; background:#fef3c7; color:#92400e;">bez DPH</span>
+                            {% endif %}
+                        </td>
                         <td style="padding:6px 8px; text-align:right;">{{ row.area_m2|floatformat:2 }} m²</td>
                         <td style="padding:6px 8px; text-align:right;{% if row.castecne %} color:#d97706; font-weight:600;{% else %} color:#888;{% endif %}">
                             {% if row.aktivnich_dnu != None %}{{ row.aktivnich_dnu }}/{{ row.dnu_v_obdobi }}{% else %}—{% endif %}
@@ -67,7 +108,7 @@
                     </tr>
                 {% endfor %}
                 <tr style="border-top:2px solid #666; font-weight:700;">
-                    <td colspan="5" style="padding:8px; text-align:right;">Celkem za {{ selected_period }}</td>
+                    <td colspan="6" style="padding:8px; text-align:right;">Celkem za {{ selected_period }}</td>
                     <td style="padding:8px; text-align:right;">{{ total_monthly|floatformat:2 }} Kč</td>
                     <td style="padding:8px; text-align:right;">{{ total_yearly|floatformat:2 }} Kč</td>
                 </tr>

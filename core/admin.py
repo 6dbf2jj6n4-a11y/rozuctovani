@@ -584,6 +584,21 @@ class ClientAdmin(ModelAdmin):
     inlines = [ClientCardInline, ContractInline]
     actions = ["export_emaily"]
 
+    # Barvy nazvu klienta v seznamu. Drzi se tady jako konstanty, protoze
+    # je krome obarveni pouziva i vysvetlivka nad tabulkou
+    # (list_before_template) - jinak by se snadno rozesly.
+    BARVA_RIZIKO = "#dc2626"
+    BARVA_PRONAJIMATEL = "#ca8a04"
+
+    list_before_template = "admin/core/client/legenda.html"
+
+    def changelist_view(self, request, extra_context=None):
+        """Preda vysvetlivce stejne barvy, jakymi se obarvuji nazvy."""
+        extra_context = extra_context or {}
+        extra_context["barva_riziko"] = self.BARVA_RIZIKO
+        extra_context["barva_pronajimatel"] = self.BARVA_PRONAJIMATEL
+        return super().changelist_view(request, extra_context)
+
     def _is_risky(self, obj):
         """Klient v likvidaci nebo se zaznamem (aktivnim ci drivejsim)
         v insolvencnim rejstriku - viz core/management/commands/zkontrolovat_rizika.py."""
@@ -595,9 +610,13 @@ class ClientAdmin(ModelAdmin):
     def name_display(self, obj):
         from django.utils.html import format_html
         if self._is_risky(obj):
-            return format_html('<span style="color:#dc2626; font-weight:600;">{}</span>', obj.name)
+            return format_html(
+                '<span style="color:{}; font-weight:600;">{}</span>', self.BARVA_RIZIKO, obj.name
+            )
         if obj.is_landlord:
-            return format_html('<span style="color:#ca8a04; font-weight:600;">{}</span>', obj.name)
+            return format_html(
+                '<span style="color:{}; font-weight:600;">{}</span>', self.BARVA_PRONAJIMATEL, obj.name
+            )
         return obj.name
 
     class Media:
@@ -1205,11 +1224,30 @@ class ClientCardAdmin(ModelAdmin):
                 "aktivnich_dnu": aktivnich_dnu,
                 "dnu_v_obdobi": period.days_in_period if period else None,
                 "castecne": period is not None and aktivnich_dnu < period.days_in_period,
+                "s_dph": card.client.vat_payer,
                 "yearly_rent": plny_mesic * 12,
             })
 
         rows.sort(key=lambda r: r["client"].name)
         total_monthly = sum((r["monthly_rent"] for r in rows), Decimal("0"))
+
+        # Koeficient DPH (§76 ZDPH): podil zdanitelnych plneni na celkovem
+        # plneni. Najem je podle §56a od DPH osvobozeny bez naroku na
+        # odpocet; zdanit ho lze jen u najemce, ktery je platce DPH -
+        # proto se tu rozhoduje podle Client.vat_payer. Overeno proti
+        # ABRA Flexi za 07/2026 (core/management/commands/diag_dph_najem.py):
+        # u vsech 37 faktur odpovidalo vycislene DPH tomuto priznaku, tzn.
+        # neplatcum se najem s DPH nefakturuje. Viz konverzace s Danielem
+        # 2026-08-18.
+        #
+        # Koeficient se ze zakona zaokrouhluje NAHORU na cele procento.
+        total_s_dph = sum((r["monthly_rent"] for r in rows if r["s_dph"]), Decimal("0"))
+        total_bez_dph = sum((r["monthly_rent"] for r in rows if not r["s_dph"]), Decimal("0"))
+        koeficient = None
+        if total_monthly:
+            koeficient = (total_s_dph / total_monthly * 100).quantize(
+                Decimal("1"), rounding=ROUND_CEILING
+            )
 
         context = {
             **self.admin_site.each_context(request),
@@ -1221,6 +1259,11 @@ class ClientCardAdmin(ModelAdmin):
             "rows": rows,
             "total_monthly": total_monthly,
             "total_yearly": total_monthly * 12,
+            "total_s_dph": total_s_dph,
+            "total_bez_dph": total_bez_dph,
+            "koeficient": koeficient,
+            "pocet_s_dph": sum(1 for r in rows if r["s_dph"]),
+            "pocet_bez_dph": sum(1 for r in rows if not r["s_dph"]),
             "opts": self.model._meta,
         }
         return render(request, "admin/core/clientcard/report_najemne.html", context)
