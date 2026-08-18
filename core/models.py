@@ -1016,7 +1016,7 @@ class InvoiceClassColor(models.Model):
 
     class Meta:
         verbose_name = "Třída"
-        verbose_name_plural = "Třídy (barvy a paušály)"
+        verbose_name_plural = "Třídy"
         ordering = ["sort_order", "invoice_class"]
 
     @classmethod
