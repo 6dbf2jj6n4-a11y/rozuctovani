@@ -377,14 +377,14 @@ class CardUnitInline(TabularInline):
 
     def rocni_najem(self, obj):
         if obj.pk and obj.rate_per_m2 and obj.area_m2:
-            return f"{obj.area_m2 * obj.rate_per_m2:.2f} Kč"
-        return "—"
+            return _format_kc(obj.area_m2 * obj.rate_per_m2)
+        return _format_kc(None)
     rocni_najem.short_description = "Nájemné/rok"
 
     def mesicni_najem(self, obj):
         if obj.pk and obj.monthly_rent:
-            return f"{obj.monthly_rent} Kč"
-        return "—"
+            return _format_kc(obj.monthly_rent)
+        return _format_kc(None)
     mesicni_najem.short_description = "Nájemné/měsíc"
 
 
