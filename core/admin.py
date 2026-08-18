@@ -2469,37 +2469,10 @@ class InvoiceClassColorAdmin(ModelAdmin):
         """Kod jde zadat jen pri zalozeni - zmena existujiciho by odpojila
         Polozky/Meridla/Odberna mista, ktera na nej odkazuji obycejnym
         textem (neni to FK). Prejmenovat jde Nazev, ten je jen na
-        zobrazeni.
-
-        "Sekce?" u Najemneho je uzamcena na Zapnuto - Najemne se v Karte
-        klienta zadava v sekci Plochy a najemne, ne pres Klice, ale tahle
-        sekce potrebuje mit svuj radek v InvoiceClassColor kvuli barve
-        a poradi. Viz konverzace s Danielem 2026-08-18."""
+        zobrazeni."""
         if obj is not None:
-            readonly = ["invoice_class"]
-            if obj.invoice_class == "najemne":
-                readonly.append("ma_sekci_klicu")
-            return tuple(readonly)
+            return ("invoice_class",)
         return ()
-
-    def get_changelist_formset(self, request, **kwargs):
-        """Stejne uzamceni "Sekce?" u Najemneho i pro prepinac primo
-        v seznamu (list_editable) - get_readonly_fields resi jen
-        jednotlivy zmenovy formular, list_editable ma vlastni formset."""
-        FormSet = super().get_changelist_formset(request, **kwargs)
-
-        class NajemneSekceUzamcenaFormSet(FormSet):
-            def _construct_form(self, i, **kw):
-                form = super()._construct_form(i, **kw)
-                if (
-                    form.instance.pk
-                    and form.instance.invoice_class == "najemne"
-                    and "ma_sekci_klicu" in form.fields
-                ):
-                    form.fields["ma_sekci_klicu"].disabled = True
-                return form
-
-        return NajemneSekceUzamcenaFormSet
 
     def has_delete_permission(self, request, obj=None):
         if obj is None:
@@ -3410,9 +3383,7 @@ class BillingLineAdmin(DefaultToCurrentPeriodMixin, ModelAdmin):
         periods.reverse()  # chronologicky pro graf
 
         class_labels = InvoiceClassColor.label_map()
-        # Najemne se do grafu nekresli - neuctuje se jako spolecny Naklad
-        # (CostEntry), ale per Karta, takze by byla cara vzdy na nule.
-        class_order = [c for c, _ in InvoiceClassColor.choices() if c != "najemne"]
+        class_order = [c for c, _ in InvoiceClassColor.choices()]
         # Barvy se berou z Nastavení -> Třídy (InvoiceClassColor), aby graf
         # drzel stejnou konvenci jako zbytek aplikace (Měřidla, Odečty,
         # Ceníky...). Do SVG se nevklada konkretni odstin, ale CSS trida +

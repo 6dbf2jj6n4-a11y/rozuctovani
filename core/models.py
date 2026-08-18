@@ -911,7 +911,6 @@ class ServicePoolItem(models.Model):
         jednorázovým příkazům - živý seznam Tříd je v InvoiceClassColor
         (Nastavení -> Třídy), takže tenhle výčet už neurčuje povolené
         volby ani popisky."""
-        RENT = "najemne", "Nájemné"
         ELECTRICITY = "elektro", "Elektřina"
         WATER = "voda", "Voda"
         HEAT = "teplo", "Teplo"
