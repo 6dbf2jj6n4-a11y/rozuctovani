@@ -34,11 +34,13 @@ vyplni celou sirku bunky sama od sebe, a text-align:right na spanu uvnitr
 uz ma do ceho se zarovnat.
 */
 .field-rocni_najem > div,
-.field-mesicni_najem > div {
+.field-mesicni_najem > div,
+.field-vymera_zasobnik > div {
     display: contents;
 }
 .field-rocni_najem .readonly,
-.field-mesicni_najem .readonly {
+.field-mesicni_najem .readonly,
+.field-vymera_zasobnik .readonly {
     display: block;
     width: 100%;
 }
