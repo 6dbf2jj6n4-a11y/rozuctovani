@@ -548,7 +548,9 @@ class ActiveClientFilter(admin.SimpleListFilter):
 
 @admin.register(Client)
 class ClientAdmin(ModelAdmin):
-    list_display = ("name_display", "code", "ico", "contact_email", "contact_phone", "is_active")
+    list_display = (
+        "name_display", "code", "ico", "vat_payer", "contact_email", "contact_phone", "is_active",
+    )
     search_fields = ("name", "ico", "code")
     list_filter = (ActiveClientFilter, "entity_type", "is_landlord", SiteFilter, "insolvency_status", "vat_payer")
     fieldsets = (
