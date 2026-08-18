@@ -227,6 +227,11 @@
         .move-btn:disabled { opacity: 0.25; cursor: default; }
         @media (min-width: 760px) {
             .sidebar { display: block; }
+            /* Tabulka meridel je typicky delsi nez karta formulare - bez
+               sticky na .wrap by po kliku na radek daleko dole zustal
+               formular nahore mimo obrazovku. Viz konverzace s Danielem
+               2026-08-18. */
+            .wrap { position: sticky; top: 20px; }
         }
     </style>
     <script>
