@@ -185,6 +185,29 @@ class SiteAdmin(ModelAdmin):
         return obj._aktivnich_klientu
 
 
+def _formset_se_stabilnim_prefixem(formset, invoice_class):
+    """Da inline sekci vlastni, stabilni jmeno formulare odvozene od kodu
+    Tridy (napr. "allocation_keys__elektro").
+
+    Proc: kdyz je nad jednim modelem vic inline sekci, Django je rozlisuje
+    JEN podle poradi - prvni dostane "allocation_keys", druha
+    "allocation_keys-2" atd. (django/contrib/admin/options.py,
+    _create_formsets). U sekci generovanych z Trid by staclo pridat Tridu
+    v jinem okne a odeslana data by se ulozila do JINE sekce, nez do ktere
+    je uzivatel zadal. S vlastnim jmenem na poradi nezalezi.
+
+    Na jmenech formularu nezavisi zadny JS ani CSS - allocationkey_default_type.js
+    i cardunit_autofill.js pracuji jen s koncovkami nazvu poli."""
+    zaklad = formset.get_default_prefix()
+
+    class FormSetSeStabilnimPrefixem(formset):
+        @classmethod
+        def get_default_prefix(cls):
+            return f"{zaklad}__{invoice_class}"
+
+    return FormSetSeStabilnimPrefixem
+
+
 class UnitServiceInlineBase(TabularInline):
     model = UnitService
     extra = 0
@@ -193,16 +216,10 @@ class UnitServiceInlineBase(TabularInline):
     class Media:
         css = {"all": ("core/css/select_width_fix.css",)}
 
-    # Mapovani tridy sluzby na meridla (pro tridu "ostatni" meridla nejsou)
-    METER_TYPE_FOR_CLASS = {
-        "elektro": "elektro",
-        "voda": "voda",
-        "teplo": "teplo",
-    }
-
     def get_formset(self, request, obj=None, **kwargs):
         self.parent_obj = obj
-        return super().get_formset(request, obj, **kwargs)
+        formset = super().get_formset(request, obj, **kwargs)
+        return _formset_se_stabilnim_prefixem(formset, self.invoice_class)
 
     def get_queryset(self, request):
         return super().get_queryset(request).filter(
@@ -217,13 +234,12 @@ class UnitServiceInlineBase(TabularInline):
                 qs = qs.filter(site=parent.site)
             kwargs["queryset"] = qs
         elif db_field.name == "meter":
-            meter_type = self.METER_TYPE_FOR_CLASS.get(self.invoice_class)
-            if meter_type:
-                qs = Meter.objects.filter(meter_type=meter_type)
-                if parent is not None:
-                    qs = qs.filter(site=parent.site)
-            else:
-                qs = Meter.objects.none()
+            # Meridlo uz drzi primo kod Tridy, takze staci filtrovat na ni
+            # (drive na to byl prevodni slovnik METER_TYPE_FOR_CLASS - po
+            # sjednoceni Trid uz to byla identita).
+            qs = Meter.objects.filter(meter_type=self.invoice_class)
+            if parent is not None:
+                qs = qs.filter(site=parent.site)
             kwargs["queryset"] = qs
 
         formfield = super().formfield_for_foreignkey(db_field, request, **kwargs)
@@ -234,28 +250,22 @@ class UnitServiceInlineBase(TabularInline):
         return formfield
 
 
-class UnitServiceElectricityInline(UnitServiceInlineBase):
-    invoice_class = "elektro"
-    verbose_name = "Služba – Elektřina"
-    verbose_name_plural = "Elektřina"
-
-
-class UnitServiceWaterInline(UnitServiceInlineBase):
-    invoice_class = "voda"
-    verbose_name = "Služba – Voda"
-    verbose_name_plural = "Voda"
-
-
-class UnitServiceHeatInline(UnitServiceInlineBase):
-    invoice_class = "teplo"
-    verbose_name = "Služba – Teplo"
-    verbose_name_plural = "Teplo"
-
-
-class UnitServiceOtherInline(UnitServiceInlineBase):
-    invoice_class = "ostatni"
-    verbose_name = "Služba – Ostatní"
-    verbose_name_plural = "Ostatní"
+def sekce_sluzeb():
+    """Sekce Vychozich sluzeb na Plose - jedna na kazdou Tridu se zapnutou
+    volbou "Vlastni sekce" (Nastaveni -> Tridy). Viz sekce_klicu()."""
+    return [
+        type(
+            f"UnitServiceInline_{trida.invoice_class}",
+            (UnitServiceInlineBase,),
+            {
+                "invoice_class": trida.invoice_class,
+                "verbose_name": f"Služba – {trida.label or trida.invoice_class}",
+                "verbose_name_plural": trida.label or trida.invoice_class,
+                "__module__": __name__,
+            },
+        )
+        for trida in InvoiceClassColor.se_sekci()
+    ]
 
 
 @admin.register(Unit)
@@ -265,12 +275,10 @@ class UnitAdmin(DuplicateModelAdminMixin, ModelAdmin):
     list_filter = ("site",)
     search_fields = ("name",)
     actions = ["duplicate_selected"]
-    inlines = [
-        UnitServiceElectricityInline,
-        UnitServiceWaterInline,
-        UnitServiceHeatInline,
-        UnitServiceOtherInline,
-    ]
+
+    def get_inlines(self, request, obj=None):
+        """Sekce se generuji z Trid (Nastaveni -> Tridy), ne napevno."""
+        return sekce_sluzeb()
 
     def prepare_duplicate(self, copy, original):
         copy.name = f"{original.name} (kopie)"
@@ -322,6 +330,10 @@ class AllocationKeyInlineBase(TabularInline):
         css = {"all": ("core/css/select_width_fix.css",)}
         js = ("core/js/allocationkey_default_type.js",)
 
+    def get_formset(self, request, obj=None, **kwargs):
+        formset = super().get_formset(request, obj, **kwargs)
+        return _formset_se_stabilnim_prefixem(formset, self.invoice_class)
+
     def get_queryset(self, request):
         return super().get_queryset(request).filter(
             service_item__invoice_class=self.invoice_class
@@ -340,39 +352,33 @@ class AllocationKeyInlineBase(TabularInline):
         return formfield
 
 
-class AllocationKeyElectricityInline(AllocationKeyInlineBase):
-    invoice_class = "elektro"
-    verbose_name = "Klíč – Elektřina"
-    verbose_name_plural = "Elektřina"
-    # Stabilni CSS trida pro cilenou dynamickou barvu pozadi sekce -
-    # viz ClientCardAdmin.change_form_before_template
-    # (core_invoiceclasscolor_style.html), ktery podle aktualnich barev
-    # z InvoiceClassColor (editovatelne v Nastavení -> Barvy tříd)
-    # vygeneruje <style> pravidlo pro tuhle tridu. Samotna trida tu jen
-    # oznacuje KTEROU sekci to je, barvu uz nenese (ta je v DB, ne
-    # napevno v kodu) - viz konverzace s Danielem.
-    classes = ("key-section-elektro",)
+def sekce_klicu():
+    """Sekce Klicu v Karte klienta - jedna na kazdou Tridu se zapnutou
+    volbou "Vlastni sekce" (Nastaveni -> Tridy).
 
-
-class AllocationKeyWaterInline(AllocationKeyInlineBase):
-    invoice_class = "voda"
-    verbose_name = "Klíč – Voda"
-    verbose_name_plural = "Voda"
-    classes = ("key-section-voda",)
-
-
-class AllocationKeyHeatInline(AllocationKeyInlineBase):
-    invoice_class = "teplo"
-    verbose_name = "Klíč – Teplo"
-    verbose_name_plural = "Teplo"
-    classes = ("key-section-teplo",)
-
-
-class AllocationKeyOtherInline(AllocationKeyInlineBase):
-    invoice_class = "ostatni"
-    verbose_name = "Klíč – Ostatní"
-    verbose_name_plural = "Ostatní"
-    classes = ("key-section-ostatni",)
+    Drive to byly ctyri tridy napevno v kodu, takze nova Trida svou sekci
+    nedostala a ty ctyri puvodni nesly smazat. Ted sekce sleduji data.
+    Poradi je dane Meta.ordering na InvoiceClassColor (sort_order), na
+    spravnost ukladani ale nema vliv - o to se stara stabilni prefix
+    formulare, viz _formset_se_stabilnim_prefixem."""
+    return [
+        type(
+            f"AllocationKeyInline_{trida.invoice_class}",
+            (AllocationKeyInlineBase,),
+            {
+                "invoice_class": trida.invoice_class,
+                "verbose_name": f"Klíč – {trida.label or trida.invoice_class}",
+                "verbose_name_plural": trida.label or trida.invoice_class,
+                # Stabilni CSS trida pro cilenou barvu pozadi sekce - podle
+                # ni generuje pravidla
+                # templates/admin/core/clientcard/invoiceclasscolor_style.html
+                # z barev ulozenych u Tridy. Sama barvu nenese.
+                "classes": (f"key-section-{trida.invoice_class}",),
+                "__module__": __name__,
+            },
+        )
+        for trida in InvoiceClassColor.se_sekci()
+    ]
 
 
 class CardUnitInline(TabularInline):
@@ -1039,14 +1045,12 @@ class ClientCardAdmin(ModelAdmin):
         result = super().serialize_result(obj, to_field_name)
         result["text"] = obj.description or f"Karta {obj.client}"
         return result
-    inlines = [
-        CardUnitInline,
-        AllocationKeyElectricityInline,
-        AllocationKeyWaterInline,
-        AllocationKeyHeatInline,
-        AllocationKeyOtherInline,
-    ]
     actions = ["kopie_karty"]
+
+    def get_inlines(self, request, obj=None):
+        """Plochy a najemne + sekce Klicu generovane z Trid
+        (Nastaveni -> Tridy), ne napevno."""
+        return [CardUnitInline, *sekce_klicu()]
 
     @admin.action(description="Vytvořit kopii vybraných karet")
     def kopie_karty(self, request, queryset):
@@ -1271,6 +1275,13 @@ class ClientCardAdmin(ModelAdmin):
             "opts": self.model._meta,
         }
         return render(request, "admin/core/clientcard/kopie_form.html", context)
+
+    def add_view(self, request, form_url="", extra_context=None):
+        """Barvy sekci se musi vlozit i na formulari NOVE Karty - driv se
+        pridavaly jen v change_view, takze nova Karta mela sekce sede."""
+        extra_context = extra_context or {}
+        extra_context["invoice_class_colors"] = InvoiceClassColor.objects.all()
+        return super().add_view(request, form_url, extra_context)
 
     def change_view(self, request, object_id, form_url="", extra_context=None):
         extra_context = extra_context or {}
@@ -2337,22 +2348,20 @@ class InvoiceClassColorAdmin(ModelAdmin):
     Meridla i Odberna mista (drive na to byly dva nezavisle vycty, viz
     docstring modelu). Radky jdou pridavat, prejmenovat i mazat.
 
-    Mazani je blokovane ve dvou pripadech: kdyz Tridu jeste neco pouziva
-    (osirel by na nem neplatny kod - neni to FK, jen text), nebo kdyz jde
-    o jednu ze ctyr Trid, na ktere jsou navazane napevno zapsane sekce v
-    Karte klienta (CHRANENE_TRIDY) - ty by po smazani zustaly prazdne."""
-
-    # Sekce v Karte klienta / na Plose jsou zatim ctyri samostatne tridy
-    # v kodu (AllocationKey*Inline, UnitService*Inline), navazane na tyhle
-    # kody. Dokud se negeneruji dynamicky, nesmi ty Tridy zmizet.
-    CHRANENE_TRIDY = ("elektro", "voda", "teplo", "ostatni")
+    Mazani je blokovane jen kdyz Tridu jeste neco pouziva - osirel by na
+    tom neplatny kod (neni to FK, jen text). Drive se navic nesmely mazat
+    ctyri zakladni Tridy, protoze na nich visely napevno zapsane sekce v
+    Karte klienta; ted se sekce generuji z Trid, takze po smazani proste
+    zmizi i sekce."""
 
     list_display = (
         "nazev", "invoice_class", "default_unit_of_measure", "sort_order",
-        "deduct_fixed_from_pool", "ukazka_textu", "pocet_pouziti",
+        "ma_sekci_klicu", "deduct_fixed_from_pool", "ukazka_textu", "pocet_pouziti",
         "color_light", "color_dark", "text_color_light", "text_color_dark",
     )
-    list_editable = ("default_unit_of_measure", "sort_order", "deduct_fixed_from_pool")
+    list_editable = (
+        "default_unit_of_measure", "sort_order", "ma_sekci_klicu", "deduct_fixed_from_pool",
+    )
     ordering = ("sort_order", "invoice_class")
 
     @display(description="Název", ordering="label")
@@ -2390,8 +2399,6 @@ class InvoiceClassColorAdmin(ModelAdmin):
     def has_delete_permission(self, request, obj=None):
         if obj is None:
             return True
-        if obj.invoice_class in self.CHRANENE_TRIDY:
-            return False
         return not (
             ServicePoolItem.objects.filter(invoice_class=obj.invoice_class).exists()
             or Meter.objects.filter(meter_type=obj.invoice_class).exists()

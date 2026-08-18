@@ -1005,6 +1005,14 @@ class InvoiceClassColor(models.Model):
             "jednotlivý klíč může odečítání vypnout i tak, zapnout ale ne."
         ),
     )
+    ma_sekci_klicu = models.BooleanField(
+        "Vlastní sekce v Kartě klienta a na Ploše", default=True,
+        help_text=(
+            "Zapnuto: Třída má v Kartě klienta vlastní sekci Klíčů a na Ploše "
+            "sekci Výchozích služeb. Vypni u Tříd, které se nerozúčtovávají "
+            "klíči - typicky Nájemné, to se zadává v sekci Plochy a nájemné."
+        ),
+    )
 
     class Meta:
         verbose_name = "Třída"
@@ -1027,6 +1035,14 @@ class InvoiceClassColor(models.Model):
             (code, label or code)
             for code, label in cls.objects.values_list("invoice_class", "label")
         ]
+
+    @classmethod
+    def se_sekci(cls):
+        """Tridy, ktere maji mit vlastni inline sekci - z nich se generuji
+        sekce Klicu v Karte klienta a Vychozich sluzeb na Plose (viz
+        core/admin.py sekce_klicu/sekce_sluzeb). Poradi je dane Meta.ordering,
+        aby bylo deterministicke."""
+        return list(cls.objects.filter(ma_sekci_klicu=True))
 
     @classmethod
     def label_map(cls):
