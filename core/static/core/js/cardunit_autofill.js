@@ -34,6 +34,15 @@ soucet vymer/najemneho, ktery tam nedava smysl.
         return value.toLocaleString("cs-CZ", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + " Kč";
     }
 
+    /* Stejne jako formatKc, ale zabaleno do bloku zarovnaneho doprava -
+       pro zapis primo do bunky sloupce (td.field-rocni_najem /
+       field-mesicni_najem je flex kontejner, .html() misto .text() proto,
+       aby se zarovnani doprava skutecne uplatnilo, ne jen jako holy text). */
+    function formatKcCell(value) {
+        var text = value.toLocaleString("cs-CZ", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + " Kč";
+        return '<span style="display:block; width:100%; text-align:right; white-space:nowrap;">' + text + "</span>";
+    }
+
     function getRowArea($row) {
         var $override = $row.find('input[id$="-area_m2_override"]');
         var overrideVal = parseNum($override.val());
@@ -66,10 +75,10 @@ soucet vymer/najemneho, ktery tam nedava smysl.
             var rocniVal = area * rate;
             var mesicniVal = rocniVal / 12;
             if ($rocni.length) {
-                $rocni.first().text(formatKc(rocniVal));
+                $rocni.first().html(formatKcCell(rocniVal));
             }
             if ($mesicni.length) {
-                $mesicni.first().text(formatKc(mesicniVal));
+                $mesicni.first().html(formatKcCell(mesicniVal));
             }
             $row.attr("data-rocni-najem", rocniVal);
             $row.attr("data-mesicni-najem", mesicniVal);
