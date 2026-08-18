@@ -2368,7 +2368,7 @@ class InvoiceClassColorAdmin(ModelAdmin):
 
     list_display = (
         "nazev", "default_unit_of_measure", "sort_order",
-        "ma_sekci_klicu", "deduct_fixed_from_pool", "ukazka_textu", "pocet_pouziti",
+        "ma_sekci_klicu", "deduct_fixed_from_pool", "pocet_pouziti",
         "color_light", "color_dark", "text_color_light", "text_color_dark",
     )
     list_editable = (
@@ -2378,12 +2378,8 @@ class InvoiceClassColorAdmin(ModelAdmin):
 
     @display(description="Název", ordering="label")
     def nazev(self, obj):
-        return colored_by_class(obj.label or obj.invoice_class, obj.invoice_class)
-
-    @display(description="Ukázka")
-    def ukazka_textu(self, obj):
-        """Nahled barvy textu primo v seznamu - stejnou CSS tridou, jakou
-        pouzivaji Měřidla/Odečty/Ceníky, takze se meni i s motivem."""
+        """Obarveno podle Tridy - drive to delal samostatny sloupec
+        "Ukázka", ted uz je redundantni, protoze Nazev nese totez."""
         return colored_by_class(obj.label or obj.invoice_class, obj.invoice_class)
 
     @display(description="Použito u")
