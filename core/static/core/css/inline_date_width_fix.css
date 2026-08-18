@@ -13,14 +13,40 @@ tento obal, ne na typ vstupu.
 
 /*
 Readonly sloupce v inline tabulkach (napr. Najemne/rok, Najemne/mesic v
-Plochach a najemnem) - Unfold obaluje hodnotu do <div class="readonly ...">
-bez sirky, ktery jako flex item (rodic bunky ma "flex items-center") jen
-obtahne obsah. Nas span uvnitr ma text-align:right, ale nema se do ceho
-roztahnout. Donutime "readonly" div zabrat celou zbylou sirku radku, aby
-se pravé zarovnani skutecne projevilo.
+Plochach a najemnem) - Unfold renderuje hodnotu jako:
+  <td class="field-rocni_najem ...">
+    <div class="flex flex-row gap-3 items-center">   <- radek (wrapper)
+      <div class="readonly ...">                     <- "bublina" s hodnotou
+        <span style="text-align:right">...</span>
+      </div>
+    </div>
+  </td>
+"readonly" div se sam natahnout nechce (je to flex-item bez flex-grow,
+takze zustava sirky sveho obsahu) - donutit JEHO natazeni je nespolehlive
+(zavisi na tom, jestli "wrapper" ma sam definovanou sirku). Spolehlivejsi
+je nechat "readonly" bublinu v jeji prirozene sirce a jen ji zarovnat k
+pravemu okraji radku pres justify-content na wrapperu - funguje bez ohledu
+na to, jak siroky wrapper skutecne je.
 */
-.field-rocni_najem .readonly,
-.field-mesicni_najem .readonly {
-    flex: 1 1 auto;
-    width: 100%;
+.field-rocni_najem > div,
+.field-mesicni_najem > div {
+    justify-content: flex-end;
+}
+
+/*
+Vypnuti nativnich sipek nahoru/dolu (spinner) u ciselnych poli Vymera
+(m2) - uprava a Cena Kc/m2/rok v inlinu Plochy a najemne (Karta klienta) -
+na pozadani Daniela, sipky tam jen prekazely.
+*/
+.field-area_m2_override input[type="number"]::-webkit-outer-spin-button,
+.field-area_m2_override input[type="number"]::-webkit-inner-spin-button,
+.field-rate_per_m2 input[type="number"]::-webkit-outer-spin-button,
+.field-rate_per_m2 input[type="number"]::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}
+
+.field-area_m2_override input[type="number"],
+.field-rate_per_m2 input[type="number"] {
+    -moz-appearance: textfield;
 }
