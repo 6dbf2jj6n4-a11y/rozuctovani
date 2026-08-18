@@ -47,10 +47,19 @@
                         <td style="padding:4px 8px; text-align:right; font-weight:600;">{{ total_bez_dph|floatformat:2 }} Kč</td>
                     </tr>
                     <tr style="border-top:1px solid #555;">
-                        <td style="padding:6px 8px;">Celkem</td>
+                        <td style="padding:6px 8px;">Základ koeficientu (fakturovaný nájem)</td>
                         <td style="padding:6px 8px;"></td>
-                        <td style="padding:6px 8px; text-align:right; font-weight:600;">{{ total_monthly|floatformat:2 }} Kč</td>
+                        <td style="padding:6px 8px; text-align:right; font-weight:600;">{{ zaklad_koeficientu|floatformat:2 }} Kč</td>
                     </tr>
+                    {% if total_nefakturovano %}
+                        <tr>
+                            <td style="padding:4px 8px; color:#d97706;">
+                                Nefakturovaný nájem <span style="font-size:11px;">(mimo koeficient)</span>
+                            </td>
+                            <td style="padding:4px 8px; text-align:right; color:#d97706;">{{ pocet_nefakturovano }}&times;</td>
+                            <td style="padding:4px 8px; text-align:right; font-weight:600; color:#d97706;">{{ total_nefakturovano|floatformat:2 }} Kč</td>
+                        </tr>
+                    {% endif %}
                     <tr>
                         <td style="padding:8px; font-weight:700;">Koeficient (zaokrouhleno nahoru)</td>
                         <td style="padding:8px;"></td>
@@ -58,10 +67,12 @@
                     </tr>
                 </table>
                 <p style="color:#999; font-size:12px; margin:10px 0 0;">
-                    Podíl zdanitelného nájmu na celkovém nájmu (§76 ZDPH), zaokrouhleno nahoru
-                    na celé procento. Nájem je dle §56a osvobozený bez nároku na odpočet;
-                    zdanit ho lze jen u nájemce, který je plátce DPH - rozhoduje proto příznak
-                    <strong>Plátce DPH</strong> u klienta.
+                    Podíl zdanitelného nájmu na celkovém fakturovaném nájmu (§76 ZDPH),
+                    zaokrouhleno nahoru na celé procento. Nájem je dle §56a osvobozený bez
+                    nároku na odpočet; zdanit ho lze jen u nájemce, který je plátce DPH -
+                    rozhoduje proto příznak <strong>Plátce DPH</strong> u klienta.
+                    Nefakturovaná část nájmu do koeficientu nevstupuje vůbec (není zdanitelné
+                    ani osvobozené plnění).
                 </p>
             </div>
         {% endif %}
@@ -103,6 +114,12 @@
                         <td style="padding:6px 8px; text-align:right;{% if row.castecne %} color:#d97706;{% endif %}">
                             {{ row.monthly_rent|floatformat:2 }} Kč
                             {% if row.castecne %}<br><span style="font-size:11px; color:#888;">plný měsíc {{ row.plny_mesic|floatformat:2 }}</span>{% endif %}
+                            {% if row.nefakturovano %}
+                                <br><span style="font-size:11px; padding:1px 6px; border-radius:4px; background:#fef3c7; color:#92400e; white-space:nowrap;">
+                                    z toho {{ row.nefakturovano|floatformat:2 }} bez dokladu
+                                </span>
+                                <br><span style="font-size:11px; color:#888;">fakturuje se {{ row.k_fakturaci|floatformat:2 }} Kč</span>
+                            {% endif %}
                         </td>
                         <td style="padding:6px 8px; text-align:right; font-weight:600;">{{ row.yearly_rent|floatformat:2 }} Kč</td>
                     </tr>

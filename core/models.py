@@ -267,6 +267,16 @@ class ClientCard(models.Model):
         "Číslo objednávky - energie a služby", max_length=100, blank=True,
         help_text="Někteří klienti vyžadují uvést na faktuře/vyúčtování za energie a služby - vázané na tuto Kartu.",
     )
+    rent_not_invoiced = models.DecimalField(
+        "Nefakturovaná část nájmu (Kč/měsíc)",
+        max_digits=10, decimal_places=2, default=Decimal("0"),
+        help_text=(
+            "Část měsíčního nájmu, kterou klient platí bez dokladu - do nájmu "
+            "a sestav se počítá dál, ale NEfakturuje se a nevstupuje do "
+            "koeficientu DPH (není zdanitelné plnění). Nech 0, pokud se "
+            "fakturuje celý nájem."
+        ),
+    )
 
     class Meta:
         verbose_name = "Karta klienta"
@@ -355,6 +365,25 @@ class ClientCard(models.Model):
             (cu.monthly_rent or Decimal("0") for cu in self.card_units.all()),
             Decimal("0"),
         )
+        if not raw:
+            return Decimal("0")
+        period_start, period_end = period.date_range()
+        active_days = self.active_days_in_period(period_start, period_end)
+        if active_days <= 0:
+            return Decimal("0")
+        dnu = period.days_in_period
+        if active_days < dnu:
+            raw = raw * Decimal(active_days) / Decimal(dnu)
+        return raw.quantize(Decimal("1"), rounding=ROUND_CEILING)
+
+    def rent_not_invoiced_for_period(self, period):
+        """Nefakturovana cast najmu za obdobi, krácená stejne jako
+        rent_for_period - je to soucast najmu, takze u karty platne jen
+        cast mesice se krati se zbytkem. Viz konverzace s Danielem
+        2026-08-18 (klient plati cast najmu bez dokladu)."""
+        from decimal import ROUND_CEILING
+
+        raw = self.rent_not_invoiced or Decimal("0")
         if not raw:
             return Decimal("0")
         period_start, period_end = period.date_range()

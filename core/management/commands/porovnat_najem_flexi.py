@@ -35,12 +35,20 @@ def _normalize(name):
 
 
 def _card_rent_for_period(card, period):
-    """Nájemné karty za dané období, poměrné podle počtu aktivních dnů.
+    """FAKTUROVANÉ nájemné karty za dané období, poměrné podle počtu
+    aktivních dnů.
 
     Deleguje na ClientCard.rent_for_period, aby krácení i zaokrouhlení
     (nahoru na celé koruny, tak se nájem fakturuje) bylo na jednom místě
-    a sedělo s reportem Paušální klienti."""
-    return card.rent_for_period(period)
+    a sedělo s reportem Paušální klienti.
+
+    Odečítá se nefakturovaná část nájmu (ClientCard.rent_not_invoiced) -
+    tu klient platí bez dokladu, takže ve Flexi žádnou fakturu nemá a
+    bez odečtení by srovnání u takové karty vždycky hlásilo rozdíl.
+    Viz konverzace s Danielem 2026-08-18."""
+    rent = card.rent_for_period(period)
+    nefakturovano = card.rent_not_invoiced_for_period(period)
+    return max(rent - nefakturovano, Decimal("0"))
 
 
 class Command(BaseCommand):
