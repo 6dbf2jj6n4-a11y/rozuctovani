@@ -319,8 +319,20 @@ class UnitAdmin(DuplicateModelAdminMixin, ModelAdmin):
         return custom + urls
 
 
+class AllocationKeyInlineForm(forms.ModelForm):
+    """Kratke popisky sloupcu jen v teto inline tabulce (Karta klienta) -
+    plny nazev pole zustava v AllocationKeyAdmin/detailu klice, kde je
+    na sirku misto. Cely popisek jde videt v tooltipu na ikonce '?'
+    (help_text, viz unfold/helpers/edit_inline/tabular_heading.html)."""
+    class Meta:
+        model = AllocationKey
+        fields = "__all__"
+        labels = {"deduct_from_pool": "OzN", "is_billed": "$"}
+
+
 class AllocationKeyInlineBase(TabularInline):
     model = AllocationKey
+    form = AllocationKeyInlineForm
     extra = 0
     collapsible = True
     fields = ("service_item", "allocation_type", "value", "unit_price", "meter", "unit", "deduct_from_pool", "is_billed")
