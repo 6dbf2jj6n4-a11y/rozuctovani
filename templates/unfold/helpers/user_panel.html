@@ -1,0 +1,73 @@
+{% load i18n static core_extras %}
+{% comment %}
+Panel prihlaseneho uzivatele dole v bocnim menu - stejny vzor jako na
+demo.unfoldadmin.com (novejsi verze Unfoldu, nez jakou mame pribalenou,
+takze rucne postaveno tady). Prepinac motivu pouziva stejnou "adminTheme"
+promennou jako existujici unfold/helpers/theme_switch.html (definovana
+na <html> v unfold/layouts/skeleton.html) - zadny novy stav.
+Zmena hesla / Odhlasit se prevzato z unfold/helpers/account_links.html.
+Viz konverzace s Danielem 2026-08-18.
+{% endcomment %}
+{% static_if_exists "core/img/avatar.jpg" as avatar_url %}
+
+<div class="border-t border-base-200 mt-auto px-6 py-3 relative dark:border-base-800" x-data="{ openUserPanel: false }">
+    <nav class="absolute bg-white border border-base-200 flex flex-col leading-none py-1 rounded-default shadow-lg bottom-[73px] left-3 right-3 z-50 dark:bg-base-800 dark:border-base-700" x-cloak x-show="openUserPanel" x-transition x-on:click.outside="openUserPanel = false">
+        <div class="border-b border-base-200 flex flex-row gap-1 mb-1 pb-1 px-2 dark:border-base-700">
+            <a class="cursor-pointer flex flex-row gap-2 grow justify-center px-2 py-1.5 rounded-default hover:bg-base-100 hover:text-base-700 dark:hover:bg-base-700 dark:hover:text-base-200"
+               x-on:click="adminTheme = 'light'"
+               x-bind:class="adminTheme == 'light' && 'text-primary-600 dark:text-primary-500 dark:hover:text-primary-500! hover:text-primary-600!'">
+                <span class="material-symbols-outlined">light_mode</span>
+                <span class="leading-none self-center">{% translate "Světlý" %}</span>
+            </a>
+            <a class="cursor-pointer flex flex-row gap-2 grow justify-center px-2 py-1.5 rounded-default hover:bg-base-100 hover:text-base-700 dark:hover:bg-base-700 dark:hover:text-base-200"
+               x-on:click="adminTheme = 'dark'"
+               x-bind:class="adminTheme == 'dark' && 'text-primary-600 dark:text-primary-500 dark:hover:text-primary-500! hover:text-primary-600!'">
+                <span class="material-symbols-outlined">dark_mode</span>
+                <span class="leading-none self-center">{% translate "Tmavý" %}</span>
+            </a>
+            <a class="cursor-pointer flex flex-row gap-2 grow justify-center px-2 py-1.5 rounded-default hover:bg-base-100 hover:text-base-700 dark:hover:bg-base-700 dark:hover:text-base-200"
+               x-on:click="adminTheme = 'auto'"
+               x-bind:class="adminTheme == 'auto' && 'text-primary-600 dark:text-primary-500 dark:hover:text-primary-500! hover:text-primary-600!'">
+                <span class="material-symbols-outlined">computer</span>
+                <span class="leading-none self-center">{% translate "Systém" %}</span>
+            </a>
+        </div>
+
+        {% if user.has_usable_password %}
+            <a href="{% url 'admin:password_change' %}" class="mx-1 px-3 py-2 rounded-default hover:bg-base-100 hover:text-base-700 dark:hover:bg-base-700 dark:hover:text-base-200">
+                {% translate "Změnit heslo" %}
+            </a>
+        {% endif %}
+
+        <div class="border-t border-base-200 mt-1 pt-1 dark:border-base-700">
+            <form id="user-panel-logout-form" method="post" action="{% url 'admin:logout' %}" class="mx-1">
+                {% csrf_token %}
+                <button type="submit" class="bg-none flex cursor-pointer items-center px-3 py-1.5 text-left text-red-700 rounded-default w-full hover:bg-red-100 dark:hover:bg-red-500/20 dark:text-red-400 dark:hover:text-red-400">
+                    {% translate "Odhlásit se" %} <span class="ml-auto material-symbols-outlined text-red-700 dark:text-red-400">logout</span>
+                </button>
+            </form>
+        </div>
+    </nav>
+
+    <div class="cursor-pointer flex flex-row gap-3 items-center min-h-[64px] -mx-6 -my-3 px-6 py-3 hover:bg-base-100 dark:hover:bg-base-800" x-on:click="openUserPanel = !openUserPanel" x-bind:class="{'bg-base-100 dark:bg-base-800': openUserPanel}">
+        <div class="bg-base-200 bg-cover bg-no-repeat bg-center flex items-center justify-center h-[38px] min-w-[38px] w-[38px] rounded-default text-base-500 dark:bg-base-700"
+             {% if avatar_url %}style="background-image: url('{{ avatar_url }}')"{% endif %}>
+            {% if not avatar_url %}<span class="material-symbols-outlined">person</span>{% endif %}
+        </div>
+
+        <div class="flex flex-col select-none min-w-0">
+            <div class="font-semibold text-important tracking-tight truncate">
+                {% firstof user.get_full_name user.get_username %}
+            </div>
+            {% if user.email %}
+                <div class="text-subtle text-xs truncate">
+                    {{ user.email }}
+                </div>
+            {% endif %}
+        </div>
+
+        <span class="material-symbols-outlined ml-auto select-none text-font-default-light dark:text-font-default-dark">
+            unfold_more
+        </span>
+    </div>
+</div>

@@ -1,0 +1,20 @@
+{% load i18n unfold %}
+{% comment %}
+Prevzato z unfold/helpers/navigation.html - jen pridan user_panel.html
+na konec (mt-auto ho v nav#nav-sidebar-inner flex-col drzi u spodniho
+okraje). Viz konverzace s Danielem 2026-08-18.
+{% endcomment %}
+
+<nav id="nav-sidebar-inner" class="bg-base-50 flex flex-col min-h-screen dark:text-font-default-dark dark:bg-base-950/20 {% element_classes 'navigation_inner' %}">
+    {% include "unfold/helpers/navigation_header.html" %}
+
+    {% include "unfold/helpers/search.html" %}
+
+    {% if sidebar_navigation|length > 0 %}
+        {% include "unfold/helpers/app_list.html" with app_list=available_apps %}
+    {% else %}
+        {% include "admin/app_list.html" with app_list=available_apps show_changelinks=False %}
+    {% endif %}
+
+    {% include "unfold/helpers/user_panel.html" %}
+</nav>

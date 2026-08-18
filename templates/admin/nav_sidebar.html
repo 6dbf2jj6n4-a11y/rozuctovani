@@ -1,0 +1,26 @@
+{% load i18n unfold %}
+{% comment %}
+Prevzato z admin/nav_sidebar.html (Unfold) - napevno w-[288px] nahrazeno
+dynamickym x-bind:style navazanym na sidebarWidth (viz unfold/layouts/
+skeleton.html) + pridano tazitko na pravem okraji pro zmenu sirky
+tazenim (stejny vzor jako demo.unfoldadmin.com). Viz konverzace
+s Danielem 2026-08-18.
+{% endcomment %}
+
+<div class="relative z-50">
+    <div class="fixed hidden xl:relative xl:block {% element_classes 'navigation_wrapper' %}" x-bind:class="{'xl:hidden!': !sidebarDesktopOpen, 'block!': sidebarMobileOpen}" x-bind:style="`width: ${sidebarWidth}px`">
+        <div class="bg-base-50 relative z-30 dark:bg-base-900">
+            <div id="nav-sidebar" class="bg-base-50 border-r border-base-200 bottom-0 fixed max-h-screen top-0 dark:border-base-800 dark:bg-base-900 {% element_classes 'navigation' %}" x-bind:style="`width: ${sidebarWidth}px`">
+                {% if templates.navigation %}
+                    {% include templates.navigation %}
+                {% else %}
+                    {% include "unfold/helpers/navigation.html" %}
+                {% endif %}
+
+                <div class="absolute bottom-0 cursor-col-resize hidden xl:flex group items-center justify-center right-[-3px] top-0 w-[7px]" x-on:mousedown="sidebarResizing = true">
+                    <div class="h-full w-[3px] transition-colors group-hover:bg-base-300 group-hover:dark:bg-base-700"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
