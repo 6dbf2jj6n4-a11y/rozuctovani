@@ -155,7 +155,7 @@ CSRF_TRUSTED_ORIGINS = [
 # 2027.0), i kdyby se nekdo zapomnel APP_VERSION_YEAR rucne prepsat -
 # dohoda s Danielem 2026-08-15.
 APP_VERSION_YEAR = 2026
-APP_VERSION_SEQUENCE = 81
+APP_VERSION_SEQUENCE = 82
 APP_VERSION = (
     f"{APP_VERSION_YEAR}.{APP_VERSION_SEQUENCE}"
     if date.today().year == APP_VERSION_YEAR
@@ -357,7 +357,7 @@ UNFOLD = {
                 "separator": True,
                 "items": [
                     {
-                        "title": _("Barvy tříd"),
+                        "title": _("Třídy (barvy a paušály)"),
                         "icon": "palette",
                         "link": reverse_lazy("admin:core_invoiceclasscolor_changelist"),
                     },

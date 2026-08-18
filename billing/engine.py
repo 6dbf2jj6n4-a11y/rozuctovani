@@ -55,7 +55,8 @@ from decimal import Decimal
 from django.db import transaction
 
 from core.models import (
-    AllocationKey, BillingLine, ClientCard, CostEntry, MeterReading, Period, PriceList, ServicePoolItem,
+    AllocationKey, BillingLine, ClientCard, CostEntry, InvoiceClassColor, MeterReading, Period,
+    PriceList, ServicePoolItem,
 )
 
 
@@ -588,7 +589,12 @@ def calculate_period(period, site=None):
         ):
             price_cache.setdefault(pl.service_item_id, []).append(pl)
 
+        # Prepinac "odecitat pausaly z celkoveho nakladu" po Tridach
+        # (Nastavení -> Třídy) - nactene jednou pro cely vypocet.
+        deduct_fixed_by_class = InvoiceClassColor.deduct_fixed_map()
+
         for service_item in service_items:
+            deduct_fixed_allowed = deduct_fixed_by_class.get(service_item.invoice_class, True)
             item_costs = cost_entries_by_item.get(service_item.id) or []
             cost_entry = item_costs[0] if item_costs else None
             cost_totals = CostEntry.totals_for(
@@ -658,7 +664,12 @@ def calculate_period(period, site=None):
                             fixed_units.get(key.client_card_id, Decimal("0")) + (key.value or Decimal("0"))
                         )
                         fixed_price_per_unit[key.client_card_id] = price
-                if key.deduct_from_pool:
+                # Odecist lze jen kdyz to dovoli TRIDA i klic - prepinac
+                # v Nastavení -> Třídy umi vypnout odecitani pausalu plosne
+                # (pak se cely naklad deli mezi ostatni, jako to delal stary
+                # system), jednotlivy klic ho muze vypnout i nad ramec toho.
+                # Viz InvoiceClassColor.deduct_fixed_from_pool.
+                if key.deduct_from_pool and deduct_fixed_allowed:
                     remaining_cost -= amount
 
             if remaining_cost < 0:

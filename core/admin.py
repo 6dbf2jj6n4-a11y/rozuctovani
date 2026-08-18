@@ -2270,9 +2270,10 @@ class InvoiceClassColorAdmin(ModelAdmin):
     """Radky se seeduji migraci (jeden na kazdou Tridu) - pridavani/mazani
     tu nema smysl (Tridy jsou pevna sada), jen uprava barvy."""
     list_display = (
-        "invoice_class", "color_light", "color_dark",
-        "text_color_light", "text_color_dark", "ukazka_textu",
+        "invoice_class", "deduct_fixed_from_pool", "ukazka_textu",
+        "color_light", "color_dark", "text_color_light", "text_color_dark",
     )
+    list_editable = ("deduct_fixed_from_pool",)
     ordering = ("invoice_class",)
 
     @display(description="Ukázka")

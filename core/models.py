@@ -929,11 +929,28 @@ class InvoiceClassColor(models.Model):
         "Barva textu (tmavý motiv)", max_length=7, default="#d1d5db",
         help_text="Formát #rrggbb.",
     )
+    deduct_fixed_from_pool = models.BooleanField(
+        "Odečítat paušály z celkového nákladu", default=True,
+        help_text=(
+            "Zapnuto: paušály (Pevná částka / Dle výměry) se nejdřív odečtou "
+            "z nákladu a mezi ostatní se dělí jen zbytek - klienti s měřidlem "
+            "tak platí méně. Vypnuto: paušály jdou navíc a celý náklad se dělí "
+            "mezi ostatní, jako to dělal starý systém. Platí pro celou třídu; "
+            "jednotlivý klíč může odečítání vypnout i tak, zapnout ale ne."
+        ),
+    )
 
     class Meta:
-        verbose_name = "Barva třídy"
-        verbose_name_plural = "Barvy tříd"
+        verbose_name = "Nastavení třídy"
+        verbose_name_plural = "Třídy (barvy a paušály)"
         ordering = ["invoice_class"]
+
+    @classmethod
+    def deduct_fixed_map(cls):
+        """{invoice_class: bool} - jestli se u te tridy maji pausaly odecitat
+        z celkoveho nakladu. Trida, ktera v tabulce neni, se chova jako
+        zapnuta (puvodni chovani). Viz konverzace s Danielem 2026-08-16."""
+        return dict(cls.objects.values_list("invoice_class", "deduct_fixed_from_pool"))
 
     # Typ meridla (Meter.MeterType) na Tridu (InvoiceClass) - barvy se
     # drzi na jednom miste, i kdyz meridla maji vlastni sadu typu
