@@ -9,6 +9,7 @@ from decimal import Decimal
 
 from django.core.exceptions import ValidationError
 from django.db import models
+from django.utils.html import format_html
 
 from core.storage import R2MediaStorage
 
@@ -944,6 +945,21 @@ class ServicePoolItem(models.Model):
         return InvoiceClassColor.label_map().get(self.invoice_class, self.invoice_class)
 
 
+def _kratky_popisek(kratky, napoveda):
+    """Kratky nazev sloupce v seznamu (misto dlouheho verbose_name,
+    ktery byl v tabulce Trid moc siroky) + otaznik s celym popiskem
+    v title atributu - stejny vizual jako u Unfoldovy napovedy
+    v inline tabulkach (viz core/admin.py AllocationKeyInlineForm),
+    tady rucne, protoze zmenovy seznam bere nazev sloupce primo
+    z verbose_name pole, ne z formulare. Viz konverzace s Danielem
+    2026-08-18."""
+    return format_html(
+        '{} <span class="cursor-help material-symbols-outlined align-middle" '
+        'style="font-size:16px; vertical-align:middle;" title="{}">help</span>',
+        kratky, napoveda,
+    )
+
+
 class InvoiceClassColor(models.Model):
     """Trida (Elektrina/Voda/Teplo/Ostatni/Najemne) - JEDINY seznam, do
     ktereho se radi jak polozky zasobniku sluzeb, tak Meridla a Odberna
@@ -996,7 +1012,16 @@ class InvoiceClassColor(models.Model):
         help_text="Formát #rrggbb.",
     )
     deduct_fixed_from_pool = models.BooleanField(
-        "Odečítat paušály z celkového nákladu", default=True,
+        _kratky_popisek(
+            "OzN",
+            "Odečítat paušály z celkového nákladu. Zapnuto: paušály (Pevná "
+            "částka / Dle výměry) se nejdřív odečtou z nákladu a mezi ostatní "
+            "se dělí jen zbytek - klienti s měřidlem tak platí méně. Vypnuto: "
+            "paušály jdou navíc a celý náklad se dělí mezi ostatní, jako to "
+            "dělal starý systém. Platí pro celou třídu; jednotlivý klíč může "
+            "odečítání vypnout i tak, zapnout ale ne.",
+        ),
+        default=True,
         help_text=(
             "Zapnuto: paušály (Pevná částka / Dle výměry) se nejdřív odečtou "
             "z nákladu a mezi ostatní se dělí jen zbytek - klienti s měřidlem "
@@ -1006,7 +1031,14 @@ class InvoiceClassColor(models.Model):
         ),
     )
     ma_sekci_klicu = models.BooleanField(
-        "Vlastní sekce v Kartě klienta a na Ploše", default=True,
+        _kratky_popisek(
+            "Sekce?",
+            "Vlastní sekce v Kartě klienta a na Ploše. Zapnuto: Třída má "
+            "v Kartě klienta vlastní sekci Klíčů a na Ploše sekci Výchozích "
+            "služeb. Vypni u Tříd, které se nerozúčtovávají klíči - typicky "
+            "Nájemné, to se zadává v sekci Plochy a nájemné.",
+        ),
+        default=True,
         help_text=(
             "Zapnuto: Třída má v Kartě klienta vlastní sekci Klíčů a na Ploše "
             "sekci Výchozích služeb. Vypni u Tříd, které se nerozúčtovávají "

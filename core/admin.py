@@ -2367,7 +2367,7 @@ class InvoiceClassColorAdmin(ModelAdmin):
     zmizi i sekce."""
 
     list_display = (
-        "nazev", "invoice_class", "default_unit_of_measure", "sort_order",
+        "nazev", "default_unit_of_measure", "sort_order",
         "ma_sekci_klicu", "deduct_fixed_from_pool", "ukazka_textu", "pocet_pouziti",
         "color_light", "color_dark", "text_color_light", "text_color_dark",
     )
@@ -2378,7 +2378,7 @@ class InvoiceClassColorAdmin(ModelAdmin):
 
     @display(description="Název", ordering="label")
     def nazev(self, obj):
-        return obj.label or obj.invoice_class
+        return colored_by_class(obj.label or obj.invoice_class, obj.invoice_class)
 
     @display(description="Ukázka")
     def ukazka_textu(self, obj):
