@@ -27,16 +27,16 @@ from core.models import Site, Meter, ServicePoolItem
 
 
 CLASS_TO_METER_TYPE = {
-    "ELEKTRO": "electricity",
-    "VODA": "water",
-    "TEPLO": "heat",
+    "ELEKTRO": "elektro",
+    "VODA": "voda",
+    "TEPLO": "teplo",
 }
 
 CLASS_TO_INVOICE_CLASS = {
-    "ELEKTRO": "electricity",
-    "VODA": "water",
-    "TEPLO": "heat",
-    "OSTATNÍ": "other",
+    "ELEKTRO": "elektro",
+    "VODA": "voda",
+    "TEPLO": "teplo",
+    "OSTATNÍ": "ostatni",
 }
 
 TYP_VYPOCTU_TO_ALLOCATION = {
@@ -198,7 +198,7 @@ class Command(BaseCommand):
                 name=name,
                 meter=None,
                 defaults={
-                    "invoice_class": "other",
+                    "invoice_class": "ostatni",
                     "default_allocation_type": allocation,
                 },
             )

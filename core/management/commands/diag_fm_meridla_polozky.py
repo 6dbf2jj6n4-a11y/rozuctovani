@@ -13,9 +13,9 @@ from django.core.management.base import BaseCommand
 from core.models import Meter, ServicePoolItem, Site
 
 SAMPLE_CODES = {
-    "electricity": ["E_SPOL", "E_PAUS", "E_A1", "E_N2", "668NT"],
-    "water": ["W_TUV", "W_A1", "W_SRAZK"],
-    "heat": ["T_TUV", "T_A1S", "T_PAUS"],
+    "elektro": ["E_SPOL", "E_PAUS", "E_A1", "E_N2", "668NT"],
+    "voda": ["W_TUV", "W_A1", "W_SRAZK"],
+    "teplo": ["T_TUV", "T_A1S", "T_PAUS"],
 }
 
 
@@ -30,7 +30,7 @@ class Command(BaseCommand):
 
         self.stdout.write(self.style.WARNING("=== ServicePoolItem (ELEKTRO/VODA/TEPLO) na FM ==="))
         items = ServicePoolItem.objects.filter(
-            site=site, invoice_class__in=["electricity", "water", "heat"]
+            site=site, invoice_class__in=["elektro", "voda", "teplo"]
         ).select_related("meter")
         for item in items:
             self.stdout.write(f"  {item.name!r} (třída={item.invoice_class}) -> meter={item.meter}")

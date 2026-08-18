@@ -121,9 +121,9 @@ class Command(BaseCommand):
                 # pro tuto tridu+areal jednoznacne jedina polozka (jinak
                 # hrozi chybne prirazeni k jine specializovane polozce -
                 # radsi selhat explicitne).
-                if ServicePoolItem.objects.filter(site=site, invoice_class="water").count() == 1:
+                if ServicePoolItem.objects.filter(site=site, invoice_class="voda").count() == 1:
                     service_item = ServicePoolItem.objects.filter(
-                        site=site, invoice_class="water", name__icontains="hlavní odběr"
+                        site=site, invoice_class="voda", name__icontains="hlavní odběr"
                     ).first()
 
             if not service_item:

@@ -18,7 +18,7 @@ from decimal import Decimal
 
 from django.core.management.base import BaseCommand, CommandError
 
-from core.models import Meter, Period, Site, SupplyPoint
+from core.models import InvoiceClassColor, Meter, Period, Site, SupplyPoint
 
 
 class Command(BaseCommand):
@@ -84,7 +84,7 @@ class Command(BaseCommand):
         if not sites:
             raise CommandError("Žádný odpovídající areál.")
 
-        type_labels = dict(Meter.MeterType.choices)
+        type_labels = InvoiceClassColor.label_map()
 
         for site in sites:
             self.stdout.write(self.style.MIGRATE_HEADING(f"\n=== {site.name} ==="))

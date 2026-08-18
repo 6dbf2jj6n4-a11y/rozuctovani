@@ -16,7 +16,7 @@ class Command(BaseCommand):
     help = "Vypíše položky třídy Teplo a jejich klíče pro všechny areály."
 
     def handle(self, *args, **options):
-        items = ServicePoolItem.objects.filter(invoice_class="heat").select_related("site", "meter").order_by("site__name", "name")
+        items = ServicePoolItem.objects.filter(invoice_class="teplo").select_related("site", "meter").order_by("site__name", "name")
         for item in items:
             self.stdout.write(self.style.WARNING(f"\n--- {item} (měřidlo: {item.meter}) ---"))
             keys = item.allocation_keys.select_related("client_card__client").all()

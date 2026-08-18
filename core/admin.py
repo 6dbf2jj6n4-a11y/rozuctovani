@@ -66,8 +66,8 @@ def colored_by_class(text, invoice_class):
 
 
 def colored_by_meter_type(text, meter_type):
-    """Obarvi podle typu meridla (Meter.MeterType) - mapuje se na Tridu,
-    aby byly barvy na jednom miste (viz InvoiceClassColor)."""
+    """Obarvi meridlo podle jeho Tridy - meridlo uz kod Tridy drzi primo
+    (viz InvoiceClassColor)."""
     return colored_text(text, InvoiceClassColor.css_class_for_meter_type(meter_type))
 
 
@@ -193,11 +193,11 @@ class UnitServiceInlineBase(TabularInline):
     class Media:
         css = {"all": ("core/css/select_width_fix.css",)}
 
-    # Mapovani tridy sluzby na typ mericí (pro tridu "other" mericí nejsou)
+    # Mapovani tridy sluzby na meridla (pro tridu "ostatni" meridla nejsou)
     METER_TYPE_FOR_CLASS = {
-        "electricity": "electricity",
-        "water": "water",
-        "heat": "heat",
+        "elektro": "elektro",
+        "voda": "voda",
+        "teplo": "teplo",
     }
 
     def get_formset(self, request, obj=None, **kwargs):
@@ -235,25 +235,25 @@ class UnitServiceInlineBase(TabularInline):
 
 
 class UnitServiceElectricityInline(UnitServiceInlineBase):
-    invoice_class = "electricity"
+    invoice_class = "elektro"
     verbose_name = "Služba – Elektřina"
     verbose_name_plural = "Elektřina"
 
 
 class UnitServiceWaterInline(UnitServiceInlineBase):
-    invoice_class = "water"
+    invoice_class = "voda"
     verbose_name = "Služba – Voda"
     verbose_name_plural = "Voda"
 
 
 class UnitServiceHeatInline(UnitServiceInlineBase):
-    invoice_class = "heat"
+    invoice_class = "teplo"
     verbose_name = "Služba – Teplo"
     verbose_name_plural = "Teplo"
 
 
 class UnitServiceOtherInline(UnitServiceInlineBase):
-    invoice_class = "other"
+    invoice_class = "ostatni"
     verbose_name = "Služba – Ostatní"
     verbose_name_plural = "Ostatní"
 
@@ -341,7 +341,7 @@ class AllocationKeyInlineBase(TabularInline):
 
 
 class AllocationKeyElectricityInline(AllocationKeyInlineBase):
-    invoice_class = "electricity"
+    invoice_class = "elektro"
     verbose_name = "Klíč – Elektřina"
     verbose_name_plural = "Elektřina"
     # Stabilni CSS trida pro cilenou dynamickou barvu pozadi sekce -
@@ -351,28 +351,28 @@ class AllocationKeyElectricityInline(AllocationKeyInlineBase):
     # vygeneruje <style> pravidlo pro tuhle tridu. Samotna trida tu jen
     # oznacuje KTEROU sekci to je, barvu uz nenese (ta je v DB, ne
     # napevno v kodu) - viz konverzace s Danielem.
-    classes = ("key-section-electricity",)
+    classes = ("key-section-elektro",)
 
 
 class AllocationKeyWaterInline(AllocationKeyInlineBase):
-    invoice_class = "water"
+    invoice_class = "voda"
     verbose_name = "Klíč – Voda"
     verbose_name_plural = "Voda"
-    classes = ("key-section-water",)
+    classes = ("key-section-voda",)
 
 
 class AllocationKeyHeatInline(AllocationKeyInlineBase):
-    invoice_class = "heat"
+    invoice_class = "teplo"
     verbose_name = "Klíč – Teplo"
     verbose_name_plural = "Teplo"
-    classes = ("key-section-heat",)
+    classes = ("key-section-teplo",)
 
 
 class AllocationKeyOtherInline(AllocationKeyInlineBase):
-    invoice_class = "other"
+    invoice_class = "ostatni"
     verbose_name = "Klíč – Ostatní"
     verbose_name_plural = "Ostatní"
-    classes = ("key-section-other",)
+    classes = ("key-section-ostatni",)
 
 
 class CardUnitInline(TabularInline):
@@ -2345,7 +2345,7 @@ class InvoiceClassColorAdmin(ModelAdmin):
     # Sekce v Karte klienta / na Plose jsou zatim ctyri samostatne tridy
     # v kodu (AllocationKey*Inline, UnitService*Inline), navazane na tyhle
     # kody. Dokud se negeneruji dynamicky, nesmi ty Tridy zmizet.
-    CHRANENE_TRIDY = ("electricity", "water", "heat", "other")
+    CHRANENE_TRIDY = ("elektro", "voda", "teplo", "ostatni")
 
     list_display = (
         "nazev", "invoice_class", "default_unit_of_measure", "sort_order",
@@ -3300,7 +3300,7 @@ class BillingLineAdmin(DefaultToCurrentPeriodMixin, ModelAdmin):
         class_labels = InvoiceClassColor.label_map()
         # Najemne se do grafu nekresli - neuctuje se jako spolecny Naklad
         # (CostEntry), ale per Karta, takze by byla cara vzdy na nule.
-        class_order = [c for c, _ in InvoiceClassColor.choices() if c != "rent"]
+        class_order = [c for c, _ in InvoiceClassColor.choices() if c != "najemne"]
         # Barvy se berou z Nastavení -> Třídy (InvoiceClassColor), aby graf
         # drzel stejnou konvenci jako zbytek aplikace (Měřidla, Odečty,
         # Ceníky...). Do SVG se nevklada konkretni odstin, ale CSS trida +

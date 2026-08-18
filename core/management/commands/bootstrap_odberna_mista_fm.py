@@ -38,7 +38,7 @@ class Command(BaseCommand):
 
         ean668, created = SupplyPoint.objects.get_or_create(
             site=site, name="EAN 668",
-            defaults={"meter_type": Meter.MeterType.ELECTRICITY, "main_meter": main_668},
+            defaults={"meter_type": "elektro", "main_meter": main_668},
         )
         self.stdout.write(self.style.SUCCESS(
             f"  EAN 668: {'založeno' if created else 'už existuje'} (id={ean668.pk})"
@@ -50,7 +50,7 @@ class Command(BaseCommand):
 
         hlavni_fm, created = SupplyPoint.objects.get_or_create(
             site=site, name="Hlavní odběr elektro FM",
-            defaults={"meter_type": Meter.MeterType.ELECTRICITY},
+            defaults={"meter_type": "elektro"},
         )
         self.stdout.write(self.style.SUCCESS(
             f"  Hlavní odběr elektro FM: {'založeno' if created else 'už existuje'} "
@@ -70,7 +70,7 @@ class Command(BaseCommand):
                 self.stdout.write(f"    {code} už je na EAN 668")
 
         unassigned = Meter.objects.filter(
-            site=site, meter_type=Meter.MeterType.ELECTRICITY, supply_point__isnull=True,
+            site=site, meter_type="elektro", supply_point__isnull=True,
         ).count()
         self.stdout.write(self.style.MIGRATE_HEADING(
             f"\n  Hotovo. Nezařazených FM elektro měřidel zbývá: {unassigned} "

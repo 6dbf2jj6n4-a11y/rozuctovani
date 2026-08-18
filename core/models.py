@@ -514,18 +514,6 @@ class InflationRate(models.Model):
 
 
 class Meter(models.Model):
-    class MeterType(models.TextChoices):
-        """Ponecháno kvůli starším jednorázovým příkazům
-        (bootstrap_odberna_mista*, diag_odberna_mista) a jako zdroj
-        výchozí hodnoty pole. Samostatný pojem "Typ měřidla" už
-        neexistuje - měřidlo si volí přímo Třídu (InvoiceClassColor,
-        Nastavení -> Třídy). Viz konverzace s Danielem 2026-08-18."""
-        ELECTRICITY = "electricity", "Elektřina"
-        WATER = "water", "Voda"
-        GAS = "gas", "Plyn"
-        HEAT = "heat", "Teplo"
-        OTHER = "other", "Jiné"
-
     class ReadingMode(models.TextChoices):
         STATE = "state", "Stavy (kumulativní odečet, spotřeba = rozdíl mezi obdobími)"
         CONSUMPTION = "consumption", "Spotřeba za období (dodavatel hlásí rovnou spotřebu, ne stav)"
@@ -780,9 +768,11 @@ class SupplyPoint(models.Model):
         help_text="Např. 'EAN 668' nebo 'Hlavní odběr elektro FM'.",
     )
     code = models.CharField("Kód / EAN", max_length=50, blank=True)
-    # Stejne jako u Meter.meter_type - drzi KOD Tridy.
+    # Stejne jako u Meter.meter_type - drzi KOD Tridy. Vychozi hodnota je
+    # napsana primo, protoze ServicePoolItem.InvoiceClass je definovana az
+    # nize v souboru (nelze na ni tady odkazat).
     meter_type = models.CharField(
-        "Třída", max_length=20, default=Meter.MeterType.ELECTRICITY,
+        "Třída", max_length=20, default="elektro",
     )
     main_meter = models.ForeignKey(
         Meter, null=True, blank=True, on_delete=models.SET_NULL,
@@ -892,11 +882,11 @@ class ServicePoolItem(models.Model):
         jednorázovým příkazům - živý seznam Tříd je v InvoiceClassColor
         (Nastavení -> Třídy), takže tenhle výčet už neurčuje povolené
         volby ani popisky."""
-        RENT = "rent", "Nájemné"
-        ELECTRICITY = "electricity", "Elektřina"
-        WATER = "water", "Voda"
-        HEAT = "heat", "Teplo"
-        OTHER = "other", "Ostatní"
+        RENT = "najemne", "Nájemné"
+        ELECTRICITY = "elektro", "Elektřina"
+        WATER = "voda", "Voda"
+        HEAT = "teplo", "Teplo"
+        OTHER = "ostatni", "Ostatní"
 
     site = models.ForeignKey(Site, on_delete=models.CASCADE, related_name="service_items", verbose_name="Areál")
     unit = models.ForeignKey(
@@ -957,7 +947,7 @@ class ServicePoolItem(models.Model):
 class InvoiceClassColor(models.Model):
     """Trida (Elektrina/Voda/Teplo/Ostatni/Najemne) - JEDINY seznam, do
     ktereho se radi jak polozky zasobniku sluzeb, tak Meridla a Odberna
-    mista. Drive byly dva nezavisle vycty: Meter.MeterType (Typ meridla)
+    mista. Drive byly dva nezavisle vycty: Meter.MeterType (Typ meridla, uz zrusen)
     a ServicePoolItem.InvoiceClass (Trida) - vznikly v jine dobe pro jiny
     ucel a nikdy se nesjednotily, i kdyz slo temer o totez (lisil se jen
     "Plyn" bez vlastni tridy a "Nájemné" bez meridel). Daniel na tu

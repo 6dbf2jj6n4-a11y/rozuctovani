@@ -52,7 +52,7 @@ from core.models import Site, Meter, ServicePoolItem, ClientCard, AllocationKey,
 DEFAULT_ZASOBNIK_NAME = "Zasobnik_sluzeb.xlsx"
 
 METERED_KATEGORIE = {"ELEKTRO", "VODA", "TEPLO"}
-KATEGORIE_TO_INVOICE_CLASS = {"ELEKTRO": "electricity", "VODA": "water", "TEPLO": "heat"}
+KATEGORIE_TO_INVOICE_CLASS = {"ELEKTRO": "elektro", "VODA": "voda", "TEPLO": "teplo"}
 
 
 class Command(BaseCommand):

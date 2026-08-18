@@ -77,7 +77,7 @@ class Command(BaseCommand):
             if chybi:
                 raise CommandError(f"Položky nenalezeny: {', '.join(sorted(chybi))}")
         else:
-            items = list(ServicePoolItem.objects.filter(site=site, invoice_class="heat"))
+            items = list(ServicePoolItem.objects.filter(site=site, invoice_class="teplo"))
         if not items:
             raise CommandError("Žádná položka tepla NJ.")
 

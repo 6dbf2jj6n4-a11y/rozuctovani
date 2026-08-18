@@ -62,14 +62,15 @@ class Command(BaseCommand):
                 )
             types = [options["typ"]]
 
-        type_labels = dict(Meter.MeterType.choices)
+        type_labels = InvoiceClassColor.label_map()
         self.stdout.write(self.style.MIGRATE_HEADING(f"=== {site.name} ==="))
 
         for mtype in types:
             label = type_labels.get(mtype, mtype)
             self.stdout.write(f"\n{label}:")
 
-            invoice_class = InvoiceClassColor.METER_TYPE_TO_CLASS.get(mtype, "other")
+            # Meridlo uz drzi primo kod Tridy (drive samostatny Typ meridla).
+            invoice_class = mtype or "ostatni"
             item = ServicePoolItem.objects.filter(
                 site=site, invoice_class=invoice_class, name__icontains="hlavní odběr"
             ).select_related("meter").first()
