@@ -1,9 +1,18 @@
+{% comment %}
+Barvy pozadi sekci Klicu v Karte klienta - generuji se z Trid
+(Nastaveni -> Tridy), aby si je Daniel mohl prebarvit bez zasahu do kodu.
+
+Prepinani motivu MUSI viset na tride "dark" na <html>, kterou pridava
+Unfold - stejne jako to dela CSS pro barvu textu (core/views.py
+class_colors_css). Driv se tu pouzivalo @media (prefers-color-scheme) +
+[data-theme], jenze to je nastaveni OPERACNIHO SYSTEMU, ne motiv zvoleny
+v adminu. Kdyz se ty dve veci rozesly (admin ve svetlem, system v tmavem),
+mely sekce ve svetlem rezimu tmave pozadi. Viz konverzace s Danielem
+2026-08-18.
+{% endcomment %}
 <style>
 {% for c in invoice_class_colors %}
     .key-section-{{ c.invoice_class }} { background-color: {{ c.color_light }}; }
-    @media (prefers-color-scheme: dark) {
-        :root:not([data-theme="light"]) .key-section-{{ c.invoice_class }} { background-color: {{ c.color_dark }}; }
-    }
-    :root[data-theme="dark"] .key-section-{{ c.invoice_class }} { background-color: {{ c.color_dark }}; }
+    html.dark .key-section-{{ c.invoice_class }} { background-color: {{ c.color_dark }}; }
 {% endfor %}
 </style>
