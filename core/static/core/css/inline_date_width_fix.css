@@ -10,3 +10,17 @@ tento obal, ne na typ vstupu.
 .tabular-table .min-w-56.max-w-2xl {
     max-width: 160px !important;
 }
+
+/*
+Readonly sloupce v inline tabulkach (napr. Najemne/rok, Najemne/mesic v
+Plochach a najemnem) - Unfold obaluje hodnotu do <div class="readonly ...">
+bez sirky, ktery jako flex item (rodic bunky ma "flex items-center") jen
+obtahne obsah. Nas span uvnitr ma text-align:right, ale nema se do ceho
+roztahnout. Donutime "readonly" div zabrat celou zbylou sirku radku, aby
+se pravé zarovnani skutecne projevilo.
+*/
+.field-rocni_najem .readonly,
+.field-mesicni_najem .readonly {
+    flex: 1 1 auto;
+    width: 100%;
+}
