@@ -108,7 +108,15 @@ def _meter_provides_consumption(meter, cache=None):
 
 
 def _fixed_amount_for(key, service_item, period, warnings, price_cache=None):
-    """Vrati absolutni mesicni Kc castku pro klic typu FIXED_AMOUNT/AREA_PRICE.
+    """Vrati absolutni mesicni Kc castku pro klic typu FIXED_AMOUNT/AREA_PRICE,
+    zkracenou podle POCTU AKTIVNICH DNI karty v obdobi.
+
+    Kdyz platnost Karty/Smlouvy zacne (nebo skonci) uprostred mesice, plati
+    klient jen pomernou cast - nastoupi-li 16. dne z 31, zaplati 16/31
+    pausalu. Stejne pravidlo uz plati u vazenych podilu (_weighted_shares),
+    do teto chvile se ale pausaly uctovaly vzdy cele. U pausalu s
+    "Odečíst z celkového nákladu" se tim z poolu odecte mene, takze zbytek
+    spravne pripadne ostatnim. Viz konverzace s Danielem 2026-08-17.
 
     `price_cache`: viz PriceList.get_price_for_period - predano dal beze zmeny."""
     if key.allocation_type == AllocationKey.AllocationType.AREA_PRICE:
@@ -125,8 +133,24 @@ def _fixed_amount_for(key, service_item, period, warnings, price_cache=None):
                 f"období - karta vynechána."
             )
             return None
-        return ((key.value or Decimal("0")) * price / 12).quantize(Decimal("0.01"))
-    return key.value or Decimal("0")
+        zaklad = (key.value or Decimal("0")) * price / 12
+    else:
+        zaklad = key.value or Decimal("0")
+    return _kraceno_dny(zaklad, key.client_card, period)
+
+
+def _kraceno_dny(castka, card, period):
+    """Zkrati castku pomerem aktivnich dni karty k delce obdobi. Karta
+    platna cely mesic dostane castku beze zmeny (vc. presneho zaokrouhleni),
+    takze na dosavadnich datech se nic nemeni."""
+    period_start, period_end = period.date_range()
+    active_days = card.active_days_in_period(period_start, period_end)
+    dnu = period.days_in_period
+    if active_days >= dnu:
+        return castka.quantize(Decimal("0.01"))
+    if active_days <= 0:
+        return Decimal("0")
+    return (castka * Decimal(active_days) / Decimal(dnu)).quantize(Decimal("0.01"))
 
 
 def _weighted_shares(keys, period, by_key_out=None):
