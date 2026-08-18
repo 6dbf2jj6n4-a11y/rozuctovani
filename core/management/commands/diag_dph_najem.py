@@ -89,12 +89,17 @@ class Command(BaseCommand):
         for inv in invoices:
             name = inv.get("nazFirmy") or (inv.get("firma@showAs") or "").split(":", 1)[-1].strip()
             key = _normalize(name)
-            zaklad = float(inv.get("sumZkl") or 0)
+            # POZOR na nazvy poli: na HLAVICCE faktury (faktura-vydana) je
+            # zaklad bez DPH v 'sumZklCelkem' - pole 'sumZkl' tu vubec
+            # neexistuje a vratilo by 0 (na polozce faktury je to naopak,
+            # viz porovnat_energie_flexi). Overeno --dump-fields 2026-08-18.
+            zaklad = float(inv.get("sumZklCelkem") or 0)
             celkem = float(inv.get("sumCelkem") or 0)
-            dph = celkem - zaklad
-            # Rozhoduje skutecne vycislene DPH na fakture, ne sazba u
-            # polozky - faktura muze mit sazbu vyplnenou a pritom nulovou
-            # zakladnu (osvobozeno), coz je prave ten pripad, ktery nas zajima.
+            dph = float(inv.get("sumDphCelkem") or 0)
+            # Rozhoduje skutecne vycislene DPH na fakture. Pozor: 'sumOsv'
+            # (osvobozeno) NENI dobre kriterium - Flexi tam uctuje i
+            # zaokrouhleni na cele koruny, takze i plne zdanena faktura
+            # ma sumOsv radove halere.
             s_dph = round(dph, 2) > 0
             plátce = vat_payer_by_key.get(key)
 
