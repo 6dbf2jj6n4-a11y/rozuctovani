@@ -34,13 +34,21 @@ soucet vymer/najemneho, ktery tam nedava smysl.
         return value.toLocaleString("cs-CZ", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + " Kč";
     }
 
-    /* Stejne jako formatKc, ale zabaleno do bloku zarovnaneho doprava -
-       pro zapis primo do bunky sloupce (td.field-rocni_najem /
-       field-mesicni_najem je flex kontejner, .html() misto .text() proto,
-       aby se zarovnani doprava skutecne uplatnilo, ne jen jako holy text). */
+    /* Stejne jako formatKc, ale zabaleno do stejne "bubliny", jakou pro
+       readonly pole renderuje Unfold server-side (trida "readonly" + py-2/
+       px-3/border/rounded-default/bg-*) - bez tohoto obalu by JS po
+       prepoctu vlozil holy text bez odsazeni, ktery by pak mel jinou
+       vysku nez editovatelna pole vedle a vypadal by svisle posunuty
+       nahoru. width:100% na obou urovnich zajisti, ze se text-align:right
+       skutecne uplatni (td.field-rocni_najem/field-mesicni_najem je flex
+       kontejner, .html() misto .text() proto, aby zarovnani fungovalo). */
     function formatKcCell(value) {
         var text = value.toLocaleString("cs-CZ", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + " Kč";
-        return '<span style="display:block; width:100%; text-align:right; white-space:nowrap;">' + text + "</span>";
+        return (
+            '<div class="readonly break-words max-w-2xl py-2 text-sm bg-base-50 border border-base-200 ' +
+            'font-medium px-3 rounded-default shadow-xs dark:border-base-700 dark:bg-base-800" style="width:100%;">' +
+            '<span style="display:block; text-align:right; white-space:nowrap;">' + text + "</span></div>"
+        );
     }
 
     function getRowArea($row) {
