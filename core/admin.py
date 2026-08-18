@@ -3030,13 +3030,12 @@ class BillingLineAdmin(DefaultToCurrentPeriodMixin, ModelAdmin):
 
         class_labels = dict(ServicePoolItem.InvoiceClass.choices)
 
-        def card_vynos(card):
-            """Skutecny najem karty - stejny vypocet jako "Přehled nájemného"
-            vc. zaokrouhleni nahoru (viz docstring vyse)."""
-            raw_monthly = sum(
-                (cu.monthly_rent or Decimal("0") for cu in card.card_units.all()), Decimal("0")
-            )
-            return raw_monthly.quantize(Decimal("1"), rounding=ROUND_CEILING)
+        def card_vynos(card, obdobi):
+            """Skutecny najem karty za dane obdobi - zkraceny podle aktivnich
+            dni, kdyz platnost karty zacina/konci uprostred mesice
+            (ClientCard.rent_for_period). Zaokrouhluje nahoru, stejne jako
+            "Přehled nájemného"."""
+            return card.rent_for_period(obdobi)
 
         rows = []
         total_naklad = Decimal("0")
@@ -3082,7 +3081,7 @@ class BillingLineAdmin(DefaultToCurrentPeriodMixin, ModelAdmin):
             vynos = Decimal("0")
             card_rows = []
             for detail in by_card.values():
-                card_vynos_amount = card_vynos(detail["card"])
+                card_vynos_amount = card_vynos(detail["card"], period)
                 vynos += card_vynos_amount
                 card_rows.append({
                     "card": detail["card"],
@@ -3175,7 +3174,19 @@ class BillingLineAdmin(DefaultToCurrentPeriodMixin, ModelAdmin):
         site_id = request.GET.get("site")
         site = sites.filter(pk=site_id).first() if site_id else None
 
-        periods = list(Period.objects.order_by("-year", "-month")[:n])
+        # Poslednich N obdobi KONCE AKTUALNIM (Period.current), ne proste
+        # nejnovejsich v DB - od tlacitka "Generovat pro celý rok" jsou
+        # zalozene i budouci mesice, ktere jeste nemaji naklady, takze
+        # graf ukazoval par prazdnych sloupcu a to jedine vyplnene
+        # obdobi vypadalo jako ztracena data. Viz Daniel 2026-08-17.
+        aktualni = Period.current()
+        qs = Period.objects.order_by("-year", "-month")
+        if aktualni is not None:
+            qs = qs.filter(
+                Q(year__lt=aktualni.year)
+                | Q(year=aktualni.year, month__lte=aktualni.month)
+            )
+        periods = list(qs[:n])
         periods.reverse()  # chronologicky pro graf
 
         class_labels = dict(ServicePoolItem.InvoiceClass.choices)

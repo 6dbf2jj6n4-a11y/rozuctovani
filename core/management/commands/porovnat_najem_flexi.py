@@ -35,18 +35,12 @@ def _normalize(name):
 
 
 def _card_rent_for_period(card, period):
-    """Nájemné karty za dané období, poměrné podle počtu aktivních dnů."""
-    period_start, period_end = period.date_range()
-    active_days = card.active_days_in_period(period_start, period_end)
-    if active_days <= 0:
-        return Decimal("0")
-    monthly_total = sum(
-        (cu.monthly_rent or Decimal("0") for cu in card.card_units.all()),
-        Decimal("0"),
-    )
-    if active_days >= period.days_in_period:
-        return monthly_total
-    return monthly_total * Decimal(active_days) / Decimal(period.days_in_period)
+    """Nájemné karty za dané období, poměrné podle počtu aktivních dnů.
+
+    Deleguje na ClientCard.rent_for_period, aby krácení i zaokrouhlení
+    (nahoru na celé koruny, tak se nájem fakturuje) bylo na jednom místě
+    a sedělo s reportem Paušální klienti."""
+    return card.rent_for_period(period)
 
 
 class Command(BaseCommand):

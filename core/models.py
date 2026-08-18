@@ -336,6 +336,36 @@ class ClientCard(models.Model):
             return 0
         return (end - start).days + 1
 
+    def rent_for_period(self, period):
+        """Najem karty za dane obdobi, zkraceny podle poctu aktivnich dni.
+
+        Soucet CardUnit.monthly_rent (plocha x sazba / 12) vynasobeny
+        pomerem aktivnich dni karty k delce obdobi - kdyz platnost zacne
+        nebo skonci uprostred mesice, plati klient jen pomernou cast,
+        stejne jako u pausalu a vazenych podilu ve vyuctovani sluzeb
+        (viz billing/engine.py _kraceno_dny). Karta platna cely mesic
+        vraci presne to, co drive, takze se dosavadni cisla nemeni.
+
+        Zaokrouhluje se NAHORU na cele koruny (ROUND_CEILING) - tak se
+        najemne skutecne fakturuje, viz report Prehled najemneho.
+        Viz konverzace s Danielem 2026-08-17."""
+        from decimal import ROUND_CEILING
+
+        raw = sum(
+            (cu.monthly_rent or Decimal("0") for cu in self.card_units.all()),
+            Decimal("0"),
+        )
+        if not raw:
+            return Decimal("0")
+        period_start, period_end = period.date_range()
+        active_days = self.active_days_in_period(period_start, period_end)
+        if active_days <= 0:
+            return Decimal("0")
+        dnu = period.days_in_period
+        if active_days < dnu:
+            raw = raw * Decimal(active_days) / Decimal(dnu)
+        return raw.quantize(Decimal("1"), rounding=ROUND_CEILING)
+
     def create_exact_copy(self, client=None, valid_from=None, is_active=False):
         """Vytvori presnou kopii teto karty (plochy i klice 1:1 z originalu).
         Zamerne NEPOUZIVA CardUnit.save()/create_default_keys() (ktere by
