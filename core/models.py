@@ -267,16 +267,6 @@ class ClientCard(models.Model):
         "Číslo objednávky - energie a služby", max_length=100, blank=True,
         help_text="Někteří klienti vyžadují uvést na faktuře/vyúčtování za energie a služby - vázané na tuto Kartu.",
     )
-    rent_not_invoiced = models.DecimalField(
-        "Nefakturovaná část nájmu (Kč/měsíc)",
-        max_digits=10, decimal_places=2, default=Decimal("0"),
-        help_text=(
-            "Část měsíčního nájmu, kterou klient platí bez dokladu - do nájmu "
-            "a sestav se počítá dál, ale NEfakturuje se a nevstupuje do "
-            "koeficientu DPH (není zdanitelné plnění). Nech 0, pokud se "
-            "fakturuje celý nájem."
-        ),
-    )
 
     class Meta:
         verbose_name = "Karta klienta"
@@ -379,11 +369,18 @@ class ClientCard(models.Model):
     def rent_not_invoiced_for_period(self, period):
         """Nefakturovana cast najmu za obdobi, krácená stejne jako
         rent_for_period - je to soucast najmu, takze u karty platne jen
-        cast mesice se krati se zbytkem. Viz konverzace s Danielem
-        2026-08-18 (klient plati cast najmu bez dokladu)."""
+        cast mesice se krati se zbytkem.
+
+        Scita se z jednotlivych Ploch karty (CardUnit.rent_not_invoiced) -
+        najemne neni Trida a nema Klice, takze i tahle odchylka patri
+        primo k Plose, ne na Kartu. Viz konverzace s Danielem 2026-08-19
+        (klient plati cast najmu bez dokladu)."""
         from decimal import ROUND_CEILING
 
-        raw = self.rent_not_invoiced or Decimal("0")
+        raw = sum(
+            (cu.rent_not_invoiced or Decimal("0") for cu in self.card_units.all()),
+            Decimal("0"),
+        )
         if not raw:
             return Decimal("0")
         period_start, period_end = period.date_range()
@@ -1531,6 +1528,16 @@ class CardUnit(models.Model):
         null=True,
         blank=True,
         help_text="Vyplnit jen pokud se liší od výměry v zásobníku (např. pronajatá část plochy).",
+    )
+    rent_not_invoiced = models.DecimalField(
+        "Nefakturovaná část (Kč/měsíc)",
+        max_digits=10, decimal_places=2, default=Decimal("0"),
+        help_text=(
+            "Část měsíčního nájmu za tuto plochu, kterou klient platí bez "
+            "dokladu - do nájmu a sestav se počítá dál, ale NEfakturuje se "
+            "a nevstupuje do koeficientu DPH (není zdanitelné plnění). "
+            "Nech 0, pokud se fakturuje celý nájem."
+        ),
     )
 
     class Meta:

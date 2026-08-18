@@ -396,7 +396,10 @@ def sekce_klicu():
 class CardUnitInline(TabularInline):
     model = CardUnit
     extra = 0
-    fields = ("unit", "vymera_zasobnik", "area_m2_override", "rate_per_m2", "rocni_najem", "mesicni_najem")
+    fields = (
+        "unit", "vymera_zasobnik", "area_m2_override", "rate_per_m2",
+        "rocni_najem", "mesicni_najem", "rent_not_invoiced",
+    )
     readonly_fields = ("vymera_zasobnik", "rocni_najem", "mesicni_najem")
     autocomplete_fields = ("unit",)
     verbose_name = "Plocha"
@@ -1065,13 +1068,6 @@ class ClientCardAdmin(ModelAdmin):
         ("Čísla objednávek (na faktury)", {
             "fields": (("po_number_rent", "po_number_services"),)
         }),
-        ("Nájemné", {
-            "fields": ("rent_not_invoiced",),
-            "description": (
-                "Nájem se počítá z ploch v sekci Plochy a nájemné. Tady se zadává "
-                "jen část, která se klientovi nefakturuje."
-            ),
-        }),
         ("Karta nájemce (Příloha č. 1)", {
             "fields": ("signed_on", "generate_card_button", "document")
         }),
@@ -1223,11 +1219,15 @@ class ClientCardAdmin(ModelAdmin):
                 (cu.monthly_rent or Decimal("0") for cu in card_units), Decimal("0")
             ).quantize(Decimal("1"), rounding=ROUND_CEILING)
             # Cast najmu placena bez dokladu - do najmu patri, ale
-            # nefakturuje se (viz ClientCard.rent_not_invoiced).
+            # nefakturuje se (viz CardUnit.rent_not_invoiced, scita se
+            # pres ClientCard.rent_not_invoiced_for_period).
             if period is not None:
                 nefakturovano = card.rent_not_invoiced_for_period(period)
             else:
-                nefakturovano = card.rent_not_invoiced or Decimal("0")
+                nefakturovano = sum(
+                    (cu.rent_not_invoiced or Decimal("0") for cu in card_units),
+                    Decimal("0"),
+                )
             nefakturovano = min(nefakturovano, total_monthly)
             sites_of_card = {cu.unit.site for cu in card_units}
             rows.append({
@@ -1261,7 +1261,7 @@ class ClientCardAdmin(ModelAdmin):
         # Koeficient se ze zakona zaokrouhluje NAHORU na cele procento.
         #
         # Pocita se jen z FAKTUROVANE casti - najem placeny bez dokladu
-        # (ClientCard.rent_not_invoiced) neni zdanitelne ani osvobozene
+        # (CardUnit.rent_not_invoiced) neni zdanitelne ani osvobozene
         # plneni, takze do koeficientu nevstupuje na zadne strane zlomku.
         total_s_dph = sum((r["k_fakturaci"] for r in rows if r["s_dph"]), Decimal("0"))
         total_bez_dph = sum((r["k_fakturaci"] for r in rows if not r["s_dph"]), Decimal("0"))

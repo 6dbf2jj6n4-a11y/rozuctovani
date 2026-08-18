@@ -12,3 +12,16 @@ bez potreby !important. Viz konverzace s Danielem 2026-08-18.
     white-space: normal !important;
     min-width: 90px;
 }
+
+/*
+Totez pro INLINE tabulky (Karta klienta - Plochy a najemne, Klice...),
+kde je "whitespace-nowrap" v unfold/helpers/edit_inline/tabular_heading.html.
+Tam je sloupcu hodne vedle sebe, takze dlouhy nazev ("Odečíst z celkového
+nákladu") roztahoval radek do sirky a tabulka pretekala. Trida
+tabular-table je z admin/edit_inline/tabular.html. Bez min-width -
+inline sloupce obsahuji formularova pole, ktera si sirku urcuji sama.
+Viz konverzace s Danielem 2026-08-19.
+*/
+.tabular-table thead th {
+    white-space: normal !important;
+}

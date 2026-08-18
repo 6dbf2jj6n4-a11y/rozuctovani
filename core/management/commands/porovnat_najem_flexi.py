@@ -42,7 +42,7 @@ def _card_rent_for_period(card, period):
     (nahoru na celé koruny, tak se nájem fakturuje) bylo na jednom místě
     a sedělo s reportem Paušální klienti.
 
-    Odečítá se nefakturovaná část nájmu (ClientCard.rent_not_invoiced) -
+    Odečítá se nefakturovaná část nájmu (CardUnit.rent_not_invoiced) -
     tu klient platí bez dokladu, takže ve Flexi žádnou fakturu nemá a
     bez odečtení by srovnání u takové karty vždycky hlásilo rozdíl.
     Viz konverzace s Danielem 2026-08-18."""
