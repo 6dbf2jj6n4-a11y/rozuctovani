@@ -62,7 +62,7 @@
     {% else %}
         <div class="viz-legend">
             {% for cls in class_choices %}
-                <span class="viz-legend-item"><span class="viz-swatch" style="background:{{ cls.color }};"></span> {{ cls.label }}</span>
+                <span class="viz-legend-item"><span class="viz-swatch {{ cls.css_class }}" style="background:currentColor;"></span> {{ cls.label }}</span>
             {% endfor %}
         </div>
 
@@ -76,9 +76,9 @@
             <line x1="{{ left_margin }}" y1="{{ baseline_y }}" x2="{{ chart_w }}" y2="{{ baseline_y }}" stroke="var(--baseline)" stroke-width="1" />
 
             {% for s in series %}
-                <polyline fill="none" stroke="{{ s.color }}" stroke-width="2" stroke-linejoin="round" points="{{ s.points }}" />
+                <polyline class="{{ s.css_class }}" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" points="{{ s.points }}" />
                 {% for d in s.dots %}
-                    <circle cx="{{ d.cx }}" cy="{{ d.cy }}" r="3" fill="{{ s.color }}"><title>{{ d.label }}: {{ d.value|floatformat:0 }} Kč</title></circle>
+                    <circle class="{{ s.css_class }}" cx="{{ d.cx }}" cy="{{ d.cy }}" r="3" fill="currentColor"><title>{{ d.label }}: {{ d.value|floatformat:0 }} Kč</title></circle>
                 {% endfor %}
             {% endfor %}
 

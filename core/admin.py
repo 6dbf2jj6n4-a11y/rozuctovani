@@ -1127,8 +1127,10 @@ class ClientCardAdmin(ModelAdmin):
         period_id = request.GET.get("period")
         period = periods.filter(pk=period_id).first() if period_id else Period.current()
 
+        # Pronajimatel (Client.is_landlord) sam sobe najem neplati - jeho
+        # vlastni karty by prehled jen nafukovaly. Viz Daniel 2026-08-17.
         cards = (
-            ClientCard.objects.filter(is_active=True)
+            ClientCard.objects.filter(is_active=True, client__is_landlord=False)
             .select_related("client")
             .prefetch_related("card_units__unit__site")
             .order_by("client__name")
@@ -3221,12 +3223,14 @@ class BillingLineAdmin(DefaultToCurrentPeriodMixin, ModelAdmin):
         # Najemne se do grafu nekresli - neuctuje se jako spolecny Naklad
         # (CostEntry), ale per Karta, takze by byla cara vzdy na nule.
         class_order = [c for c, _ in ServicePoolItem.InvoiceClass.choices if c != "rent"]
-        class_colors = {
-            "electricity": "#eb6834",
-            "water": "#1baf7a",
-            "heat": "#eda100",
-            "other": "#e87ba4",
-            "rent": "#2a78d6",
+        # Barvy se berou z Nastavení -> Třídy (InvoiceClassColor), aby graf
+        # drzel stejnou konvenci jako zbytek aplikace (Měřidla, Odečty,
+        # Ceníky...). Do SVG se nevklada konkretni odstin, ale CSS trida +
+        # fill/stroke="currentColor" - diky tomu se barva prepne se svetlym
+        # / tmavym motivem a zmena v Nastavení se projevi bez zasahu do kodu
+        # (viz core/views.py class_colors_css). Viz Daniel 2026-08-17.
+        class_css = {
+            code: InvoiceClassColor.css_class_for(code) for code, _ in ServicePoolItem.InvoiceClass.choices
         }
 
         # get_naklad_by_class dela jen par dotazu CELKEM (bez ohledu na pocet
@@ -3292,7 +3296,10 @@ class BillingLineAdmin(DefaultToCurrentPeriodMixin, ModelAdmin):
                 value = totals.get(code, Decimal("0"))
                 dots.append({"cx": _x(i), "cy": _y(value), "value": value, "label": class_labels[code]})
             points = " ".join(f"{d['cx']:.1f},{d['cy']:.1f}" for d in dots)
-            series.append({"label": class_labels[code], "color": class_colors[code], "points": points, "dots": dots})
+            series.append({
+                "label": class_labels[code], "css_class": class_css[code],
+                "points": points, "dots": dots,
+            })
 
         period_labels = [
             {"x": _x(i), "label": str(period)} for i, (period, _) in enumerate(raw_totals)
@@ -3307,7 +3314,7 @@ class BillingLineAdmin(DefaultToCurrentPeriodMixin, ModelAdmin):
             **self.admin_site.each_context(request),
             "title": "Grafy nákladů podle tříd",
             "class_choices": [
-                {"code": code, "label": class_labels[code], "color": class_colors[code]}
+                {"code": code, "label": class_labels[code], "css_class": class_css[code]}
                 for code in class_order
             ],
             "series": series,
