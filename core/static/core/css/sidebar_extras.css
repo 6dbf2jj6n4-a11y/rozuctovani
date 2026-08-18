@@ -1,0 +1,78 @@
+/*
+Rucne psane CSS pro veci, ktere Unfoldovo predkompilovane styles.css
+NEOBSAHUJE. Unfold sype Tailwind na SVYCH VLASTNICH sablonach v dobe
+sveho buildu - trida jako "w-[38px]" nebo "cursor-col-resize", kterou
+pouzijeme jen v NASICH vlastnich sablonach (templates/unfold/helpers/
+user_panel.html, templates/admin/nav_sidebar.html), v tom CSS souboru
+proste neexistuje, takze by nemela zadny efekt (potvrzeno grepem CSS
+bundlu - viz konverzace s Danielem 2026-08-18, tazitko na sirku menu
+se puvodne vubec neobjevilo presne z tohoto duvodu).
+*/
+
+/* Tazitko na zmenu sirky bocniho menu (templates/admin/nav_sidebar.html) */
+.rx-resize-handle {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    right: -3px;
+    width: 7px;
+    cursor: col-resize;
+    z-index: 10;
+    display: none;
+}
+@media (min-width: 1280px) {
+    .rx-resize-handle { display: block; }
+}
+.rx-resize-bar {
+    height: 100%;
+    width: 3px;
+    margin: 0 auto;
+    transition: background-color 0.15s;
+}
+.rx-resize-handle:hover .rx-resize-bar {
+    background: var(--color-base-300);
+}
+.dark .rx-resize-handle:hover .rx-resize-bar {
+    background: var(--color-base-700);
+}
+
+/* Panel prihlaseneho uzivatele dole v menu (user_panel.html) */
+.rx-user-avatar {
+    height: 38px;
+    width: 38px;
+    min-width: 38px;
+    background-color: var(--color-base-200);
+    background-size: cover;
+    background-position: center;
+    background-repeat: no-repeat;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--color-base-500);
+}
+.dark .rx-user-avatar {
+    background-color: var(--color-base-700);
+}
+
+.rx-user-trigger {
+    min-height: 64px;
+}
+.rx-user-trigger:hover,
+.rx-user-trigger.rx-open {
+    background-color: var(--color-base-100);
+}
+.dark .rx-user-trigger:hover,
+.dark .rx-user-trigger.rx-open {
+    background-color: var(--color-base-800);
+}
+
+.rx-user-popup {
+    bottom: 73px;
+}
+
+.rx-logout-btn:hover {
+    color: var(--color-red-700);
+}
+.dark .rx-logout-btn:hover {
+    color: var(--color-red-400);
+}

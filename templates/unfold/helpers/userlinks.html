@@ -1,0 +1,29 @@
+{% load i18n static %}
+{% comment %}
+Prevzato z unfold/helpers/userlinks.html - odebrany theme_switch.html
+a account_links.html (motiv + odhlaseni/zmena hesla), protoze presly
+do noveho panelu dole v bocnim menu (templates/unfold/helpers/
+user_panel.html) - na tehle same akce uz nema smysl mit dve mista.
+Jazykovy prepinac (language_switch.html) zustava, o ten Daniel
+nezadal. Viz konverzace s Danielem 2026-08-18.
+{% endcomment %}
+
+<div class="flex items-center ml-auto">
+    <div class="flex flex-row group items-center leading-none relative">
+        <div class="flex gap-4 items-center">
+            {% if environment %}
+                {% include "unfold/helpers/label.html" with text=environment.0 type=environment.1 %}
+            {% endif %}
+
+            {% if extra_userlinks %}
+                {{ extra_userlinks }}
+            {% endif %}
+
+            {% include "unfold/helpers/language_switch.html" %}
+        </div>
+    </div>
+
+    {% if nav_global_side %}
+        {{ nav_global_side }}
+    {% endif %}
+</div>
