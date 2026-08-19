@@ -576,6 +576,15 @@ class Meter(models.Model):
     # desitek mist bez uzitku.
     meter_type = models.CharField("Třída", max_length=20)
     unit_of_measure = models.CharField("Měrná jednotka", max_length=20, default="kWh")
+    reading_unit_of_measure = models.CharField(
+        "Jednotka odečtu (na displeji)", max_length=20, blank=True,
+        help_text=(
+            "Jednotka, ve které se odečet fyzicky čte z měřidla - zobrazí se "
+            "na stránce Zadávání odečtů. Vyplň jen když se liší od Měrné "
+            "jednotky, tedy když je Koeficient jiný než 1 (např. teplo se "
+            "čte v kWh, ale vykazuje v GJ). Prázdné = stejná jako Měrná jednotka."
+        ),
+    )
     coefficient = models.DecimalField(
         "Koeficient (odečet × koef. = spotřeba)", max_digits=12, decimal_places=6, default=Decimal("1"),
         help_text=(
@@ -637,6 +646,18 @@ class Meter(models.Model):
 
     def __str__(self):
         return self.code or self.name
+
+    @property
+    def jednotka_odectu(self):
+        """Jednotka, kterou spravce vidi u policka pro odecet.
+
+        Odecet se zadava v jednotce z DISPLEJE meridla, kdezto
+        `unit_of_measure` je jednotka az PO prepoctu koeficientem
+        (u tepla se cte kWh, ale vykazuje GJ pri koef. 0,0036). Na
+        strance odectu se proto ukazuje tahle, ne `unit_of_measure` -
+        driv tam u vsech meridel tepla svitilo GJ, i kdyz se do nich
+        zadavaly kWh. Viz konverzace s Danielem 2026-08-19."""
+        return self.reading_unit_of_measure or self.unit_of_measure
 
     def get_meter_type_display(self):
         """Django tuhle metodu generuje samo jen u poli s choices= - to uz

@@ -47,18 +47,22 @@ uz ma do ceho se zarovnat.
 
 /*
 Vypnuti nativnich sipek nahoru/dolu (spinner) u ciselnych poli Vymera
-(m2) - uprava a Cena Kc/m2/rok v inlinu Plochy a najemne (Karta klienta) -
-na pozadani Daniela, sipky tam jen prekazely.
+(m2) - uprava a Cena Kc/m2/rok v inlinu Plochy a najemne (Karta klienta),
+a Sazba DPH v seznamu Obdobi - na pozadani Daniela, sipky tam jen
+prekazely.
 */
 .field-area_m2_override input[type="number"]::-webkit-outer-spin-button,
 .field-area_m2_override input[type="number"]::-webkit-inner-spin-button,
 .field-rate_per_m2 input[type="number"]::-webkit-outer-spin-button,
-.field-rate_per_m2 input[type="number"]::-webkit-inner-spin-button {
+.field-rate_per_m2 input[type="number"]::-webkit-inner-spin-button,
+.field-vat_rate input[type="number"]::-webkit-outer-spin-button,
+.field-vat_rate input[type="number"]::-webkit-inner-spin-button {
     -webkit-appearance: none;
     margin: 0;
 }
 
 .field-area_m2_override input[type="number"],
-.field-rate_per_m2 input[type="number"] {
+.field-rate_per_m2 input[type="number"],
+.field-vat_rate input[type="number"] {
     -moz-appearance: textfield;
 }

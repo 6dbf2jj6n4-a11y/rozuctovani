@@ -112,7 +112,7 @@ def readings_entry(request):
                 "code": m.code,
                 "name": m.name,
                 "meter_type_label": m.get_meter_type_display(),
-                "unit": m.unit_of_measure,
+                "unit": m.jednotka_odectu,
                 "reading_mode": m.reading_mode,
                 "parent_id": m.parent_meter_id,
                 "prev_value": float(previous.value) if previous else None,

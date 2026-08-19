@@ -1479,6 +1479,7 @@ class MeterAdmin(DuplicateModelAdminMixin, ModelAdmin):
             "fields": (
                 ("site", "code", "name"),
                 ("meter_type", "unit_of_measure", "coefficient", "serial_number"),
+                "reading_unit_of_measure",
                 "display_order",
             )
         }),
