@@ -9,6 +9,11 @@ Zmena hesla / Odhlasit se prevzato z unfold/helpers/account_links.html
 (vc. jeho presnych barev - red-500/red-100, ne demove red-700/red-400,
 ty v nasem predkompilovanem CSS nejsou).
 
+Fotka: prednost ma vlastni fotka prihlaseneho uzivatele
+(accounts.User.photo, nahrava se v adminu u uzivatele), pak spolecny
+staticky avatar, pak panacek. Podepsana URL z R2 plati hodinu, proto se
+bere az tady pri vykresleni (viz core/storage.py).
+
 DULEZITE: rozmery/pozice, ktere Unfoldovo predkompilovane styles.css
 neobsahuje (h-[38px], min-h-[64px], bottom-[73px]...), reseny vlastnimi
 tridami rx-user-* v core/static/core/css/sidebar_extras.css - viz
@@ -57,10 +62,15 @@ komentar v templates/admin/nav_sidebar.html a konverzace s Danielem
     </nav>
 
     <div class="rx-user-trigger cursor-pointer flex flex-row gap-3 items-center -mx-6 -my-3 px-6 py-3" x-on:click="openUserPanel = !openUserPanel" x-bind:class="{'rx-open': openUserPanel}">
-        <div class="rx-user-avatar rounded-default"
-             {% if avatar_url %}style="background-image: url('{{ avatar_url }}')"{% endif %}>
-            {% if not avatar_url %}<span class="material-symbols-outlined">person</span>{% endif %}
-        </div>
+        {% if user.photo_url %}
+            <div class="rx-user-avatar rounded-default" style="background-image: url('{{ user.photo_url }}')"></div>
+        {% elif avatar_url %}
+            <div class="rx-user-avatar rounded-default" style="background-image: url('{{ avatar_url }}')"></div>
+        {% else %}
+            <div class="rx-user-avatar rounded-default">
+                <span class="material-symbols-outlined">person</span>
+            </div>
+        {% endif %}
 
         <div class="flex flex-col select-none min-w-0">
             <div class="font-semibold text-important tracking-tight truncate">

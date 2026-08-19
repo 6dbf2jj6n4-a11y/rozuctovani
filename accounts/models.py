@@ -7,6 +7,8 @@ Vlastni uzivatelsky model s rolemi.
 from django.contrib.auth.models import AbstractUser
 from django.db import models
 
+from core.storage import R2MediaStorage
+
 
 class User(AbstractUser):
     class Role(models.TextChoices):
@@ -40,12 +42,39 @@ class User(AbstractUser):
         help_text="Areály ke kterým má správce přístup. Prázdné = přístup ke všem (admin).",
     )
 
+    photo = models.ImageField(
+        "Fotka", upload_to="uzivatele/", null=True, blank=True,
+        storage=R2MediaStorage(),
+        help_text=(
+            "Zobrazí se v panelu přihlášeného uživatele dole v menu. "
+            "Ideálně čtvercová, stačí malá (např. 200×200). Bez fotky se "
+            "použije panáček."
+        ),
+    )
+
     class Meta:
         verbose_name = "Uživatel"
         verbose_name_plural = "Uživatelé"
 
     def __str__(self):
         return f"{self.get_username()} ({self.get_role_display()})"
+
+    @property
+    def photo_url(self):
+        """Podepsana URL fotky, nebo None kdyz fotka neni / uloziste
+        neodpovida.
+
+        Fotka se kresli v panelu uzivatele, ktery je v bocnim menu na
+        KAZDE strance adminu - vypadek nebo chybejici konfigurace R2 by
+        tedy shodily cely admin, ne jen jednu stranku. Proto se chyba
+        spolkne a panel spadne zpet na spolecny avatar/panacka. Lokalne
+        (bez R2 promennych) to nastava vzdy, viz core/storage.py."""
+        if not self.photo:
+            return None
+        try:
+            return self.photo.url
+        except Exception:
+            return None
 
     @property
     def is_admin_role(self):
