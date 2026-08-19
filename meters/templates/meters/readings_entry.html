@@ -96,6 +96,11 @@
             width: 32px; height: 32px; border-radius: 50%; background: rgba(255,255,255,0.2); color: #ffffff;
             display: flex; align-items: center; justify-content: center;
         }
+        /* Vlastni fotka uzivatele (accounts.User.photo) - stejna fotka jako
+           v panelu dole v menu adminu. Bez fotky zustava panacek nize. */
+        .user-icon.s-fotkou {
+            background-size: cover; background-position: center; background-repeat: no-repeat;
+        }
         .user-name { font-size: 11px; font-weight: 600; color: #ffffff; text-align: center; line-height: 1.15; max-width: 96px; word-break: break-word; }
         .logout-form { display: block; }
         .logout {
@@ -259,12 +264,17 @@
                 {% if landlord_name %}<span class="brand-subtitle">{{ landlord_name }}</span>{% endif %}
             </div>
             <div class="user-block">
-                <span class="user-icon" title="{{ request.user.username }}">
-                    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <circle cx="12" cy="8" r="4"></circle>
-                        <path d="M4 20c0-4.4 3.6-8 8-8s8 3.6 8 8"></path>
-                    </svg>
-                </span>
+                {% if request.user.photo_url %}
+                    <span class="user-icon s-fotkou" title="{{ request.user.username }}"
+                          style="background-image: url('{{ request.user.photo_url }}')"></span>
+                {% else %}
+                    <span class="user-icon" title="{{ request.user.username }}">
+                        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <circle cx="12" cy="8" r="4"></circle>
+                            <path d="M4 20c0-4.4 3.6-8 8-8s8 3.6 8 8"></path>
+                        </svg>
+                    </span>
+                {% endif %}
                 <span class="user-name">{{ request.user.get_full_name|default:request.user.username }}</span>
                 <form method="post" action="{% url 'logout' %}" class="logout-form">
                     {% csrf_token %}
