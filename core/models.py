@@ -575,7 +575,14 @@ class Meter(models.Model):
     # prikazu - prejmenovani sloupce by znamenalo migraci a upravu
     # desitek mist bez uzitku.
     meter_type = models.CharField("Třída", max_length=20)
-    unit_of_measure = models.CharField("Měrná jednotka", max_length=20, default="kWh")
+    unit_of_measure = models.CharField(
+        "Měrná jednotka", max_length=20, blank=True, default="",
+        help_text=(
+            "Nech prázdné a doplní se výchozí jednotka Třídy (Nastavení → Třídy). "
+            "Dřív tu byla natvrdo „kWh“, takže vodoměr nebo teploměr založený bez "
+            "vyplnění jednotky dostal kWh."
+        ),
+    )
     reading_unit_of_measure = models.CharField(
         "Jednotka odečtu (na displeji)", max_length=20, blank=True,
         help_text=(
@@ -646,6 +653,21 @@ class Meter(models.Model):
 
     def __str__(self):
         return self.code or self.name
+
+    def save(self, *args, **kwargs):
+        """Prazdna Merna jednotka se doplni podle Tridy.
+
+        Pole drive melo natvrdo default="kWh", takze vodomer i teplomer
+        zalozeny bez vyplneni jednotky dostal kWh - presne tak vznikl
+        W_FM_CELKEM s jednotkou kWh misto m³. Ted se bere vychozi
+        jednotka Tridy (InvoiceClassColor.default_unit_of_measure), a to
+        i mimo admin (importy, shell). Kdyz Trida vychozi jednotku nema,
+        zustane prazdna. Viz konverzace s Danielem 2026-08-19."""
+        if not self.unit_of_measure and self.meter_type:
+            vychozi = InvoiceClassColor.default_unit_map().get(self.meter_type)
+            if vychozi:
+                self.unit_of_measure = vychozi
+        super().save(*args, **kwargs)
 
     @property
     def jednotka_odectu(self):
