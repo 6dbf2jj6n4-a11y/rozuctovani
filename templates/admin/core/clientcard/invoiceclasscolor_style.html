@@ -1,6 +1,15 @@
 {% comment %}
-Barvy pozadi sekci Klicu v Karte klienta - generuji se z Trid
-(Nastaveni -> Tridy), aby si je Daniel mohl prebarvit bez zasahu do kodu.
+Vzhled sekci v Karte klienta - generuje se z Trid (Nastaveni -> Tridy),
+aby si barvy mohl Daniel prebarvit bez zasahu do kodu.
+
+1) Pozadi cele sekce Klicu (fieldset ma tridu key-section-<kod>).
+2) Nadpis sekce - vychozi Unfold h2 je maly a splyva, takze dostane
+   vetsi pismo a barevny pruh vlevo v barve TEXTU dane Tridy (stejny
+   odstin jako v seznamech Meridel/Odectu). Nadpisy inlinu se poznaji
+   podle id konciciho na "-heading" (viz unfold/templates/admin/
+   edit_inline/tabular.html) - u sbalitelnych sekci je h2 zanorene
+   v <details><summary>, takze primy potomek fieldsetu to neni.
+   Viz konverzace s Danielem 2026-08-19.
 
 Prepinani motivu MUSI viset na tride "dark" na <html>, kterou pridava
 Unfold - stejne jako to dela CSS pro barvu textu (core/views.py
@@ -14,5 +23,22 @@ mely sekce ve svetlem rezimu tmave pozadi. Viz konverzace s Danielem
 {% for c in invoice_class_colors %}
     .key-section-{{ c.invoice_class }} { background-color: {{ c.color_light }}; }
     html.dark .key-section-{{ c.invoice_class }} { background-color: {{ c.color_dark }}; }
+{% endfor %}
+
+/* Spolecny vzhled nadpisu vsech sekci (i tech bez Tridy, napr.
+   "Plochy a najemne") - vetsi a s pruhem vlevo, at je na prvni pohled
+   videt, kde sekce zacina. */
+h2[id$="-heading"] {
+    font-size: 15px;
+    line-height: 1.35;
+    letter-spacing: 0.005em;
+    border-left: 4px solid var(--color-base-400);
+    padding-left: 14px;
+}
+
+/* Pruh v barve konkretni Tridy. */
+{% for c in invoice_class_colors %}
+    .key-section-{{ c.invoice_class }} h2[id$="-heading"] { border-left-color: {{ c.text_color_light }}; }
+    html.dark .key-section-{{ c.invoice_class }} h2[id$="-heading"] { border-left-color: {{ c.text_color_dark }}; }
 {% endfor %}
 </style>
