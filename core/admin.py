@@ -2056,24 +2056,31 @@ class PeriodAdmin(ModelAdmin):
             request, f"Aktuální období je nyní {period} - předvyplní se ve všech sestavách."
         )
 
-    def changelist_view(self, request, extra_context=None):
-        """Ulozi request na self, aby si ho action_buttons (list_display
-        sloupec) mohl vzit pro CSRF token - list_display metody request
-        normalne nedostavaji, tohle je bezny obchazeci trik."""
-        self.request = request
-        return super().changelist_view(request, extra_context)
+    def _period_action_button(self, url, label, color, confirm_text):
+        """Tlacitko akce pro JEDNO obdobi primo v radku tabulky.
 
-    def _period_action_button(self, url, csrf_token, label, color, confirm_text):
+        POZOR na vlastni <form>: bunka tabulky je uvnitr velkeho
+        <form id="changelist-form"> (hromadne akce dole), a vnorene
+        formulare HTML nepovoluje - prohlizec vnitrni <form> ZAHODI a
+        prvni </form> mu navic predcasne uzavre ten vnejsi. Dopadalo to
+        tak, ze tlacitka v PRVNIM radku odesilala changelist-form, tedy
+        akci vybranou v combu dole (klidne i mazani), zatimco v dalsich
+        radcich uz fungovala spravne. Overeno v prohlizeci
+        2026-08-19 (button.form ukazoval na changelist-form).
+
+        Reseni bez vnoreni: tlacitko je bezny submit changelist-formu, ale
+        pres HTML5 `formaction` si prepise cil odeslani jen pro sebe.
+        CSRF token si bere z changelist-formu ({% csrf_token %} tam je).
+        Data hromadnych akci, ktera se pritom odeslou, nas pohled ignoruje -
+        obdobi bere z URL."""
         from django.utils.html import format_html
         return format_html(
-            '<form method="post" action="{}" style="display:inline;" '
-            'onsubmit="return confirm(\'{}\');">'
-            '<input type="hidden" name="csrfmiddlewaretoken" value="{}">'
-            '<button type="submit" style="padding:4px 10px; border-radius:6px; border:none; '
+            '<button type="submit" formaction="{}" formmethod="post" formnovalidate '
+            'onclick="return confirm(\'{}\');" '
+            'style="padding:4px 10px; border-radius:6px; border:none; '
             'color:white; font-weight:600; font-size:12px; cursor:pointer; white-space:nowrap; '
-            'background:{};">{}</button>'
-            '</form>',
-            url, confirm_text, csrf_token, color, label,
+            'background:{};">{}</button>',
+            url, confirm_text, color, label,
         )
 
     def _period_link_button(self, url, label, color):
@@ -2087,15 +2094,13 @@ class PeriodAdmin(ModelAdmin):
 
     def period_actions(self, obj):
         from django.urls import reverse
-        from django.middleware.csrf import get_token
         from django.utils.safestring import mark_safe
 
-        token = get_token(self.request)
         odecty_url = f"{reverse('odecty')}?period={obj.pk}"
         buttons = [
             self._period_link_button(odecty_url, "Zadat odečty", "#2563eb"),
             self._period_action_button(
-                reverse("admin:core_period_vypocet", args=[obj.pk]), token,
+                reverse("admin:core_period_vypocet", args=[obj.pk]),
                 "Výpočet", "#ca8a04", f"Spočítat rozúčtování za {obj} (všechny areály)?",
             ),
         ]
@@ -2104,12 +2109,12 @@ class PeriodAdmin(ModelAdmin):
         # s Danielem).
         if obj.status == Period.Status.CLOSED:
             buttons.append(self._period_action_button(
-                reverse("admin:core_period_otevrit", args=[obj.pk]), token,
+                reverse("admin:core_period_otevrit", args=[obj.pk]),
                 "Otevřít", "#16a34a", f"Znovu otevřít {obj}?",
             ))
         else:
             buttons.append(self._period_action_button(
-                reverse("admin:core_period_zavrit", args=[obj.pk]), token,
+                reverse("admin:core_period_zavrit", args=[obj.pk]),
                 "Zavřít", "#dc2626", f"Uzavřít {obj}? Rozúčtování už pak nepůjde přepočítat.",
             ))
         return mark_safe(" ".join(buttons))
