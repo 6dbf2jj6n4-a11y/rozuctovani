@@ -2096,20 +2096,26 @@ class PeriodAdmin(ModelAdmin):
         from django.urls import reverse
         from django.utils.safestring import mark_safe
 
-        odecty_url = f"{reverse('odecty')}?period={obj.pk}"
-        buttons = [
-            self._period_link_button(odecty_url, "Zadat odečty", "#2563eb"),
+        uzavrene = obj.status == Period.Status.CLOSED
+        buttons = []
+        # U uzavreneho obdobi nema smysl nabizet ani odecty, ani vypocet -
+        # odecty jdou jen do otevreneho obdobi (meters/views.py hlida
+        # period_closed) a prepocet engine odmitne
+        # (BillingPeriodClosedError). Zbyde jen "Otevřít". Viz konverzace
+        # s Danielem 2026-08-19.
+        if not uzavrene:
+            odecty_url = f"{reverse('odecty')}?period={obj.pk}"
+            buttons.append(self._period_link_button(odecty_url, "Zadat odečty", "#2563eb"))
             # Vypocet je ODKAZ, ne POST tlacitko - otevre mezistranku
             # s vyberem arealu (viz vypocet_view).
-            self._period_link_button(
+            buttons.append(self._period_link_button(
                 reverse("admin:core_period_vypocet", args=[obj.pk]),
                 "Výpočet", "#ca8a04", nove_okno=False,
-            ),
-        ]
+            ))
         # Otevrit ma smysl jen u uzavreneho obdobi a naopak - u
         # aktualniho stavu by tlacitko nic nezmenilo (viz konverzace
         # s Danielem).
-        if obj.status == Period.Status.CLOSED:
+        if uzavrene:
             buttons.append(self._period_action_button(
                 reverse("admin:core_period_otevrit", args=[obj.pk]),
                 "Otevřít", "#16a34a", f"Znovu otevřít {obj}?",
@@ -2189,6 +2195,30 @@ class PeriodAdmin(ModelAdmin):
             "opts": self.model._meta,
         }
         return render(request, "admin/core/period/generovat_rok.html", context)
+
+    def _obdobi_ma_data(self, period):
+        """Ma obdobi navazana data, ktera by se pri smazani ztratila?
+        Vsechny tyhle vazby jsou on_delete=CASCADE."""
+        return (
+            period.readings.exists()
+            or period.cost_entries.exists()
+            or period.price_list.exists()
+            or period.billing_lines.exists()
+        )
+
+    def has_delete_permission(self, request, obj=None):
+        """Obdobi s daty smazat NEJDE - kaskada by vzala odecty meridel,
+        naklady, ceniky i cely spocitany vyuctovani. U 07/2026 to bylo
+        411 zaznamu (115 odectu + 10 nakladu + 285 radku vyuctovani).
+        Nabidka "Odstranit" je vestavena akce Djangu, ktera se ve
+        vyberu dole objevuje sama a `actions` v kodu ji nevypina, takze
+        pojistka musi byt tady. Viz konverzace s Danielem 2026-08-19.
+
+        Prazdna obdobi (typicky omylem vygenerovana pres "Generovat pro
+        celý rok") smazat jdou - jinak by je neslo uklidit."""
+        if obj is not None and self._obdobi_ma_data(obj):
+            return False
+        return super().has_delete_permission(request, obj)
 
     def _redirect_back(self, request):
         from django.http import HttpResponseRedirect
