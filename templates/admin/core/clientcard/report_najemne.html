@@ -7,6 +7,10 @@
         (nástup nebo odchod uprostřed), je částka <strong>zkrácená podle počtu
         aktivních dnů</strong> - stejně jako se krátí paušály a služby ve vyúčtování.
         Sloupec „Nájemné/rok" počítá vždy s plným měsícem.
+        Sloupce <strong>vč. DPH</strong> vychází z <strong>fakturované</strong> částky
+        (bez části placené bez dokladu) a DPH {{ sazba_dph_pct }} % se připočítá jen
+        plátcům - neplátcům je nájem podle §56a osvobozený, takže u nich je částka
+        vč. DPH shodná s částkou bez DPH.
     </p>
 
     <form method="get" class="rx-filters">
@@ -87,7 +91,9 @@
                     <th style="padding:6px 8px; text-align:right;">Výměra (m²)</th>
                     <th style="padding:6px 8px; text-align:right;">Dnů</th>
                     <th style="padding:6px 8px; text-align:right;">Nájemné za období</th>
+                    <th style="padding:6px 8px; text-align:right;">Nájemné za období vč. DPH</th>
                     <th style="padding:6px 8px; text-align:right;">Nájemné/rok</th>
+                    <th style="padding:6px 8px; text-align:right;">Nájemné/rok vč. DPH</th>
                 </tr>
             </thead>
             <tbody>
@@ -121,13 +127,20 @@
                                 <br><span style="font-size:11px; color:#888;">fakturuje se {{ row.k_fakturaci|floatformat:2 }} Kč</span>
                             {% endif %}
                         </td>
+                        <td style="padding:6px 8px; text-align:right;">
+                            {{ row.k_fakturaci_s_dph|floatformat:2 }} Kč
+                            {% if not row.s_dph %}<br><span style="font-size:11px; color:#888;">osvobozeno</span>{% endif %}
+                        </td>
                         <td style="padding:6px 8px; text-align:right; font-weight:600;">{{ row.yearly_rent|floatformat:2 }} Kč</td>
+                        <td style="padding:6px 8px; text-align:right; font-weight:600;">{{ row.yearly_rent_s_dph|floatformat:2 }} Kč</td>
                     </tr>
                 {% endfor %}
                 <tr style="border-top:2px solid #666; font-weight:700;">
                     <td colspan="6" style="padding:8px; text-align:right;">Celkem za {{ selected_period }}</td>
                     <td style="padding:8px; text-align:right;">{{ total_monthly|floatformat:2 }} Kč</td>
+                    <td style="padding:8px; text-align:right;">{{ total_monthly_s_dph|floatformat:2 }} Kč</td>
                     <td style="padding:8px; text-align:right;">{{ total_yearly|floatformat:2 }} Kč</td>
+                    <td style="padding:8px; text-align:right;">{{ total_yearly_s_dph|floatformat:2 }} Kč</td>
                 </tr>
             </tbody>
         </table>

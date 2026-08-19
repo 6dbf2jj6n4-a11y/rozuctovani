@@ -21,6 +21,13 @@ from .models import (
     ServicePoolItem, AllocationKey, PriceList, CostEntry, BillingLine, UnitService
 )
 
+# Zakladni sazba DPH pro najem (u platcu DPH; neplatcum je najem podle
+# §56a osvobozeny). Zamerne konstanta, ne nastaveni - sazba se meni
+# jednou za nekolik let a zmena zakona stejne vyzaduje zasah do kodu
+# (prechodna obdobi, stare faktury). Overeno proti ABRA Flexi
+# (sazbaDphZakl = 21 %). Viz konverzace s Danielem 2026-08-19.
+_SAZBA_DPH = Decimal("0.21")
+
 
 class _PeriodDefaultMarkerFilter(admin.SimpleListFilter):
     """Neviditelny "filtr" bez skutecneho efektu - jediny ucel je, aby
@@ -1229,6 +1236,17 @@ class ClientCardAdmin(ModelAdmin):
                     Decimal("0"),
                 )
             nefakturovano = min(nefakturovano, total_monthly)
+            k_fakturaci = total_monthly - nefakturovano
+            # Rocni castka pracuje s PLNYM mesicem (nezkracenym), takze se
+            # od ni odecita taky nezkracena nefakturovana cast.
+            nefakturovano_plny_mesic = min(
+                sum((cu.rent_not_invoiced or Decimal("0") for cu in card_units), Decimal("0")),
+                plny_mesic,
+            )
+            k_fakturaci_rocne = (plny_mesic - nefakturovano_plny_mesic) * 12
+            # DPH se pripocita jen platci - neplatci je najem osvobozeny
+            # (§56a), takze u nej se castka vc. DPH rovna castce bez DPH.
+            koef = (1 + _SAZBA_DPH) if card.client.vat_payer else Decimal("1")
             sites_of_card = {cu.unit.site for cu in card_units}
             rows.append({
                 "client": card.client,
@@ -1237,13 +1255,15 @@ class ClientCardAdmin(ModelAdmin):
                 "area_m2": total_area,
                 "monthly_rent": total_monthly,
                 "nefakturovano": nefakturovano,
-                "k_fakturaci": total_monthly - nefakturovano,
+                "k_fakturaci": k_fakturaci,
+                "k_fakturaci_s_dph": (k_fakturaci * koef).quantize(Decimal("0.01")),
                 "plny_mesic": plny_mesic,
                 "aktivnich_dnu": aktivnich_dnu,
                 "dnu_v_obdobi": period.days_in_period if period else None,
                 "castecne": period is not None and aktivnich_dnu < period.days_in_period,
                 "s_dph": card.client.vat_payer,
                 "yearly_rent": plny_mesic * 12,
+                "yearly_rent_s_dph": (k_fakturaci_rocne * koef).quantize(Decimal("0.01")),
             })
 
         rows.sort(key=lambda r: r["client"].name)
@@ -1283,6 +1303,9 @@ class ClientCardAdmin(ModelAdmin):
             "rows": rows,
             "total_monthly": total_monthly,
             "total_yearly": total_monthly * 12,
+            "total_monthly_s_dph": sum((r["k_fakturaci_s_dph"] for r in rows), Decimal("0")),
+            "total_yearly_s_dph": sum((r["yearly_rent_s_dph"] for r in rows), Decimal("0")),
+            "sazba_dph_pct": (_SAZBA_DPH * 100).quantize(Decimal("1")),
             "total_s_dph": total_s_dph,
             "total_bez_dph": total_bez_dph,
             "total_nefakturovano": total_nefakturovano,
