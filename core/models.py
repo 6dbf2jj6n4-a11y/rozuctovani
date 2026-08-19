@@ -638,6 +638,15 @@ class Meter(models.Model):
     def __str__(self):
         return self.code or self.name
 
+    def get_meter_type_display(self):
+        """Django tuhle metodu generuje samo jen u poli s choices= - to uz
+        pole nema (zivy seznam Trid je v InvoiceClassColor), takze ji
+        dodavame rucne, stejne jako u ServicePoolItem.
+        get_invoice_class_display. Bez ni padala stranka odectu
+        (meters/views.py) i sestava Neprirazena meridla na
+        AttributeError - viz konverzace s Danielem 2026-08-19."""
+        return InvoiceClassColor.label_map().get(self.meter_type, self.meter_type)
+
     def consumption_for(self, period, readings_cache=None):
         """`readings_cache`: volitelny dict {(meter_id, period_id):
         MeterReading} pro hromadne predem nactene odecty (viz
@@ -860,6 +869,12 @@ class SupplyPoint(models.Model):
 
     def __str__(self):
         return self.name
+
+    def get_meter_type_display(self):
+        """Stejny duvod jako u Meter.get_meter_type_display - pole uz nema
+        choices=. Zatim to nikdo nevola, ale je to stejna mina: u Meter
+        prave takove volani shodilo stranku odectu."""
+        return InvoiceClassColor.label_map().get(self.meter_type, self.meter_type)
 
 
 class MeterReading(models.Model):
