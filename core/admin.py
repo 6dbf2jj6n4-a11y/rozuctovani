@@ -269,11 +269,17 @@ def sekce_sluzeb():
 
 @admin.register(Unit)
 class UnitAdmin(DuplicateModelAdminMixin, ModelAdmin):
-    list_display = ("name", "site", "purpose", "area_m2", "unit_type")
+    list_display = ("name", "site", "purpose", "area_m2", "unit_type", "druh_prostoru")
     list_select_related = ("site",)
-    list_filter = ("site",)
+    list_filter = ("site", "is_residential")
     search_fields = ("name",)
     actions = ["duplicate_selected"]
+
+    @display(description="Druh", ordering="is_residential")
+    def druh_prostoru(self, obj):
+        """Slovem, ne zaskrtavatkem - 'Bytový/Nebytový' se v seznamu cte
+        lip nez fajfka u sloupce 'Bytový prostor'."""
+        return "Bytový" if obj.is_residential else "Nebytový"
 
     def get_inlines(self, request, obj=None):
         """Sekce se generuji z Trid (Nastaveni -> Tridy), ne napevno."""

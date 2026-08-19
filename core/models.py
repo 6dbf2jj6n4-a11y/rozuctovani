@@ -62,6 +62,14 @@ class Unit(models.Model):
         "Sazba Kč/m²/rok", max_digits=10, decimal_places=2, null=True, blank=True
     )
     unit_type = models.CharField("Jednotka", max_length=10, blank=True, default="m2")
+    is_residential = models.BooleanField(
+        "Bytový prostor", default=False,
+        help_text=(
+            "Zapnuto = bytový prostor, vypnuto = nebytový. Nájem bytu je "
+            "podle §56a vždy osvobozený od DPH a nelze ho zdanit ani "
+            "nájemci, který je plátce - na rozdíl od nebytových prostor."
+        ),
+    )
 
     class Meta:
         verbose_name = "Pronajímaný prostor"
