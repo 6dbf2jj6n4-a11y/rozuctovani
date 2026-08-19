@@ -14,6 +14,12 @@ Fotka: prednost ma vlastni fotka prihlaseneho uzivatele
 staticky avatar, pak panacek. Podepsana URL z R2 plati hodinu, proto se
 bere az tady pri vykresleni (viz core/storage.py).
 
+Uzke menu: kdyz je sirka menu pod 200 px, panel se prepne do
+kompaktniho rezimu (trida rx-user-kompakt) - zustane jen fotka na stred,
+popisky a sipka se schovaji. Bez toho se text mackal na "D..." a panel
+prerustal sirku menu. Sirka chodi z Alpine promenne sidebarWidth, kterou
+ovlada tazitko (viz templates/admin/nav_sidebar.html).
+
 DULEZITE: rozmery/pozice, ktere Unfoldovo predkompilovane styles.css
 neobsahuje (h-[38px], min-h-[64px], bottom-[73px]...), reseny vlastnimi
 tridami rx-user-* v core/static/core/css/sidebar_extras.css - viz
@@ -22,9 +28,11 @@ komentar v templates/admin/nav_sidebar.html a konverzace s Danielem
 {% endcomment %}
 {% static_if_exists "core/img/avatar.jpg" as avatar_url %}
 
-<div class="border-t border-base-200 mt-auto px-6 py-3 relative dark:border-base-800" x-data="{ openUserPanel: false }">
+<div class="rx-user-panel border-t border-base-200 mt-auto px-6 py-3 relative dark:border-base-800"
+     x-data="{ openUserPanel: false }"
+     x-bind:class="{'rx-user-kompakt': sidebarWidth < 200}">
     <nav class="rx-user-popup absolute bg-white border border-base-200 flex flex-col leading-none py-1 rounded-default shadow-lg left-3 right-3 z-50 dark:bg-base-800 dark:border-base-700" x-cloak x-show="openUserPanel" x-transition x-on:click.outside="openUserPanel = false">
-        <div class="border-b border-base-200 flex flex-row gap-1 mb-1 pb-1 px-2 dark:border-base-700">
+        <div class="rx-user-themes border-b border-base-200 flex flex-row gap-1 mb-1 pb-1 px-2 dark:border-base-700">
             <a class="cursor-pointer flex flex-row gap-2 grow justify-center px-2 py-1.5 rounded-default hover:bg-base-100 hover:text-base-700 dark:hover:bg-base-700 dark:hover:text-base-200"
                x-on:click="adminTheme = 'light'"
                x-bind:class="adminTheme == 'light' && 'text-primary-600 dark:text-primary-500 dark:hover:text-primary-500! hover:text-primary-600!'">
@@ -72,7 +80,7 @@ komentar v templates/admin/nav_sidebar.html a konverzace s Danielem
             </div>
         {% endif %}
 
-        <div class="flex flex-col select-none min-w-0">
+        <div class="rx-user-text flex flex-col select-none min-w-0">
             <div class="font-semibold text-important tracking-tight truncate">
                 {% firstof user.get_full_name user.get_username %}
             </div>
@@ -83,7 +91,7 @@ komentar v templates/admin/nav_sidebar.html a konverzace s Danielem
             {% endif %}
         </div>
 
-        <span class="material-symbols-outlined ml-auto select-none text-font-default-light dark:text-font-default-dark">
+        <span class="rx-user-chevron material-symbols-outlined ml-auto select-none text-font-default-light dark:text-font-default-dark">
             unfold_more
         </span>
     </div>

@@ -76,3 +76,44 @@ se puvodne vubec neobjevilo presne z tohoto duvodu).
 .dark .rx-logout-btn:hover {
     color: var(--color-red-400);
 }
+
+/*
+Kompaktni panel uzivatele pri uzkem menu (rx-user-kompakt se prida v
+user_panel.html, kdyz sidebarWidth < 200). Zustane jen fotka na stred -
+jinak se jmeno/e-mail zmackly na "D..." a panel prerustal sirku menu.
+Vyskakovaci nabidka si drzi vlastni sirku, aby se do ni prepinac motivu
+vesel i kdyz je menu uzke; presahuje pak menu doprava, coz je v poradku
+(je to absolutne pozicovany prvek nad obsahem).
+*/
+.rx-user-kompakt .rx-user-text,
+.rx-user-kompakt .rx-user-chevron {
+    display: none;
+}
+.rx-user-kompakt .rx-user-trigger {
+    justify-content: center;
+    padding-left: 0;
+    padding-right: 0;
+    gap: 0;
+}
+/* Nabidka zustava UVNITR menu (drive se roztahovala pres jeho okraj, coz
+   vypadalo rozbite) - prepinac motivu se proto v uzkem menu sklada pod
+   sebe misto vedle sebe, aby se popisky vesly. */
+.rx-user-kompakt .rx-user-themes {
+    flex-direction: column;
+}
+.rx-user-kompakt .rx-user-themes > a {
+    justify-content: flex-start;
+}
+
+/* Tri volby motivu vedle sebe potrebuji pri vychozi sirce menu (288 px)
+   o par pixelu vic, nez kolik nabidka nabizi - "Systém" tak vycuhoval
+   pres jeji okraj. Mensi vnitrni odsazeni je srovna; wrap je pojistka
+   pro jine sirky, aby se misto pretekani zalomily. */
+.rx-user-themes {
+    flex-wrap: wrap;
+}
+.rx-user-themes > a {
+    padding-left: 0.25rem;
+    padding-right: 0.25rem;
+    min-width: 0;
+}
