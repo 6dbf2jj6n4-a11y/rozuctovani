@@ -1,0 +1,36 @@
+{% extends "admin/base_site.html" %}
+
+{% block content %}
+<div>
+    {% if je_uzavrene %}
+        <p style="background:#fef3c7; color:#92400e; padding:10px 12px; border-radius:8px; font-size:13px; max-width:520px;">
+            Období <strong>{{ period }}</strong> je uzavřené - rozúčtování se nepřepočítá.
+            Nejdřív ho musíš znovu otevřít tlačítkem „Otevřít“ v seznamu období.
+        </p>
+    {% endif %}
+
+    <p style="color:#999; font-size:13px; margin-bottom:20px; max-width:520px;">
+        Spočítá rozúčtování za období <strong>{{ period }}</strong>. Vyber, čeho se má
+        výpočet týkat - buď všech areálů najednou, nebo jen jednoho. Předchozí výsledky
+        za zvolený rozsah se přepíšou.
+    </p>
+
+    <form method="post" style="max-width:320px;">
+        {% csrf_token %}
+        <label for="id_site" style="display:block; font-weight:600; margin-bottom:6px;">Areál</label>
+        <select name="site" id="id_site"
+                style="padding:8px; width:100%; box-sizing:border-box; margin-bottom:20px; border-radius:6px; border:1px solid #d1d5db;">
+            <option value="">Všechny areály</option>
+            {% for s in sites %}
+                <option value="{{ s.pk }}">jen {{ s.name }}</option>
+            {% endfor %}
+        </select>
+        <button type="submit"
+                style="padding:8px 20px; border-radius:6px; background:#ca8a04; color:white; font-weight:600; border:none; cursor:pointer;">
+            Spočítat
+        </button>
+        <a href="{% url 'admin:core_period_changelist' %}"
+           style="margin-left:12px; font-size:13px; color:#6b7280;">Zpět</a>
+    </form>
+</div>
+{% endblock %}

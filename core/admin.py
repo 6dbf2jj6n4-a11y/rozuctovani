@@ -2083,13 +2083,13 @@ class PeriodAdmin(ModelAdmin):
             url, confirm_text, color, label,
         )
 
-    def _period_link_button(self, url, label, color):
+    def _period_link_button(self, url, label, color, nove_okno=True):
         from django.utils.html import format_html
         return format_html(
-            '<a href="{}" target="_blank" style="padding:4px 10px; border-radius:6px; '
+            '<a href="{}"{} style="padding:4px 10px; border-radius:6px; '
             'color:white; font-weight:600; font-size:12px; text-decoration:none; '
             'display:inline-block; white-space:nowrap; background:{};">{}</a>',
-            url, color, label,
+            url, format_html(' target="_blank"') if nove_okno else "", color, label,
         )
 
     def period_actions(self, obj):
@@ -2099,9 +2099,11 @@ class PeriodAdmin(ModelAdmin):
         odecty_url = f"{reverse('odecty')}?period={obj.pk}"
         buttons = [
             self._period_link_button(odecty_url, "Zadat odečty", "#2563eb"),
-            self._period_action_button(
+            # Vypocet je ODKAZ, ne POST tlacitko - otevre mezistranku
+            # s vyberem arealu (viz vypocet_view).
+            self._period_link_button(
                 reverse("admin:core_period_vypocet", args=[obj.pk]),
-                "Výpočet", "#ca8a04", f"Spočítat rozúčtování za {obj} (všechny areály)?",
+                "Výpočet", "#ca8a04", nove_okno=False,
             ),
         ]
         # Otevrit ma smysl jen u uzavreneho obdobi a naopak - u
@@ -2218,12 +2220,37 @@ class PeriodAdmin(ModelAdmin):
         return self._redirect_back(request)
 
     def vypocet_view(self, request, period_id):
-        from django.shortcuts import get_object_or_404
-        if request.method != "POST":
-            return self._redirect_back(request)
+        """Vypocet rozuctovani za JEDNO obdobi, s volbou arealu.
+
+        GET = mezistranka s vyberem arealu, POST = provede se. Stejny
+        vzor jako generovat_rok_view. Driv tlacitko v radku POSTovalo
+        rovnou a pocitalo vzdy VSECHNY arealy - vybrat jeden slo jen
+        pres hromadne akce dole, coz nebylo poznat. Viz konverzace
+        s Danielem 2026-08-19."""
+        from django.shortcuts import get_object_or_404, redirect, render
+
         period = get_object_or_404(Period, pk=period_id)
-        self._spocitat_rozuctovani(request, Period.objects.filter(pk=period.pk), site=None)
-        return self._redirect_back(request)
+
+        if request.method == "POST":
+            site_id = request.POST.get("site") or ""
+            site = None
+            if site_id:
+                site = Site.objects.filter(pk=site_id).first()
+                if site is None:
+                    self.message_user(request, "Neznámý areál.", level=messages.ERROR)
+                    return redirect("admin:core_period_changelist")
+            self._spocitat_rozuctovani(request, Period.objects.filter(pk=period.pk), site=site)
+            return redirect("admin:core_period_changelist")
+
+        context = {
+            **self.admin_site.each_context(request),
+            "title": f"Výpočet rozúčtování – {period}",
+            "period": period,
+            "sites": Site.objects.order_by("name"),
+            "je_uzavrene": period.status == Period.Status.CLOSED,
+            "opts": self.model._meta,
+        }
+        return render(request, "admin/core/period/vypocet.html", context)
 
     def get_actions(self, request):
         actions = super().get_actions(request)
