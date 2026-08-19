@@ -21,14 +21,6 @@ from .models import (
     ServicePoolItem, AllocationKey, PriceList, CostEntry, BillingLine, UnitService
 )
 
-# Zakladni sazba DPH pro najem (u platcu DPH; neplatcum je najem podle
-# §56a osvobozeny). Zamerne konstanta, ne nastaveni - sazba se meni
-# jednou za nekolik let a zmena zakona stejne vyzaduje zasah do kodu
-# (prechodna obdobi, stare faktury). Overeno proti ABRA Flexi
-# (sazbaDphZakl = 21 %). Viz konverzace s Danielem 2026-08-19.
-_SAZBA_DPH = Decimal("0.21")
-
-
 class _PeriodDefaultMarkerFilter(admin.SimpleListFilter):
     """Neviditelny "filtr" bez skutecneho efektu - jediny ucel je, aby
     Django ChangeList rozpoznalo parametr '_pd' jako OCEKAVANY a vyjmulo
@@ -326,20 +318,8 @@ class UnitAdmin(DuplicateModelAdminMixin, ModelAdmin):
         return custom + urls
 
 
-class AllocationKeyInlineForm(forms.ModelForm):
-    """Kratke popisky sloupcu jen v teto inline tabulce (Karta klienta) -
-    plny nazev pole zustava v AllocationKeyAdmin/detailu klice, kde je
-    na sirku misto. Cely popisek jde videt v tooltipu na ikonce '?'
-    (help_text, viz unfold/helpers/edit_inline/tabular_heading.html)."""
-    class Meta:
-        model = AllocationKey
-        fields = "__all__"
-        labels = {"deduct_from_pool": "OzN", "is_billed": "$"}
-
-
 class AllocationKeyInlineBase(TabularInline):
     model = AllocationKey
-    form = AllocationKeyInlineForm
     extra = 0
     collapsible = True
     fields = ("service_item", "allocation_type", "value", "unit_price", "meter", "unit", "deduct_from_pool", "is_billed")
@@ -1205,6 +1185,14 @@ class ClientCardAdmin(ModelAdmin):
 
         rows = []
         period_start, period_end = period.date_range() if period else (None, None)
+        # Sazba DPH se bere z vybraneho Obdobi (Period.vat_rate), aby zmena
+        # sazby neprepocitala zpetne uz uzavrena obdobi. Bez obdobi (zadne
+        # zalozene) se pouzije vychozi hodnota pole.
+        sazba_dph = (
+            period.vat_rate
+            if period is not None
+            else Period._meta.get_field("vat_rate").default
+        ) / Decimal("100")
         for card in cards:
             card_units = list(card.card_units.all())
             if not card_units:
@@ -1246,7 +1234,7 @@ class ClientCardAdmin(ModelAdmin):
             k_fakturaci_rocne = (plny_mesic - nefakturovano_plny_mesic) * 12
             # DPH se pripocita jen platci - neplatci je najem osvobozeny
             # (§56a), takze u nej se castka vc. DPH rovna castce bez DPH.
-            koef = (1 + _SAZBA_DPH) if card.client.vat_payer else Decimal("1")
+            koef = (1 + sazba_dph) if card.client.vat_payer else Decimal("1")
             sites_of_card = {cu.unit.site for cu in card_units}
             rows.append({
                 "client": card.client,
@@ -1305,7 +1293,7 @@ class ClientCardAdmin(ModelAdmin):
             "total_yearly": total_monthly * 12,
             "total_monthly_s_dph": sum((r["k_fakturaci_s_dph"] for r in rows), Decimal("0")),
             "total_yearly_s_dph": sum((r["yearly_rent_s_dph"] for r in rows), Decimal("0")),
-            "sazba_dph_pct": (_SAZBA_DPH * 100).quantize(Decimal("1")),
+            "sazba_dph_pct": (sazba_dph * 100).normalize(),
             "total_s_dph": total_s_dph,
             "total_bez_dph": total_bez_dph,
             "total_nefakturovano": total_nefakturovano,
@@ -2009,7 +1997,11 @@ class MeterAdmin(DuplicateModelAdminMixin, ModelAdmin):
 
 @admin.register(Period)
 class PeriodAdmin(ModelAdmin):
-    list_display = ("__str__", "current_badge", "status_badge", "days_in_period", "period_actions")
+    list_display = (
+        "__str__", "current_badge", "status_badge", "days_in_period",
+        "vat_rate", "period_actions",
+    )
+    list_editable = ("vat_rate",)
     list_filter = ("status", "is_current")
     ordering = ("-year", "-month")
     actions = [

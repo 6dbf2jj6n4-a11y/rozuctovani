@@ -454,6 +454,14 @@ class Period(models.Model):
             "zaškrtnutím se ostatní automaticky odznačí."
         ),
     )
+    vat_rate = models.DecimalField(
+        "Sazba DPH (%)", max_digits=5, decimal_places=2, default=Decimal("21"),
+        help_text=(
+            "Základní sazba DPH platná v tomto období - používá se ve sloupcích "
+            "„vč. DPH\" v Přehledu nájemného. Je u období, aby změna sazby "
+            "neovlivnila zpětně už uzavřená období."
+        ),
+    )
 
     class Meta:
         verbose_name = "Období"
