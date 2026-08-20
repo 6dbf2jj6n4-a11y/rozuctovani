@@ -1167,13 +1167,14 @@ class ClientCardAdmin(ModelAdmin):
     )
     readonly_fields = ("generate_card_button",)
 
-    def serialize_result(self, obj, to_field_name):
+    def autocomplete_label(self, obj):
         # ClientCard.__str__ je schvalne prazdny (kvuli nadpisu v inline sekcich
         # na karte klienta) - autocomplete jinde (napr. u Klice) potrebuje
         # smysluplny popisek, proto se sestavuje tady zvlast.
-        result = super().serialize_result(obj, to_field_name)
-        result["text"] = obj.description or f"Karta {obj.client}"
-        return result
+        # Drive to byla metoda serialize_result, jenze tu Django na
+        # ModelAdminu vubec nevola (je na AutocompleteJsonView) - popisek
+        # tedy zustaval prazdny. Viz core/autocomplete.py.
+        return obj.description or f"Karta {obj.client}"
     actions = ["kopie_karty"]
 
     def get_inlines(self, request, obj=None):
@@ -1686,6 +1687,18 @@ class MeterAdmin(DuplicateModelAdminMixin, ModelAdmin):
     autocomplete_fields = ("parent_meter", "supply_point")
     actions = ["duplicate_selected", "assign_supply_point"]
     inlines = [MeterReadingInline]
+
+    def autocomplete_label(self, obj):
+        """Popisek polozky v naseptavaci - pripisuje se areal.
+
+        Meter.__str__ vraci jen kod, takze stejny kod ve dvou arealech
+        (E_SPOL je ve FM i NJ, celkem 10 takovych kodu) vypadal v nabidce
+        dvakrat uplne stejne a neslo poznat, ktery vybrat - Daniel na to
+        narazil u Klice na Karte klienta. Meni se jen popisek v
+        naseptavaci, ne __str__ (ten se pouziva v sestavach a PDF, kde je
+        areal zrejmy z kontextu). Stejny vzor jako u ClientCardAdmin
+        vyse. Viz konverzace s Danielem 2026-08-20."""
+        return f"{obj.code or obj.name} ({obj.site.name})"
 
     def formfield_for_dbfield(self, db_field, request, **kwargs):
         if db_field.name == "meter_type":

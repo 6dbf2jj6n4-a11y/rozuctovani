@@ -6,6 +6,7 @@ from django.shortcuts import redirect
 from django.urls import include, path
 from django.views.static import serve as static_serve
 
+from core.autocomplete import PopiskyAutocompleteView
 from core.views import class_colors_css
 
 
@@ -41,6 +42,16 @@ urlpatterns = [
     # rel=stylesheet> znamenalo 302 misto CSS. Barvy tříd nejsou citlivy
     # udaj, takze nemusi byt za prihlasenim.
     path("barvy-trid.css", class_colors_css, name="class_colors_css"),
+    # MUSI byt PRED admin.site.urls, aby prisla ke slovu drive - stini
+    # vestaveny naseptavac vlastnim pohledem s hezcimi popisky (napr.
+    # "E_SPOL (FM)" misto dvou stejnych "E_SPOL"). reverse("admin:autocomplete")
+    # vraci porad tuhle adresu, takze widgety nic nepoznaji.
+    # Viz core/autocomplete.py.
+    path(
+        "admin/autocomplete/",
+        admin.site.admin_view(PopiskyAutocompleteView.as_view(admin_site=admin.site)),
+        name="autocomplete_popisky",
+    ),
     path("admin/", admin.site.urls),
     path("api/", include("billing.api_urls")),
     path("accounts/", include("django.contrib.auth.urls")),

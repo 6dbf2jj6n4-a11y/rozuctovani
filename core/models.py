@@ -711,6 +711,27 @@ class Meter(models.Model):
         verbose_name = "Měřidlo"
         verbose_name_plural = "Měřidla"
         ordering = ["site", "meter_type", "code"]
+        constraints = [
+            # Kod musi byt jedinecny V RAMCI AREALU, ne globalne: stejny
+            # kod ve dvou arealech je v poradku (E_SPOL je ve FM i NJ,
+            # takovych kodu je 10) a vzorce si meridlo hledaji vzdy
+            # v ramci sveho arealu - viz _formula_consumption_for
+            # (`Meter.objects.filter(site=self.site, code=token)`).
+            # DVA STEJNE KODY V JEDNOM AREALU by ale vzorce rozbily TISE:
+            # bere se `.first()`, takze by se pocitalo s nahodnym z nich.
+            # Prazdny kod se z omezeni vynechava - je to volitelne pole.
+            # Viz konverzace s Danielem 2026-08-20.
+            models.UniqueConstraint(
+                fields=["site", "code"],
+                condition=~models.Q(code=""),
+                name="meridlo_kod_jedinecny_v_arealu",
+                violation_error_message=(
+                    "Měřidlo s tímto kódem už v tomto areálu existuje. "
+                    "Kód musí být v rámci areálu jedinečný, jinak by vzorce "
+                    "virtuálních měřidel nevěděly, které z nich použít."
+                ),
+            ),
+        ]
 
     def __str__(self):
         return self.code or self.name
