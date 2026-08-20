@@ -37,22 +37,43 @@
     {% if not rows %}
         <p>Žádné aktivní karty s plochami nenalezeny.</p>
     {% else %}
-        {% if koef %}
+        {% if selected_period %}
             <div style="border:1px solid #444; border-radius:8px; padding:14px 16px; margin-bottom:18px; max-width:860px;">
                 <div style="font-weight:600; margin-bottom:4px;">
-                    Koeficient DPH za rok {{ koef.rok|unlocalize }}
-                    {% if not koef.cely_rok %}
+                    Koeficient DPH za rok {% if koef %}{{ koef.rok|unlocalize }}{% else %}{{ selected_period.year|unlocalize }}{% endif %}
+                    {% if koef and not koef.cely_rok %}
                         <span style="font-weight:400; color:#d97706; font-size:13px;">
                             &ndash; zatím jen leden až {{ selected_period }} ({{ koef.pocet_obdobi }} z 12 období)
                         </span>
                     {% endif %}
                 </div>
-                <p style="color:#999; font-size:12px; margin:0 0 12px;">
+                <p style="color:#999; font-size:12px; margin:0 0 10px;">
                     Počítá se za celý kalendářní rok (§76 ZDPH), ne za jeden měsíc. Každá karta
-                    do něj vstupuje jen za období, ve kterých platila. Za celou firmu -
-                    <strong>filtr areálu se sem nepromítá</strong>.
+                    do něj vstupuje jen za období, ve kterých platila. Areály se vybírají zvlášť
+                    (koeficient je za jednu osobu), <strong>filtr nad tabulkou se sem nepromítá</strong>.
                 </p>
 
+                <form method="get" style="margin:0 0 12px; display:flex; align-items:center; gap:14px; flex-wrap:wrap;">
+                    <input type="hidden" name="period" value="{{ selected_period.pk }}">
+                    {% if selected_site_id %}<input type="hidden" name="site" value="{{ selected_site_id }}">{% endif %}
+                    <span style="font-size:12px; color:#999;">Areály v koeficientu:</span>
+                    {% for s in koef_sites %}
+                        <label style="font-size:13px; display:inline-flex; align-items:center; gap:5px; cursor:pointer;">
+                            <input type="checkbox" name="koef_site" value="{{ s.site.pk }}"
+                                   {% if s.vybrany %}checked{% endif %} onchange="this.form.submit()">
+                            {{ s.site.name }}
+                            {% if not s.site.in_vat_coefficient %}
+                                <span style="font-size:11px; color:#999;">(jiná osoba)</span>
+                            {% endif %}
+                        </label>
+                    {% endfor %}
+                </form>
+
+                {% if not koef %}
+                    <p style="color:#d97706; font-size:13px; margin:0;">
+                        Vyber alespoň jeden areál, jinak není z čeho koeficient spočítat.
+                    </p>
+                {% else %}
                 <table style="border-collapse:collapse; font-size:13px; width:100%;">
                     <thead>
                         <tr style="border-bottom:1px solid #555; text-align:right; color:#999; font-size:12px;">
@@ -98,6 +119,7 @@
                     Nefakturovaná část nájmu do koeficientu nevstupuje vůbec (není zdanitelné
                     ani osvobozené plnění), je tu jen pro kontrolu.
                 </p>
+                {% endif %}
             </div>
         {% endif %}
         <div style="overflow-x:auto;">

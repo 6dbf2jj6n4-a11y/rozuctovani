@@ -36,6 +36,16 @@ class Site(models.Model):
             "každý další řádek je jeden pozemek/budova z výčtu."
         ),
     )
+    in_vat_coefficient = models.BooleanField(
+        "Vstupuje do koeficientu DPH", default=True,
+        help_text=(
+            "Zapnuto: nájem z tohoto areálu se počítá do koeficientu DPH "
+            "v Přehledu nájemného. Vypni u areálu, který pronajímá jiná osoba "
+            "než plátce, za kterého se koeficient počítá - třeba areál vedený "
+            "na fyzickou osobu. Slouží jen jako výchozí zaškrtnutí, v sestavě "
+            "jde výběr areálů kdykoli změnit."
+        ),
+    )
 
     class Meta:
         verbose_name = "Areál / objekt"
@@ -172,7 +182,15 @@ class Client(models.Model):
 
     def save(self, *args, **kwargs):
         """Kdyz se klient prepne na neaktivniho, deaktivuji se i vsechny jeho
-        (dosud aktivni) Karty - neaktivni klient nemuze mit aktivni kartu."""
+        (dosud aktivni) Karty - neaktivni klient nemuze mit aktivni kartu.
+
+        Pronajimatel muze byt jen JEDEN - zaskrtnuti odznaci ostatni,
+        stejne jako u Period.is_current. Cely model s jednim
+        pronajimatelem pocita: bere se pres
+        Client.objects.filter(is_landlord=True).first() (hlavicka
+        zadavani odectu, generovani Smluv a Karet najemce), takze druhy
+        oznaceny klient by se tise ignoroval podle poradi v DB. Viz
+        konverzace s Danielem 2026-08-19."""
         deactivate_cards = False
         if self.pk and not self.is_active:
             was_active = Client.objects.filter(pk=self.pk, is_active=True).exists()
@@ -180,6 +198,8 @@ class Client(models.Model):
         super().save(*args, **kwargs)
         if deactivate_cards:
             self.cards.filter(is_active=True).update(is_active=False)
+        if self.is_landlord:
+            Client.objects.exclude(pk=self.pk).filter(is_landlord=True).update(is_landlord=False)
 
 
 class Contract(models.Model):

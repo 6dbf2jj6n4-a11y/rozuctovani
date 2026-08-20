@@ -158,7 +158,8 @@ class UnitInline(TabularInline):
 
 @admin.register(Site)
 class SiteAdmin(ModelAdmin):
-    list_display = ("name", "address", "aktivnich_klientu")
+    list_display = ("name", "address", "aktivnich_klientu", "in_vat_coefficient")
+    list_editable = ("in_vat_coefficient",)
     search_fields = ("name",)
     inlines = [UnitInline]
 
@@ -1156,7 +1157,7 @@ class ClientCardAdmin(ModelAdmin):
         }
         return render(request, "admin/core/clientcard/report_plochy_konflikt.html", context)
 
-    def _koeficient_dph_za_rok(self, period):
+    def _koeficient_dph_za_rok(self, period, site_ids):
         """Koeficient DPH (§76 ZDPH) za KALENDARNI ROK, ne za jeden mesic.
 
         Koeficient se ze zakona vypocitava z plneni za cely kalendarni
@@ -1179,8 +1180,15 @@ class ClientCardAdmin(ModelAdmin):
            dnes neaktivni, ale najem za mesice, kdy tu byl, do koeficientu
            patri.
 
-        Koeficient je vec cele firmy, takze filtr arealu se na nej
-        zamerne NEUPLATNUJE."""
+        Koeficient se pocita za JEDNU osobu, ne za jeden areal - proto ma
+        vlastni vyber arealu (`site_ids`), nezavisly na filtru nad
+        tabulkou. Danielova firma pronajima FM a NJ, kdezto DV je vedene
+        na fyzickou osobu, takze do koeficientu firmy nepatri; vychozi
+        zaskrtnuti drzi priznak Site.in_vat_coefficient.
+
+        Filtruje se podle arealu KARTY (plochy na karte), ne klienta -
+        karta patri vzdy do jednoho arealu, takze klient s kartami ve
+        dvou arealech prispeje jen tou, ktera do vyberu spada."""
         from decimal import ROUND_CEILING
 
         rok = period.year
@@ -1191,9 +1199,13 @@ class ClientCardAdmin(ModelAdmin):
             return None
 
         karty = list(
-            ClientCard.objects.filter(client__is_landlord=False)
+            ClientCard.objects.filter(
+                client__is_landlord=False,
+                card_units__unit__site_id__in=site_ids,
+            )
             .select_related("client")
             .prefetch_related("card_units")
+            .distinct()
         )
 
         mesice = []
@@ -1261,6 +1273,17 @@ class ClientCardAdmin(ModelAdmin):
         periods = Period.objects.all()
         period_id = request.GET.get("period")
         period = periods.filter(pk=period_id).first() if period_id else Period.current()
+
+        # Vyber arealu pro KOEFICIENT - vlastni, nezavisly na filtru nad
+        # tabulkou (koeficient je za jednu osobu, ne za jeden areal).
+        # Bez parametru v URL se bere prednastaveni ze Site.in_vat_coefficient.
+        if "koef_site" in request.GET:
+            zadane = request.GET.getlist("koef_site")
+            koef_site_ids = [
+                s.pk for s in sites if str(s.pk) in zadane
+            ]
+        else:
+            koef_site_ids = [s.pk for s in sites if s.in_vat_coefficient]
 
         # Pronajimatel (Client.is_landlord) sam sobe najem neplati - jeho
         # vlastni karty by prehled jen nafukovaly. Viz Daniel 2026-08-17.
@@ -1359,7 +1382,11 @@ class ClientCardAdmin(ModelAdmin):
         # Koeficient se ze zakona zaokrouhluje NAHORU na cele procento
         # a pocita se za KALENDARNI ROK, ne za jeden mesic - viz
         # _koeficient_dph_za_rok.
-        koef = self._koeficient_dph_za_rok(period) if period is not None else None
+        koef = (
+            self._koeficient_dph_za_rok(period, koef_site_ids)
+            if period is not None and koef_site_ids
+            else None
+        )
 
         context = {
             **self.admin_site.each_context(request),
@@ -1375,6 +1402,9 @@ class ClientCardAdmin(ModelAdmin):
             "total_yearly_s_dph": sum((r["yearly_rent_s_dph"] for r in rows), Decimal("0")),
             "sazba_dph_pct": (sazba_dph * 100).normalize(),
             "koef": koef,
+            "koef_sites": [
+                {"site": s, "vybrany": s.pk in koef_site_ids} for s in sites
+            ],
             "opts": self.model._meta,
         }
         return render(request, "admin/core/clientcard/report_najemne.html", context)
