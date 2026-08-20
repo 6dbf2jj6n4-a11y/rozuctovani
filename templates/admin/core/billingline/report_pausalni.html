@@ -1,4 +1,5 @@
 {% extends "admin/base_site.html" %}
+{% load l10n %}
 
 {% block content %}
 <div>
@@ -9,7 +10,7 @@
     </p>
 
     {% if not rows %}
-        <p>Za rok {{ year }} zatím nejsou žádná vypočtená období s paušálními klienty.</p>
+        <p>Za rok {{ year|unlocalize }} zatím nejsou žádná vypočtená období s paušálními klienty.</p>
     {% else %}
         <div style="overflow-x:auto;">
         <table style="width:100%; border-collapse:collapse; font-size:13px;">
@@ -73,7 +74,7 @@
                     </tr>
                 {% endfor %}
                 <tr style="border-top:2px solid #666; font-weight:700;">
-                    <td colspan="2" style="padding:8px; text-align:right;">Celkem {{ year }}</td>
+                    <td colspan="2" style="padding:8px; text-align:right;">Celkem {{ year|unlocalize }}</td>
                     <td style="padding:8px; text-align:right;">{{ total_naklad|floatformat:2 }} Kč</td>
                     <td style="padding:8px; text-align:right;">{{ total_vynos|floatformat:2 }} Kč</td>
                     <td style="padding:8px; text-align:right; {% if total_rozdil < 0 %}color:#c0392b;{% endif %}">
@@ -84,7 +85,7 @@
         </table>
         </div>
 
-        <h2 style="margin:28px 0 4px;">Souhrn po kartách za rok {{ year }}</h2>
+        <h2 style="margin:28px 0 4px;">Souhrn po kartách za rok {{ year|unlocalize }}</h2>
         <p style="color:#888; font-size:12px; margin-bottom:10px;">
             Seřazeno od nejztrátovější karty. „Měsíců“ = v kolika obdobích roku měla karta
             něco v paušálu - u karty, která nabíhala v průběhu roku, je součet za méně měsíců

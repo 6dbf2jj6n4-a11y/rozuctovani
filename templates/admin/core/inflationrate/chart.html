@@ -54,12 +54,12 @@
 
             {% for bar in inflation_chart_bars %}
                 <rect class="inflation-bar" x="{{ bar.x }}" y="{{ bar.y }}" width="{{ bar.w }}" height="{{ bar.h }}" rx="3" fill="#2a78d6">
-                    <title>{{ bar.year }}: {{ bar.value|floatformat:1 }} %</title>
+                    <title>{{ bar.year|unlocalize }}: {{ bar.value|floatformat:1 }} %</title>
                 </rect>
                 {% if bar.is_peak %}
                     <text class="inflation-peak-label" x="{{ bar.label_x }}" y="{{ bar.peak_label_y }}">{{ bar.value|floatformat:1 }} %</text>
                 {% endif %}
-                <text class="inflation-year-label" x="{{ bar.label_x }}" y="{{ bar.year_label_y }}" text-anchor="end" transform="rotate(-55 {{ bar.label_x }} {{ bar.year_label_y }})">{{ bar.year }}</text>
+                <text class="inflation-year-label" x="{{ bar.label_x }}" y="{{ bar.year_label_y }}" text-anchor="end" transform="rotate(-55 {{ bar.label_x }} {{ bar.year_label_y }})">{{ bar.year|unlocalize }}</text>
             {% endfor %}
         </svg>
         {% endlocalize %}

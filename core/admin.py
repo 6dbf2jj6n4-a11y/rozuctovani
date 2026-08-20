@@ -1156,6 +1156,90 @@ class ClientCardAdmin(ModelAdmin):
         }
         return render(request, "admin/core/clientcard/report_plochy_konflikt.html", context)
 
+    def _koeficient_dph_za_rok(self, period):
+        """Koeficient DPH (§76 ZDPH) za KALENDARNI ROK, ne za jeden mesic.
+
+        Koeficient se ze zakona vypocitava z plneni za cely kalendarni
+        rok (vyporadaci koeficient), takze jeden mesic nestaci - kazda
+        Karta klienta do nej vstupuje jen za obdobi, ve kterych
+        SKUTECNE PLATILA. To resi ClientCard.rent_for_period, ktera
+        krati najem podle valid_from/valid_to (mimo platnost vraci nulu).
+        Viz konverzace s Danielem 2026-08-19.
+
+        Dve rozhodnuti, ktera stoji za vysvetleni:
+
+        1) Bere se rok od ledna do VYBRANEHO obdobi (ne vsech 12 mesicu).
+           Obdobi se zakladaji dopredu tlacitkem "Generovat pro cely rok",
+           takze v DB uz existuji i mesice, ktere jeste nenastaly - ty by
+           koeficient nafoukly o najem, ktery se jeste nestal. Kdyz se
+           vybere prosinec, vyjde cely rok.
+
+        2) Karty se beru podle PLATNOSTI (valid_from/valid_to), ne podle
+           priznaku "Aktivní". Karta klienta, ktery behem roku odesel, je
+           dnes neaktivni, ale najem za mesice, kdy tu byl, do koeficientu
+           patri.
+
+        Koeficient je vec cele firmy, takze filtr arealu se na nej
+        zamerne NEUPLATNUJE."""
+        from decimal import ROUND_CEILING
+
+        rok = period.year
+        obdobi_roku = list(
+            Period.objects.filter(year=rok, month__lte=period.month).order_by("month")
+        )
+        if not obdobi_roku:
+            return None
+
+        karty = list(
+            ClientCard.objects.filter(client__is_landlord=False)
+            .select_related("client")
+            .prefetch_related("card_units")
+        )
+
+        mesice = []
+        celkem_s_dph = celkem_bez_dph = celkem_nefakt = Decimal("0")
+        for p in obdobi_roku:
+            m_s_dph = m_bez_dph = m_nefakt = Decimal("0")
+            for card in karty:
+                najem = card.rent_for_period(p)
+                if not najem:
+                    continue  # karta v tomhle obdobi neplatila
+                nefakt = min(card.rent_not_invoiced_for_period(p), najem)
+                k_fakturaci = najem - nefakt
+                m_nefakt += nefakt
+                if card.client.vat_payer:
+                    m_s_dph += k_fakturaci
+                else:
+                    m_bez_dph += k_fakturaci
+            mesice.append({
+                "period": p,
+                "s_dph": m_s_dph,
+                "bez_dph": m_bez_dph,
+                "nefakturovano": m_nefakt,
+                "zaklad": m_s_dph + m_bez_dph,
+            })
+            celkem_s_dph += m_s_dph
+            celkem_bez_dph += m_bez_dph
+            celkem_nefakt += m_nefakt
+
+        zaklad = celkem_s_dph + celkem_bez_dph
+        if not zaklad:
+            return None
+        return {
+            "rok": rok,
+            "mesice": mesice,
+            "pocet_obdobi": len(obdobi_roku),
+            "cely_rok": len(obdobi_roku) == 12,
+            "s_dph": celkem_s_dph,
+            "bez_dph": celkem_bez_dph,
+            "nefakturovano": celkem_nefakt,
+            "zaklad": zaklad,
+            "procenta": (celkem_s_dph / zaklad * 100).quantize(
+                Decimal("1"), rounding=ROUND_CEILING
+            ),
+            "presne": (celkem_s_dph / zaklad * 100).quantize(Decimal("0.01")),
+        }
+
     def report_najemne_view(self, request):
         """Report (Reporty v menu): prehled najemneho po aktivnich Kartach -
         vyuziva jiz existujici CardUnit.monthly_rent (plocha x sazba/12).
@@ -1272,20 +1356,10 @@ class ClientCardAdmin(ModelAdmin):
         # neplatcum se najem s DPH nefakturuje. Viz konverzace s Danielem
         # 2026-08-18.
         #
-        # Koeficient se ze zakona zaokrouhluje NAHORU na cele procento.
-        #
-        # Pocita se jen z FAKTUROVANE casti - najem placeny bez dokladu
-        # (CardUnit.rent_not_invoiced) neni zdanitelne ani osvobozene
-        # plneni, takze do koeficientu nevstupuje na zadne strane zlomku.
-        total_s_dph = sum((r["k_fakturaci"] for r in rows if r["s_dph"]), Decimal("0"))
-        total_bez_dph = sum((r["k_fakturaci"] for r in rows if not r["s_dph"]), Decimal("0"))
-        total_nefakturovano = sum((r["nefakturovano"] for r in rows), Decimal("0"))
-        zaklad_koeficientu = total_s_dph + total_bez_dph
-        koeficient = None
-        if zaklad_koeficientu:
-            koeficient = (total_s_dph / zaklad_koeficientu * 100).quantize(
-                Decimal("1"), rounding=ROUND_CEILING
-            )
+        # Koeficient se ze zakona zaokrouhluje NAHORU na cele procento
+        # a pocita se za KALENDARNI ROK, ne za jeden mesic - viz
+        # _koeficient_dph_za_rok.
+        koef = self._koeficient_dph_za_rok(period) if period is not None else None
 
         context = {
             **self.admin_site.each_context(request),
@@ -1300,14 +1374,7 @@ class ClientCardAdmin(ModelAdmin):
             "total_monthly_s_dph": sum((r["k_fakturaci_s_dph"] for r in rows), Decimal("0")),
             "total_yearly_s_dph": sum((r["yearly_rent_s_dph"] for r in rows), Decimal("0")),
             "sazba_dph_pct": (sazba_dph * 100).normalize(),
-            "total_s_dph": total_s_dph,
-            "total_bez_dph": total_bez_dph,
-            "total_nefakturovano": total_nefakturovano,
-            "zaklad_koeficientu": zaklad_koeficientu,
-            "koeficient": koeficient,
-            "pocet_s_dph": sum(1 for r in rows if r["s_dph"]),
-            "pocet_bez_dph": sum(1 for r in rows if not r["s_dph"]),
-            "pocet_nefakturovano": sum(1 for r in rows if r["nefakturovano"]),
+            "koef": koef,
             "opts": self.model._meta,
         }
         return render(request, "admin/core/clientcard/report_najemne.html", context)
