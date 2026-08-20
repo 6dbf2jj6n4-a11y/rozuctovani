@@ -10,18 +10,14 @@
             --gridline: #e1e0d9;
             --baseline: #c3c2b7;
         }
-        @media (prefers-color-scheme: dark) {
-            :root:where(:not([data-theme="light"])) .viz-root {
-                color-scheme: dark;
-                --surface-1: #1a1a19;
-                --text-primary: #ffffff;
-                --text-secondary: #c3c2b7;
-                --text-muted: #898781;
-                --gridline: #2c2c2a;
-                --baseline: #383835;
-            }
-        }
-        :root[data-theme="dark"] .viz-root {
+        /* Tmavy motiv visi na tride "dark" na <html>, kterou pridava Unfold
+           (prepinac Svetly/Tmavy/System v panelu uzivatele). Driv tu bylo
+           @media (prefers-color-scheme) + [data-theme], jenze to je
+           nastaveni OPERACNIHO SYSTEMU, ne motiv zvoleny v adminu - kdyz
+           mel nekdo system tmavy a admin svetly, kreslily se svetle texty
+           na svetle pozadi a nebylo to videt. Viz konverzace s Danielem
+           2026-08-19. */
+        html.dark .viz-root {
             color-scheme: dark;
             --surface-1: #1a1a19;
             --text-primary: #ffffff;
