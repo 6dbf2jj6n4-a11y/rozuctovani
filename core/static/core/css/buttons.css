@@ -71,6 +71,32 @@ Pouziti:
 .dark .rx-btn.rx-btn-success { background: var(--color-green-600); color: #fff; }
 .dark .rx-btn.rx-btn-success:hover { background: var(--color-green-500); color: #fff; }
 
+/*
+Tlumena destruktivni varianta - vypada jako zakladni tlacitko (stejne
+jako "Generovat pro celý rok"), jen ma cerveny text a pri najeti
+cerveny ramecek. Pouziva se u samostatnych tlacitek nad tabulkou
+("Smazat vybrané"), kde plna cervena plocha zbytecne krici a hlavne
+se tlouklo se zbytkem adminu. Plna cervena (.rx-btn-danger) zustava
+pro male akce primo v radcich, kde je potreba barvou rozlisit.
+Viz konverzace s Danielem 2026-08-19.
+*/
+.rx-btn.rx-btn-danger-soft {
+    color: var(--color-red-600);
+}
+.rx-btn.rx-btn-danger-soft:hover {
+    color: var(--color-red-700);
+    border-color: var(--color-red-300);
+    background: var(--color-red-50);
+}
+.dark .rx-btn.rx-btn-danger-soft {
+    color: var(--color-red-400);
+}
+.dark .rx-btn.rx-btn-danger-soft:hover {
+    color: var(--color-red-400);
+    border-color: var(--color-red-700);
+    background: var(--color-base-800);
+}
+
 /* Mensi varianta do radku tabulky (akce u Obdobi) */
 .rx-btn.rx-btn-sm {
     padding: 4px 10px;
