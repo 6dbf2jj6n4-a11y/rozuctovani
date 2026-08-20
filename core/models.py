@@ -90,6 +90,38 @@ class Unit(models.Model):
         return f"{self.site} – {self.name}"
 
 
+def normalizovat_telefon(hodnota):
+    """Sjednoti zapis telefonu na "+420 777 913 623".
+
+    Zvlada bezne tvary, ktere clovek napise: 777913623, +420777913623,
+    420777913623, 00420777913623, s mezerami i pomlckami. Slovenska
+    predvolba (421) taky.
+
+    Co nerozpozna (klapky, vic cisel v jednom poli, zahranicni predvolby
+    mimo 420/421), vraci NEZMENENE - lepsi nechat, jak to nekdo zapsal,
+    nez to prepsat na nesmysl. Viz konverzace s Danielem 2026-08-19."""
+    if not hodnota:
+        return hodnota
+    text = hodnota.strip()
+    cislice = re.sub(r"\D", "", text)
+    if not cislice:
+        return text
+
+    if text.startswith("00"):
+        cislice = cislice[2:]
+
+    if len(cislice) == 9:
+        # samotne cislo bez predvolby - u nas vzdy ceske
+        predvolba, zbytek = "420", cislice
+    elif len(cislice) == 12 and cislice[:3] in ("420", "421"):
+        predvolba, zbytek = cislice[:3], cislice[3:]
+    else:
+        return text
+
+    trojice = [zbytek[i:i + 3] for i in range(0, 9, 3)]
+    return "+{} {}".format(predvolba, " ".join(trojice))
+
+
 class Client(models.Model):
     """Klient (najemce) - firma nebo osoba."""
 
@@ -161,7 +193,7 @@ class Client(models.Model):
     contact_email = models.EmailField("E-mail", blank=True)
     contact_phone = models.CharField(
         "Telefon", max_length=50, blank=True, default="+420 ",
-        help_text="Formát: +420 777123456.",
+        help_text="Stačí napsat 777913623, uloží se jako +420 777 913 623.",
     )
 
     class Meta:
@@ -191,6 +223,10 @@ class Client(models.Model):
         zadavani odectu, generovani Smluv a Karet najemce), takze druhy
         oznaceny klient by se tise ignoroval podle poradi v DB. Viz
         konverzace s Danielem 2026-08-19."""
+        # Telefon se sjednoti pri KAZDEM ulozeni (admin, seznam klientu,
+        # importy i skripty), aby drzel jeden tvar - viz normalizovat_telefon.
+        self.contact_phone = normalizovat_telefon(self.contact_phone)
+
         deactivate_cards = False
         if self.pk and not self.is_active:
             was_active = Client.objects.filter(pk=self.pk, is_active=True).exists()
