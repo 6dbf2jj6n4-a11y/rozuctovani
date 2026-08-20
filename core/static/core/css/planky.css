@@ -1,0 +1,219 @@
+/* Plánky (2D půdorysy) - prohlížeč a kontrola párování.
+   Vlastní CSS, ne Tailwind: předkompilované styles.css Unfoldu zná jen
+   třídy z jeho vlastních šablon (viz core/static/core/css/buttons.css).
+   Barvy se berou z proměnných Unfoldu, aby držely světlý i tmavý motiv. */
+
+.rx-planek-stranka {
+    color: rgb(var(--color-base-700));
+}
+
+/* Nadpisy a odstavce musí mít VLASTNÍ třídu, ne jen selektor prvku:
+   unfold/css/styles.css se načítá až ZA našimi styly (UNFOLD["STYLES"]),
+   takže Tailwind preflight (`h2 { font-size: inherit; margin: 0 }`) by
+   pravidlo se stejnou specifičností přebil. */
+.rx-nadpis {
+    font-size: 15px;
+    font-weight: 600;
+    margin: 22px 0 6px;
+    padding-bottom: 4px;
+    border-bottom: 1px solid rgb(var(--color-base-200));
+    color: rgb(var(--color-base-600));
+    display: block;
+}
+
+.rx-odstavec {
+    margin: 6px 0;
+    font-size: 13px;
+}
+
+.rx-kod {
+    padding: 1px 4px;
+    border-radius: 4px;
+    background: rgb(var(--color-base-100));
+    font-size: 12px;
+}
+
+.rx-planek-ovladani {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin-bottom: 12px;
+}
+
+.rx-planek-ovladani input[type="date"],
+.rx-planek-ovladani select {
+    padding: 4px 8px;
+    border: 1px solid rgb(var(--color-base-300));
+    border-radius: 6px;
+    background: rgb(var(--color-base-50));
+    color: rgb(var(--color-base-700));
+}
+
+.rx-planek-prepinac {
+    display: flex;
+    gap: 12px;
+    margin-left: 8px;
+    font-size: 13px;
+}
+
+.rx-planek-kontrola {
+    margin-left: auto;
+}
+
+.rx-planek-napoveda {
+    font-size: 13px;
+    color: rgb(var(--color-base-400));
+    max-width: 70ch;
+}
+
+.rx-planek-chyba {
+    color: rgb(var(--color-red-500));
+    font-size: 13px;
+}
+
+.rx-planek-ok {
+    color: rgb(var(--color-base-400));
+    font-size: 13px;
+}
+
+.rx-planek-vypis {
+    columns: 4;
+    font-size: 13px;
+    margin: 4px 0 16px 18px;
+}
+
+/* ---------------------------------------------------------------- legenda */
+
+.rx-planek-legenda {
+    display: flex;
+    gap: 18px;
+    flex-wrap: wrap;
+    font-size: 13px;
+    margin-bottom: 10px;
+}
+
+.rx-vzorek {
+    display: inline-block;
+    width: 14px;
+    height: 14px;
+    border-radius: 3px;
+    vertical-align: -2px;
+    margin-right: 5px;
+    border: 1px solid rgba(0, 0, 0, .35);
+}
+
+/* ------------------------------------------------------------ rozvrzeni */
+
+.rx-planek-obsah {
+    display: flex;
+    gap: 20px;
+    align-items: flex-start;
+    flex-wrap: wrap;
+}
+
+.rx-planek-plocha {
+    position: relative;
+    flex: 1 1 620px;
+    min-width: 320px;
+    background: #fff;          /* výkres je černý na bílém, i v tmavém motivu */
+    border: 1px solid rgb(var(--color-base-300));
+    border-radius: 8px;
+    padding: 8px;
+}
+
+.rx-planek-plocha svg {
+    width: 100%;
+    height: auto;
+    display: block;
+}
+
+.rx-planek-seznam {
+    flex: 0 1 340px;
+    min-width: 260px;
+}
+
+.rx-planek-seznam table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+}
+
+.rx-planek-seznam th,
+.rx-planek-seznam td {
+    padding: 4px 8px;
+    text-align: left;
+    border-bottom: 1px solid rgb(var(--color-base-200));
+}
+
+.rx-planek-seznam th {
+    border-bottom-width: 2px;
+}
+
+.rx-planek-seznam .rx-cislo {
+    text-align: right;
+    white-space: nowrap;
+}
+
+/* kód plochy se nesmí lámat na dva řádky ("AB" / "2.03") */
+.rx-planek-seznam td:first-child,
+.rx-planek-seznam th:first-child {
+    white-space: nowrap;
+}
+
+.rx-planek-seznam .rx-radek.rx-zvyrazneno {
+    background: rgb(var(--color-base-100));
+}
+
+/* -------------------------------------------------------------- tooltip */
+
+.rx-planek-tooltip {
+    position: absolute;
+    z-index: 20;
+    pointer-events: none;
+    padding: 5px 9px;
+    border-radius: 6px;
+    font-size: 12px;
+    line-height: 1.35;
+    color: #fff;
+    background: rgba(24, 24, 27, .92);
+    white-space: nowrap;
+}
+
+/* ------------------------------------------------------ stavy ploch */
+
+.rx-plocha {
+    fill-opacity: .38;
+    stroke-width: 1.2;
+    transition: fill-opacity .1s ease;
+}
+
+.rx-plocha[data-odkaz] {
+    cursor: pointer;
+}
+
+.rx-plocha.rx-zvyrazneno {
+    fill-opacity: .62;
+}
+
+/* barvy jsou schválně napevno, ne z motivu - musí být čitelné na bílém
+   výkresu a hlavně stejné v prohlížeči i v PDF Karty */
+.rx-obsazeno    { fill: #2563eb; stroke: #1d4ed8; }
+.rx-konci       { fill: #f59e0b; stroke: #b45309; }
+.rx-volne       { fill: #9ca3af; stroke: #4b5563; }
+.rx-neprirazeno { fill: #dc2626; stroke: #991b1b; }
+.rx-spolecne    { fill: #a3a3a3; stroke: #737373; fill-opacity: .18; }
+
+/* vzorky v legendě používají stejné barvy jako plochy */
+.rx-vzorek.rx-obsazeno    { background: #2563eb; }
+.rx-vzorek.rx-konci       { background: #f59e0b; }
+.rx-vzorek.rx-volne       { background: #9ca3af; }
+.rx-vzorek.rx-neprirazeno { background: #dc2626; }
+.rx-vzorek.rx-spolecne    { background: #d4d4d4; }
+
+/* řádky tabulky dostanou jen barevný proužek vlevo, ne celou výplň */
+.rx-planek-seznam .rx-radek td:first-child { border-left: 4px solid transparent; }
+.rx-planek-seznam .rx-obsazeno    td:first-child { border-left-color: #2563eb; }
+.rx-planek-seznam .rx-konci       td:first-child { border-left-color: #f59e0b; }
+.rx-planek-seznam .rx-volne       td:first-child { border-left-color: #9ca3af; }
+.rx-planek-seznam .rx-neprirazeno td:first-child { border-left-color: #dc2626; }

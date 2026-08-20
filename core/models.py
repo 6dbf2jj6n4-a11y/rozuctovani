@@ -56,6 +56,83 @@ class Site(models.Model):
         return self.name
 
 
+class Floorplan(models.Model):
+    """Planek (2D pudorys) patra nebo budovy v arealu.
+
+    V databazi je jen samotny SVG soubor - tvary ploch zustavaji ve vykresu,
+    obsazenost v Kartach. Spojka je `id` polygonu, ktere se rovna nazvu
+    Pronajimaneho prostoru s podtrzitkem misto mezery (`AB 3.03` ->
+    `AB_3.03`). Rozliseni pronajimane/spolecne plochy urcuje vrstva ve
+    vykresu. Podrobnosti a nastroje na pripravu podkladu viz core/floorplan.py.
+    """
+
+    site = models.ForeignKey(
+        Site, on_delete=models.CASCADE, related_name="floorplans", verbose_name="Areál"
+    )
+    name = models.CharField(
+        "Název", max_length=200,
+        help_text="Např. „Administrativní budova – 2.NP“.",
+    )
+    svg = models.FileField(
+        "Výkres (SVG)", upload_to="planky/",
+        help_text=(
+            "Plain/Inkscape SVG s vrstvami „podklad“, „Plochy_rentex“ a "
+            "„Plochy_spolecne“. Každý tvar ve vrstvě Plochy_rentex musí mít "
+            "id shodné s názvem Pronajímaného prostoru (mezera → podtržítko)."
+        ),
+    )
+    svg_text = models.TextField(
+        "Obsah výkresu", blank=True, editable=False,
+        help_text=(
+            "Text nahraneho SVG. Drzi se v databazi zamerne: kontejner na "
+            "Railway nema trvaly disk (jediny volume patri Postgresu), takze "
+            "nahrany soubor by pri kazdem nasazeni zmizel."
+        ),
+    )
+    order = models.IntegerField(
+        "Pořadí", default=0,
+        help_text="Menší číslo je výš. Typicky podle podlaží.",
+    )
+    is_active = models.BooleanField("Aktivní", default=True)
+    note = models.CharField("Poznámka", max_length=300, blank=True)
+
+    class Meta:
+        verbose_name = "Plánek"
+        verbose_name_plural = "Plánky"
+        ordering = ["site", "order", "name"]
+
+    def __str__(self):
+        return f"{self.site} – {self.name}"
+
+    def save(self, *args, **kwargs):
+        """Po ulozeni si obsah nahraneho souboru zkopiruje do `svg_text`.
+
+        Soubor na disku slouzi uz jen jako pohodlny nahravaci widget v adminu -
+        po nasazeni tam nemusi byt, proto se pri nedostupnem souboru jen necha
+        to, co uz je v databazi."""
+        super().save(*args, **kwargs)
+        try:
+            text = self._precti_soubor()
+        except Exception:
+            text = None
+        if text and text != self.svg_text:
+            self.svg_text = text
+            super().save(update_fields=["svg_text"])
+
+    def _precti_soubor(self):
+        self.svg.open("rb")
+        try:
+            return self.svg.read().decode("utf-8")
+        finally:
+            self.svg.close()
+
+    def read_svg(self):
+        """Obsah vykresu jako text - primarne z databaze (viz save())."""
+        if self.svg_text:
+            return self.svg_text
+        return self._precti_soubor()
+
+
 class Unit(models.Model):
     """Pronajimany prostor v ramci arealu (kancelar, hala, byt...)."""
 

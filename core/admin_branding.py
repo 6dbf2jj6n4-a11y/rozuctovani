@@ -45,3 +45,8 @@ def buttons_css(request):
 def sidebar_extras_css(request):
     from django.templatetags.static import static
     return static("core/css/sidebar_extras.css")
+
+
+def planky_css(request):
+    from django.templatetags.static import static
+    return static("core/css/planky.css")

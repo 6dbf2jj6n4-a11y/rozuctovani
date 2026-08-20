@@ -155,7 +155,7 @@ CSRF_TRUSTED_ORIGINS = [
 # 2027.0), i kdyby se nekdo zapomnel APP_VERSION_YEAR rucne prepsat -
 # dohoda s Danielem 2026-08-15.
 APP_VERSION_YEAR = 2026
-APP_VERSION_SEQUENCE = 148
+APP_VERSION_SEQUENCE = 149
 APP_VERSION = (
     f"{APP_VERSION_YEAR}.{APP_VERSION_SEQUENCE}"
     if date.today().year == APP_VERSION_YEAR
@@ -174,6 +174,7 @@ UNFOLD = {
         "core.admin_branding.changelist_header_wrap_css",
         "core.admin_branding.sidebar_extras_css",
         "core.admin_branding.buttons_css",
+        "core.admin_branding.planky_css",
     ],
     "SIDEBAR": {
         "show_search": True,
@@ -243,6 +244,16 @@ UNFOLD = {
                         "title": _("Zásobník služeb"),
                         "icon": "inventory_2",
                         "link": reverse_lazy("admin:core_servicepoolitem_changelist"),
+                    },
+                    {
+                        "title": _("Plánky"),
+                        "icon": "map",
+                        "link": reverse_lazy("admin:core_floorplan_changelist"),
+                    },
+                    {
+                        "title": _("Kontrola plánků"),
+                        "icon": "rule",
+                        "link": reverse_lazy("admin:core_floorplan_kontrola"),
                     },
                 ],
             },

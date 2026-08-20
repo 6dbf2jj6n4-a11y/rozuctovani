@@ -16,7 +16,7 @@ from unfold.decorators import display
 from .admin_mixins import ModelAdmin, TabularInline
 
 from .models import (
-    Client, ClientCard, Contract, Site, Unit, CardUnit,
+    Client, ClientCard, Contract, Site, Unit, CardUnit, Floorplan,
     Meter, MeterReading, Period, InflationRate, SupplyPoint, InvoiceClassColor,
     ServicePoolItem, AllocationKey, PriceList, CostEntry, BillingLine, UnitService,
     normalizovat_telefon,
@@ -4194,3 +4194,128 @@ class BillingLineAdmin(DefaultToCurrentPeriodMixin, ModelAdmin):
         response = HttpResponse(buf.getvalue(), content_type="application/pdf")
         response["Content-Disposition"] = f'attachment; filename="{filename}"'
         return response
+
+
+@admin.register(Floorplan)
+class FloorplanAdmin(ModelAdmin):
+    """Planky (2D pudorysy). Tvary ploch zustavaji ve vykresu, obsazenost
+    v Kartach - parovani je jen pres `id` polygonu (viz core/floorplan.py)."""
+
+    list_display = ("name", "site", "order", "ploch", "is_active", "prohlizec_odkaz")
+    list_filter = ("site", "is_active")
+    search_fields = ("name", "note")
+    ordering = ("site", "order", "name")
+
+    @display(description="Ploch ve výkresu")
+    def ploch(self, obj):
+        from core.floorplan import kody_ploch
+
+        try:
+            pronajimane, spolecne = kody_ploch(obj.read_svg())
+        except Exception:
+            return "chyba čtení"
+        return f"{len(pronajimane)} pronajímaných, {len(spolecne)} společných"
+
+    @display(description="")
+    def prohlizec_odkaz(self, obj):
+        from django.urls import reverse
+        from django.utils.html import format_html
+
+        if not obj.pk:
+            return ""
+        url = reverse("admin:core_floorplan_prohlizec", args=[obj.pk])
+        return format_html('<a class="rx-btn rx-btn-primary rx-btn-sm" href="{}">Prohlížeč</a>', url)
+
+    def get_urls(self):
+        from django.urls import path
+
+        custom = [
+            path(
+                "prohlizec/<int:plan_id>/",
+                self.admin_site.admin_view(self.prohlizec_view),
+                name="core_floorplan_prohlizec",
+            ),
+            path(
+                "kontrola/",
+                self.admin_site.admin_view(self.kontrola_view),
+                name="core_floorplan_kontrola",
+            ),
+        ]
+        return custom + super().get_urls()
+
+    def prohlizec_view(self, request, plan_id):
+        """Planek obarveny podle obsazenosti k zadanemu datu. SVG se vklada
+        primo do stranky (ne pres <img>), jinak by se do ploch nedalo klikat
+        ani je barvit CSS."""
+        from datetime import date
+
+        from django.shortcuts import get_object_or_404, render
+        from django.utils.safestring import mark_safe
+
+        from core.floorplan import oznac_plochy, stavy_ploch
+
+        plan = get_object_or_404(Floorplan, pk=plan_id)
+
+        k_datu = date.today()
+        zadane = request.GET.get("datum")
+        if zadane:
+            try:
+                k_datu = date.fromisoformat(zadane)
+            except ValueError:
+                messages.warning(request, "Datum nedává smysl, používám dnešek.")
+
+        stavy = stavy_ploch(plan.site, k_datu)
+        try:
+            svg = oznac_plochy(plan.read_svg(), stavy)
+            chyba = None
+        except Exception as potiz:
+            svg, chyba = "", str(potiz)
+
+        # prehled vedle plánku - jen plochy, ktere na TOMHLE planku jsou
+        from core.floorplan import kody_ploch
+
+        try:
+            kody, _ = kody_ploch(plan.read_svg())
+        except Exception:
+            kody = []
+        radky = []
+        for kod in sorted(kody):
+            udaje = stavy.get(kod) or {"stav": "neprirazeno", "popis": "Není na žádné platné Kartě"}
+            radky.append({"kod": kod, **udaje})
+
+        return render(request, "admin/core/floorplan/prohlizec.html", {
+            **self.admin_site.each_context(request),
+            "plan": plan,
+            "svg": mark_safe(svg),
+            "chyba": chyba,
+            "k_datu": k_datu,
+            "radky": radky,
+            "plany_arealu": Floorplan.objects.filter(site=plan.site, is_active=True),
+            "opts": self.model._meta,
+            "title": f"Plánek – {plan}",
+        })
+
+    def kontrola_view(self, request):
+        """Kontrola parovani: co je ve vykresu a nema Prostor v DB, a naopak
+        ktere Prostory arealu nejsou na zadnem planku."""
+        from django.shortcuts import render
+
+        from core.floorplan import kontrola_parovani
+
+        sites = list(Site.objects.filter(floorplans__is_active=True).distinct())
+        vybrany_id = request.GET.get("site")
+        vybrany = None
+        if vybrany_id:
+            vybrany = next((s for s in sites if str(s.pk) == vybrany_id), None)
+        if vybrany is None and sites:
+            vybrany = sites[0]
+
+        vysledek = kontrola_parovani(vybrany) if vybrany else None
+        return render(request, "admin/core/floorplan/kontrola.html", {
+            **self.admin_site.each_context(request),
+            "sites": sites,
+            "vybrany": vybrany,
+            "vysledek": vysledek,
+            "opts": self.model._meta,
+            "title": "Kontrola párování plánků",
+        })

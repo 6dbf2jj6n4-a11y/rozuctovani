@@ -1,0 +1,62 @@
+{% extends "admin/base_site.html" %}
+
+{% block content %}
+<div class="rx-planek-stranka">
+
+    <p class="rx-planek-napoveda">
+        Porovnává tvary ve vrstvě <code class="rx-kod">Plochy_rentex</code> proti Pronajímaným prostorům
+        v databázi. Spojka je <code class="rx-kod">id</code> polygonu, kde podtržítko zastupuje mezeru
+        (<code class="rx-kod">AB_3.03</code> = <code class="rx-kod">AB 3.03</code>). Obojí musí sedět znak po znaku.
+    </p>
+
+    <form method="get" class="rx-planek-ovladani">
+        <label for="site">Areál:</label>
+        <select name="site" id="site" onchange="this.form.submit()">
+            {% for s in sites %}
+                <option value="{{ s.pk }}" {% if vybrany and s.pk == vybrany.pk %}selected{% endif %}>{{ s.name }}</option>
+            {% endfor %}
+        </select>
+        <noscript><button type="submit" class="rx-btn rx-btn-sm rx-btn-primary">Zobrazit</button></noscript>
+    </form>
+
+    {% if not vysledek %}
+        <p class="rx-odstavec">Zatím není nahraný žádný aktivní plánek.</p>
+    {% else %}
+
+        {% for chybny, duvod in vysledek.chybne %}
+            <p class="rx-planek-chyba">{{ chybny.name }}: výkres se nepodařilo přečíst – {{ duvod }}</p>
+        {% endfor %}
+
+        {% for radek in vysledek.plany %}
+            <h2 class="rx-nadpis">{{ radek.plan.name }}</h2>
+            <p class="rx-odstavec">
+                {{ radek.pocet }} pronajímaných ploch, {{ radek.spolecnych }} společných.
+                <a href="{% url 'admin:core_floorplan_prohlizec' radek.plan.pk %}">Otevřít prohlížeč</a>
+            </p>
+            {% if radek.bez_prostoru %}
+                <p class="rx-planek-chyba">
+                    Ve výkresu jsou plochy, které nemají Pronajímaný prostor v databázi:
+                </p>
+                <ul class="rx-planek-vypis">
+                    {% for kod in radek.bez_prostoru %}<li>{{ kod }}</li>{% endfor %}
+                </ul>
+            {% else %}
+                <p class="rx-planek-ok">Všechny plochy výkresu mají svůj Prostor v databázi.</p>
+            {% endif %}
+        {% endfor %}
+
+        <h2 class="rx-nadpis">Prostory bez plánku</h2>
+        {% if vysledek.bez_planku %}
+            <p class="rx-planek-napoveda">
+                Tyhle Pronajímané prostory areálu {{ vybrany.name }} nejsou na žádném plánku.
+                Dokud nejsou všechna patra obkreslená, je to čekaný stav.
+            </p>
+            <ul class="rx-planek-vypis">
+                {% for kod in vysledek.bez_planku %}<li>{{ kod }}</li>{% endfor %}
+            </ul>
+        {% else %}
+            <p class="rx-planek-ok">Každý Prostor areálu je na některém plánku.</p>
+        {% endif %}
+    {% endif %}
+</div>
+{% endblock %}
