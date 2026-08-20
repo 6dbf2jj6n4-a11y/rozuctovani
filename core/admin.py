@@ -547,16 +547,21 @@ class ActiveClientFilter(admin.SimpleListFilter):
 # Predvolby pro combo u telefonu klienta. Zamerne kratky seznam - v praxi
 # jsou to ceska a slovenska cisla; posledni volba nechava pole jako holy
 # text pro cokoliv jineho (zahranici, klapka, dve cisla v jednom poli),
-# aby se takovy zapis neprepisoval na nesmysl.
+# aby se takovy zapis neprepisoval na nesmysl. Popisky jsou kratke -
+# combo je uzke, aby nezabiralo misto cislu.
 TELEFON_PREDVOLBY = [
     ("+420", "+420"),
     ("+421", "+421"),
-    ("", "jiný zápis"),
+    ("", "jiné"),
 ]
 
 
 class TelefonWidget(forms.MultiWidget):
-    """Predvolba jako rozbalovaci seznam + samotne cislo vedle."""
+    """Predvolba jako rozbalovaci seznam + samotne cislo vedle.
+
+    Vlastni sablona je nutna - vychozi MultiWidget da obe pole pod sebe."""
+
+    template_name = "core/widgets/telefon.html"
 
     def __init__(self, attrs=None):
         from unfold.widgets import UnfoldAdminSelectWidget, UnfoldAdminTextInputWidget
@@ -568,6 +573,21 @@ class TelefonWidget(forms.MultiWidget):
             ],
             attrs,
         )
+
+    def get_context(self, name, value, attrs):
+        """Odstrani Alpine vazbu, kterou Unfold pridava podle jmena pole.
+
+        Unfold (templatetags/unfold.py, changeform_condition) navesi na
+        widget x-model.fill="<jmeno pole>". MultiWidget ten atribut preda
+        OBEMA castem, takze by predvolba i cislo visely na jedne promenne
+        a prepisovaly by se navzajem - vyber +421 by prepsal i cislo.
+        Unfold si to resi jen u svych vlastnich MultiWidgetu (datum a cas,
+        castka), nas nezna. Vazbu tu nepotrebujeme: conditional_fields u
+        klienta stoji na entity_type, ne na telefonu."""
+        context = super().get_context(name, value, attrs)
+        for podwidget in context["widget"]["subwidgets"]:
+            podwidget["attrs"].pop("x-model.fill", None)
+        return context
 
     def decompress(self, value):
         if not value:

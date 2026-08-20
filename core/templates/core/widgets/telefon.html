@@ -1,0 +1,19 @@
+{% comment %}
+Telefon = predvolba (combo) + cislo VEDLE SEBE na jednom radku.
+
+Bez teto sablony je Djangovy MultiWidget vykresli pod sebe, protoze
+Unfoldovy vstupy jsou blokove pres celou sirku - combo pak sedelo nad
+cislem a bylo zbytecne siroke. Viz konverzace s Danielem 2026-08-19.
+
+Sirky jsou zamerne v inline stylech, ne v Tailwind tridach: Unfoldovo
+predkompilovane styles.css obsahuje jen tridy, ktere pouzivaji jeho
+vlastni sablony - nase vlastni by nemely zadny efekt (stejny duvod jako
+u rx-* trid v core/static/core/css/sidebar_extras.css).
+{% endcomment %}
+<div style="display:flex; gap:6px; align-items:center; width:100%;">
+    {% for podwidget in widget.subwidgets %}
+        <div style="{% if forloop.first %}flex:0 0 auto; width:96px;{% else %}flex:1 1 auto; min-width:0;{% endif %}">
+            {% include podwidget.template_name with widget=podwidget %}
+        </div>
+    {% endfor %}
+</div>
