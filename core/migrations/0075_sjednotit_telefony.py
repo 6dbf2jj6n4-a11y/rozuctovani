@@ -1,6 +1,6 @@
-"""Sjednoceni zapisu telefonu klientu na "+420 777 913 623".
+"""Sjednoceni zapisu telefonu klientu na "+420 123 456 789".
 
-Na Danielovo prani 2026-08-19 - do pole se da napsat treba 777913623 a
+Na Danielovo prani 2026-08-19 - do pole se da napsat cislo bez mezer a
 ulozi se uz v jednotnem tvaru (Client.save volá normalizovat_telefon).
 Tahle migrace srovna i cisla, ktera uz v databazi jsou, aby seznam
 klientu vypadal jednotne.
@@ -37,7 +37,7 @@ class Migration(migrations.Migration):
             name="contact_phone",
             field=models.CharField(
                 blank=True, default="+420 ",
-                help_text="Stačí napsat 777913623, uloží se jako +420 777 913 623.",
+                help_text="Číslo stačí napsat bez mezer, uloží se ve tvaru +420 123 456 789.",
                 max_length=50, verbose_name="Telefon",
             ),
         ),

@@ -91,10 +91,10 @@ class Unit(models.Model):
 
 
 def normalizovat_telefon(hodnota):
-    """Sjednoti zapis telefonu na "+420 777 913 623".
+    """Sjednoti zapis telefonu na "+420 123 456 789".
 
-    Zvlada bezne tvary, ktere clovek napise: 777913623, +420777913623,
-    420777913623, 00420777913623, s mezerami i pomlckami. Napsanou
+    Zvlada bezne tvary, ktere clovek napise: 123456789, +420123456789,
+    420123456789, 00420123456789, s mezerami i pomlckami. Napsanou
     predvolbu (420 i 421) vzdy respektuje - nikdy ji neprepisuje.
 
     Co nerozpozna (klapky, vic cisel v jednom poli, zahranicni predvolby
@@ -198,7 +198,7 @@ class Client(models.Model):
     contact_email = models.EmailField("E-mail", blank=True)
     contact_phone = models.CharField(
         "Telefon", max_length=50, blank=True, default="+420 ",
-        help_text="Stačí napsat 777913623, uloží se jako +420 777 913 623.",
+        help_text="Číslo stačí napsat bez mezer, uloží se ve tvaru +420 123 456 789.",
     )
 
     class Meta:

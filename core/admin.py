@@ -569,7 +569,7 @@ class TelefonWidget(forms.MultiWidget):
         super().__init__(
             [
                 UnfoldAdminSelectWidget(choices=TELEFON_PREDVOLBY),
-                UnfoldAdminTextInputWidget(attrs={"placeholder": "777 913 623"}),
+                UnfoldAdminTextInputWidget(attrs={"placeholder": "123 456 789"}),
             ],
             attrs,
         )

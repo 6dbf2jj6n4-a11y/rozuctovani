@@ -4,7 +4,7 @@ Sjednoti format telefonnich cisel u klientu.
 Samotny prevod NEDELA tenhle prikaz - deleguje na
 core.models.normalizovat_telefon, aby platilo jedno pravidlo vsude
 (ulozeni klienta v adminu, importy i tenhle prikaz). Cilovy tvar je
-"+420 777 913 623"; napsana predvolba (420/421) se respektuje a cislo
+"+420 123 456 789"; napsana predvolba (420/421) se respektuje a cislo
 bez predvolby se doplnuje jen u ceskych mobilu (6xx/7xx), kde je zeme
 jista - viz docstring te funkce.
 
@@ -23,7 +23,7 @@ from django.core.management.base import BaseCommand
 from core.models import Client, normalizovat_telefon
 
 
-# Cilovy tvar, na ktery normalizovat_telefon prevadi: "+420 777 913 623".
+# Cilovy tvar, na ktery normalizovat_telefon prevadi: "+420 123 456 789".
 CILOVY_TVAR = re.compile(r"^\+\d{3}( \d{3}){3}$")
 
 
@@ -43,7 +43,7 @@ def normalize_phone(raw):
 
 
 class Command(BaseCommand):
-    help = "Sjednotí formát telefonu klientů na '+420 777 913 623'."
+    help = "Sjednotí formát telefonu klientů na '+420 123 456 789'."
 
     def add_arguments(self, parser):
         parser.add_argument("--dry-run", action="store_true", help="Jen ukázat, co by se změnilo")
