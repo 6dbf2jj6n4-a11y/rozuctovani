@@ -18,7 +18,8 @@ from .admin_mixins import ModelAdmin, TabularInline
 from .models import (
     Client, ClientCard, Contract, Site, Unit, CardUnit,
     Meter, MeterReading, Period, InflationRate, SupplyPoint, InvoiceClassColor,
-    ServicePoolItem, AllocationKey, PriceList, CostEntry, BillingLine, UnitService
+    ServicePoolItem, AllocationKey, PriceList, CostEntry, BillingLine, UnitService,
+    normalizovat_telefon,
 )
 
 class _PeriodDefaultMarkerFilter(admin.SimpleListFilter):
@@ -543,6 +544,74 @@ class ActiveClientFilter(admin.SimpleListFilter):
         return queryset.filter(is_active=True)
 
 
+# Predvolby pro combo u telefonu klienta. Zamerne kratky seznam - v praxi
+# jsou to ceska a slovenska cisla; posledni volba nechava pole jako holy
+# text pro cokoliv jineho (zahranici, klapka, dve cisla v jednom poli),
+# aby se takovy zapis neprepisoval na nesmysl.
+TELEFON_PREDVOLBY = [
+    ("+420", "+420"),
+    ("+421", "+421"),
+    ("", "jiný zápis"),
+]
+
+
+class TelefonWidget(forms.MultiWidget):
+    """Predvolba jako rozbalovaci seznam + samotne cislo vedle."""
+
+    def __init__(self, attrs=None):
+        from unfold.widgets import UnfoldAdminSelectWidget, UnfoldAdminTextInputWidget
+
+        super().__init__(
+            [
+                UnfoldAdminSelectWidget(choices=TELEFON_PREDVOLBY),
+                UnfoldAdminTextInputWidget(attrs={"placeholder": "777 913 623"}),
+            ],
+            attrs,
+        )
+
+    def decompress(self, value):
+        if not value:
+            return ["+420", ""]
+        text = str(value).strip()
+        for kod, _ in TELEFON_PREDVOLBY:
+            if kod and text.startswith(kod):
+                return [kod, text[len(kod):].strip()]
+        # Neznamy tvar - cely do textoveho pole a predvolba "jiny zapis",
+        # aby ho ulozeni nechalo presne tak, jak je.
+        return ["", text]
+
+
+class TelefonField(forms.MultiValueField):
+    """Slozi predvolbu a cislo zpet do jednoho retezce, ktery se uklada.
+
+    Model zustava jedno textove pole (Client.contact_phone), takze vsechno,
+    co telefon jen cte (sestavy, PDF, exporty), funguje beze zmeny."""
+
+    widget = TelefonWidget
+
+    def __init__(self, **kwargs):
+        kwargs.pop("max_length", None)
+        kwargs.pop("empty_value", None)
+        super().__init__(
+            fields=(
+                forms.ChoiceField(choices=TELEFON_PREDVOLBY, required=False),
+                forms.CharField(required=False),
+            ),
+            require_all_fields=False,
+            **kwargs,
+        )
+
+    def compress(self, hodnoty):
+        if not hodnoty:
+            return ""
+        predvolba, cislo = (hodnoty[0] or ""), (hodnoty[1] or "").strip()
+        if not cislo:
+            return ""
+        if not predvolba:
+            return cislo
+        return normalizovat_telefon(f"{predvolba} {cislo}")
+
+
 @admin.register(Client)
 class ClientAdmin(ModelAdmin):
     list_display = (
@@ -555,6 +624,14 @@ class ClientAdmin(ModelAdmin):
     # Django list_editable odmitlo (admin.E124).
     list_editable = ("contact_email", "contact_phone")
     search_fields = ("name", "ico", "code")
+
+    def formfield_for_dbfield(self, db_field, request, **kwargs):
+        """Telefon se zadava jako predvolba (combo) + cislo - viz
+        TelefonField. Plati i v seznamu klientu, kde je pole editovatelne."""
+        if db_field.name == "contact_phone":
+            return TelefonField(required=False, label=db_field.verbose_name.capitalize(),
+                                help_text=db_field.help_text)
+        return super().formfield_for_dbfield(db_field, request, **kwargs)
     list_filter = (ActiveClientFilter, "entity_type", "is_landlord", SiteFilter, "insolvency_status", "vat_payer")
     fieldsets = (
         ("Základní údaje", {

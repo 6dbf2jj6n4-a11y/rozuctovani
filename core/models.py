@@ -94,8 +94,8 @@ def normalizovat_telefon(hodnota):
     """Sjednoti zapis telefonu na "+420 777 913 623".
 
     Zvlada bezne tvary, ktere clovek napise: 777913623, +420777913623,
-    420777913623, 00420777913623, s mezerami i pomlckami. Slovenska
-    predvolba (421) taky.
+    420777913623, 00420777913623, s mezerami i pomlckami. Napsanou
+    predvolbu (420 i 421) vzdy respektuje - nikdy ji neprepisuje.
 
     Co nerozpozna (klapky, vic cisel v jednom poli, zahranicni predvolby
     mimo 420/421), vraci NEZMENENE - lepsi nechat, jak to nekdo zapsal,
@@ -110,11 +110,16 @@ def normalizovat_telefon(hodnota):
     if text.startswith("00"):
         cislice = cislice[2:]
 
-    if len(cislice) == 9:
-        # samotne cislo bez predvolby - u nas vzdy ceske
-        predvolba, zbytek = "420", cislice
-    elif len(cislice) == 12 and cislice[:3] in ("420", "421"):
+    if len(cislice) == 12 and cislice[:3] in ("420", "421"):
+        # predvolba je napsana - respektuje se, nic se nehada
         predvolba, zbytek = cislice[:3], cislice[3:]
+    elif len(cislice) == 9 and cislice[0] in "67":
+        # Cislo BEZ predvolby doplnujeme jen tam, kde je zeme jista:
+        # 6xx/7xx jsou ceske mobily. Slovenske mobily zacinaji 9 a pevne
+        # linky obou zemi 2-5, tam by slo o hadani 50 na 50 - takova
+        # cisla proto nechavame presne tak, jak je nekdo napsal.
+        # Viz konverzace s Danielem 2026-08-19.
+        predvolba, zbytek = "420", cislice
     else:
         return text
 
