@@ -62,9 +62,6 @@
                             <input type="checkbox" name="koef_site" value="{{ s.site.pk }}"
                                    {% if s.vybrany %}checked{% endif %} onchange="this.form.submit()">
                             {{ s.site.name }}
-                            {% if not s.site.in_vat_coefficient %}
-                                <span style="font-size:11px; color:#999;">(jiná osoba)</span>
-                            {% endif %}
                         </label>
                     {% endfor %}
                 </form>
@@ -111,6 +108,41 @@
                         (přesně {{ koef.presne }} %, ze zákona se zaokrouhluje nahoru na celé procento)
                     </span>
                 </div>
+
+                {% if koef.hranice %}
+                    <div style="margin-top:12px; padding:10px 12px; border-radius:6px;
+                                {% if koef.hranice.staci %}background:#dcfce7; color:#15803d;{% else %}background:#fef3c7; color:#92400e;{% endif %}">
+                        {% if koef.hranice.staci %}
+                            <strong>Na plný odpočet dosáhnete.</strong>
+                            Při zachování současného stavu vyjde koeficient za celý rok
+                            <strong>{{ koef.hranice.odhad_pct }} %</strong>
+                            ({{ koef.hranice.odhad_zaokrouhlene }} % po zaokrouhlení), tedy nad hranicí
+                            95 % - odpočet se pak nekrátí vůbec.
+                        {% else %}
+                            <strong>Takto budete kráceni.</strong>
+                            Při zachování současného stavu vyjde koeficient za celý rok jen
+                            <strong>{{ koef.hranice.odhad_pct }} %</strong>
+                            ({{ koef.hranice.odhad_zaokrouhlene }} % po zaokrouhlení).
+                            {% if koef.hranice.zbyva_mesicu %}
+                                Aby se odpočet nekrátil, bylo by potřeba ve zbývajících
+                                {{ koef.hranice.zbyva_mesicu }} měsících buď
+                                <strong>přidat {{ koef.hranice.chybi_zdanitelne|floatformat:0 }} Kč</strong>
+                                zdanitelného nájmu (tj. {{ koef.hranice.mesicne_zdanitelne|floatformat:0 }} Kč měsíčně),
+                                nebo <strong>snížit osvobozený nájem o {{ koef.hranice.snizit_osvobozene|floatformat:0 }} Kč</strong>
+                                za rok.
+                            {% else %}
+                                Rok je uzavřený, změnit už to nejde - pro příští rok by bylo potřeba
+                                snížit osvobozený nájem o
+                                <strong>{{ koef.hranice.snizit_osvobozene|floatformat:0 }} Kč</strong>.
+                            {% endif %}
+                        {% endif %}
+                        <div style="font-size:12px; margin-top:6px; opacity:0.85;">
+                            Odhad zbytku roku vychází z posledního započteného měsíce. Je-li koeficient
+                            95 % a vyšší, bere se dle §76 odst. 5 ZDPH jako 100 %; protože se zaokrouhluje
+                            nahoru na celé procento, stačí přesáhnout 94 %.
+                        </div>
+                    </div>
+                {% endif %}
 
                 <p style="color:#999; font-size:12px; margin:10px 0 0;">
                     Podíl zdanitelného nájmu na celkovém fakturovaném nájmu. Nájem je dle §56a

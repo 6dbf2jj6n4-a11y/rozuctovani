@@ -548,6 +548,12 @@ class ClientAdmin(ModelAdmin):
     list_display = (
         "name_display", "code", "ico", "vat_payer", "contact_email", "contact_phone", "is_active",
     )
+    # E-mail a telefon jdou prepsat primo v seznamu (ulozi se tlacitkem
+    # dole pod tabulkou) - na Danielovo prani, aby se kvuli oprave
+    # kontaktu nemusel proklikavat do detailu kazdeho klienta.
+    # Prvni sloupec (name_display) zustava odkazem do detailu, jinak by
+    # Django list_editable odmitlo (admin.E124).
+    list_editable = ("contact_email", "contact_phone")
     search_fields = ("name", "ico", "code")
     list_filter = (ActiveClientFilter, "entity_type", "is_landlord", SiteFilter, "insolvency_status", "vat_payer")
     fieldsets = (
@@ -1250,6 +1256,78 @@ class ClientCardAdmin(ModelAdmin):
                 Decimal("1"), rounding=ROUND_CEILING
             ),
             "presne": (celkem_s_dph / zaklad * 100).quantize(Decimal("0.01")),
+            "hranice": self._hranice_95(mesice, celkem_s_dph, celkem_bez_dph),
+        }
+
+    def _hranice_95(self, mesice, s_dph, bez_dph):
+        """Co je potreba, aby koeficient dosahl zakonne hranice a odpocet
+        se nekratil.
+
+        §76 odst. 5 ZDPH: vypocteny koeficient se zaokrouhli na cele
+        procento NAHORU a je-li roven nebo vyssi nez 95 %, povazuje se za
+        100 % (plny narok na odpocet). Diky tomu zaokrouhleni staci, aby
+        nezaokrouhlena hodnota presahla 94 % - proto se pocita s touhle
+        hranici, ne s 95 %.
+
+        Zbytek roku se odhaduje bezi POSLEDNIHO zapocteneho mesice - to
+        nejlip odpovida soucasnemu stavu najemniku. Je to odhad, ne
+        predpoved: kdyz nekdo prijde nebo odejde, cislo se zmeni.
+
+        Vraci, co by bylo potreba dodat na zdanitelnem najmu, nebo
+        naopak o kolik snizit osvobozeny - druha varianta byva
+        realistictejsi. Viz konverzace s Danielem 2026-08-19."""
+        from decimal import ROUND_CEILING
+
+        # Hranice je "nad 94 %" - zaokrouhlenim nahoru se pak dostane na 95
+        # a odpocet se nekrati. Cilime na 94,01 %, protoze presne 94,00 %
+        # se zaokrouhli jeste na 94 a hranici by to netreflo (pri cileni na
+        # rovnych 94 vychazelo "pridat 0 Kc", coz nic neresi).
+        HRANICE = Decimal("94")
+        CIL = Decimal("94.01")
+        if not mesice:
+            return None
+
+        posledni = mesice[-1]
+        zbyva = 12 - len(mesice)
+        # odhad konce roku pri zachovani soucasneho stavu
+        odhad_s = s_dph + posledni["s_dph"] * zbyva
+        odhad_bez = bez_dph + posledni["bez_dph"] * zbyva
+        odhad_zaklad = odhad_s + odhad_bez
+        if not odhad_zaklad:
+            return None
+
+        odhad_pct = (odhad_s / odhad_zaklad * 100).quantize(Decimal("0.01"))
+        podil = CIL / Decimal("100")
+        staci = odhad_pct > HRANICE
+
+        # kolik zdanitelneho najmu navic by bylo potreba
+        chybi_zdanitelne = None
+        # kolik osvobozeneho najmu by muselo ubyt
+        snizit_osvobozene = None
+        if not staci:
+            chybi_zdanitelne = (
+                (podil * odhad_zaklad - odhad_s) / (1 - podil)
+            ).quantize(Decimal("1"), rounding=ROUND_CEILING)
+            snizit_osvobozene = (
+                odhad_zaklad - odhad_s / podil
+            ).quantize(Decimal("1"), rounding=ROUND_CEILING)
+
+        return {
+            "zbyva_mesicu": zbyva,
+            "odhad_s_dph": odhad_s,
+            "odhad_bez_dph": odhad_bez,
+            "odhad_zaklad": odhad_zaklad,
+            "odhad_pct": odhad_pct,
+            "odhad_zaokrouhlene": (odhad_s / odhad_zaklad * 100).quantize(
+                Decimal("1"), rounding=ROUND_CEILING
+            ),
+            "staci": staci,
+            "chybi_zdanitelne": chybi_zdanitelne,
+            "snizit_osvobozene": snizit_osvobozene,
+            "mesicne_zdanitelne": (
+                (chybi_zdanitelne / zbyva).quantize(Decimal("1"), rounding=ROUND_CEILING)
+                if chybi_zdanitelne is not None and zbyva else None
+            ),
         }
 
     def report_najemne_view(self, request):
