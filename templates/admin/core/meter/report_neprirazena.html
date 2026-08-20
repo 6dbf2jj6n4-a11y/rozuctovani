@@ -16,7 +16,7 @@
         <form method="post" action="{% url 'admin:core_meter_report_neprirazena_smazat' %}" id="delete-form">
             {% csrf_token %}
             <div style="margin-bottom:10px;">
-                <button type="submit" style="background:#b91c1c; color:#fff; border:none; padding:8px 16px; border-radius:6px; cursor:pointer; font-weight:600;">
+                <button type="submit" class="rx-btn rx-btn-danger">
                     Smazat vybrané
                 </button>
             </div>

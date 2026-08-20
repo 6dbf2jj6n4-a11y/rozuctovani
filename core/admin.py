@@ -630,9 +630,7 @@ class ClientAdmin(ModelAdmin):
     def ares_button(self, obj):
         from django.utils.html import format_html
         return format_html(
-            '<button type="button" onclick="aresLookup()" '
-            'style="padding:6px 16px; border-radius:6px; background:#2563eb; '
-            'color:white; font-weight:600; border:none; cursor:pointer;">'
+            '<button type="button" onclick="aresLookup()" class="rx-btn rx-btn-primary">'
             'Načíst z ARES</button>'
             '<span id="ares-status" style="margin-left:8px; font-size:13px;"></span>'
         )
@@ -968,9 +966,7 @@ class ContractAdmin(DuplicateModelAdminMixin, ModelAdmin):
             return "Nejprve smlouvu uložte."
         url = reverse("admin:core_contract_generovat", args=[obj.pk])
         return format_html(
-            '<a href="{}" '
-            'style="padding:6px 16px; border-radius:6px; background:#2563eb; '
-            'color:white; font-weight:600; text-decoration:none; display:inline-block;">'
+            '<a href="{}" class="rx-btn rx-btn-primary">'
             'Generovat smlouvu (.docx)</a>',
             url,
         )
@@ -1511,9 +1507,7 @@ class ClientCardAdmin(ModelAdmin):
             return "Nejprve kartu uložte."
         url = reverse("admin:core_clientcard_generovat", args=[obj.pk])
         return format_html(
-            '<a href="{}" '
-            'style="padding:6px 16px; border-radius:6px; background:#2563eb; '
-            'color:white; font-weight:600; text-decoration:none; display:inline-block;">'
+            '<a href="{}" class="rx-btn rx-btn-primary">'
             'Generovat Kartu nájemce (.pdf)</a>',
             url,
         )
@@ -2232,7 +2226,7 @@ class PeriodAdmin(ModelAdmin):
             request, f"Aktuální období je nyní {period} - předvyplní se ve všech sestavách."
         )
 
-    def _period_action_button(self, url, label, color, confirm_text):
+    def _period_action_button(self, url, label, varianta, confirm_text):
         """Tlacitko akce pro JEDNO obdobi primo v radku tabulky.
 
         POZOR na vlastni <form>: bunka tabulky je uvnitr velkeho
@@ -2252,20 +2246,15 @@ class PeriodAdmin(ModelAdmin):
         from django.utils.html import format_html
         return format_html(
             '<button type="submit" formaction="{}" formmethod="post" formnovalidate '
-            'onclick="return confirm(\'{}\');" '
-            'style="padding:4px 10px; border-radius:6px; border:none; '
-            'color:white; font-weight:600; font-size:12px; cursor:pointer; white-space:nowrap; '
-            'background:{};">{}</button>',
-            url, confirm_text, color, label,
+            'onclick="return confirm(\'{}\');" class="{}">{}</button>',
+            url, confirm_text, f"rx-btn rx-btn-sm {varianta}".strip(), label,
         )
 
-    def _period_link_button(self, url, label, color, nove_okno=True):
+    def _period_link_button(self, url, label, varianta="", nove_okno=True):
         from django.utils.html import format_html
         return format_html(
-            '<a href="{}"{} style="padding:4px 10px; border-radius:6px; '
-            'color:white; font-weight:600; font-size:12px; text-decoration:none; '
-            'display:inline-block; white-space:nowrap; background:{};">{}</a>',
-            url, format_html(' target="_blank"') if nove_okno else "", color, label,
+            '<a href="{}"{} class="{}">{}</a>',
+            url, format_html(' target="_blank"') if nove_okno else "", f"rx-btn rx-btn-sm {varianta}".strip(), label,
         )
 
     def period_actions(self, obj):
@@ -2281,12 +2270,12 @@ class PeriodAdmin(ModelAdmin):
         # s Danielem 2026-08-19.
         if not uzavrene:
             odecty_url = f"{reverse('odecty')}?period={obj.pk}"
-            buttons.append(self._period_link_button(odecty_url, "Zadat odečty", "#2563eb"))
+            buttons.append(self._period_link_button(odecty_url, "Zadat odečty"))
             # Vypocet je ODKAZ, ne POST tlacitko - otevre mezistranku
             # s vyberem arealu (viz vypocet_view).
             buttons.append(self._period_link_button(
                 reverse("admin:core_period_vypocet", args=[obj.pk]),
-                "Výpočet", "#ca8a04", nove_okno=False,
+                "Výpočet", "rx-btn-primary", nove_okno=False,
             ))
         # Otevrit ma smysl jen u uzavreneho obdobi a naopak - u
         # aktualniho stavu by tlacitko nic nezmenilo (viz konverzace
@@ -2294,12 +2283,12 @@ class PeriodAdmin(ModelAdmin):
         if uzavrene:
             buttons.append(self._period_action_button(
                 reverse("admin:core_period_otevrit", args=[obj.pk]),
-                "Otevřít", "#16a34a", f"Znovu otevřít {obj}?",
+                "Otevřít", "rx-btn-success", f"Znovu otevřít {obj}?",
             ))
         else:
             buttons.append(self._period_action_button(
                 reverse("admin:core_period_zavrit", args=[obj.pk]),
-                "Zavřít", "#dc2626", f"Uzavřít {obj}? Rozúčtování už pak nepůjde přepočítat.",
+                "Zavřít", "rx-btn-danger", f"Uzavřít {obj}? Rozúčtování už pak nepůjde přepočítat.",
             ))
         return mark_safe(" ".join(buttons))
     period_actions.short_description = "Akce"

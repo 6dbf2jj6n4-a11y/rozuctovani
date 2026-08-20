@@ -1,0 +1,92 @@
+/*
+Jednotny vzhled tlacitek napric adminem.
+
+Duvod: tlacitka vznikala postupne a kazde vypadalo jinak - "Generovat
+pro celý rok" pouzivalo Unfoldovy tridy (a tim i tmavy rezim), kdezto
+"Smazat vybrané", "Generovat smlouvu", akce u Obdobi apod. mely barvy
+natvrdo v inline stylu, takze se s motivem nemenily. Viz konverzace
+s Danielem 2026-08-19.
+
+Barvy se berou z promennych Unfoldu (--color-primary-*, --color-base-*,
+--color-red-*, --color-green-*), takze tlacitka drzi motiv i pripadnou
+zmenu firemni barvy bez zasahu sem.
+
+Pouziti:
+  .rx-btn                 zakladni (bily/tmavy podklad s rameckem)
+  .rx-btn.rx-btn-primary  hlavni akce (plna barva)
+  .rx-btn.rx-btn-danger   destruktivni (mazani, uzavreni)
+  .rx-btn.rx-btn-success  potvrzujici (znovu otevreni)
+  .rx-btn.rx-btn-sm       mensi varianta do radku tabulky
+*/
+
+.rx-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 14px;
+    border-radius: var(--radius-default, 6px);
+    border: 1px solid var(--color-base-200);
+    background: #fff;
+    color: var(--color-base-700);
+    font-size: 14px;
+    font-weight: 500;
+    line-height: 1.2;
+    text-decoration: none;
+    white-space: nowrap;
+    cursor: pointer;
+    transition: color 0.15s, background-color 0.15s, border-color 0.15s;
+}
+.rx-btn:hover {
+    color: var(--color-primary-600);
+}
+.dark .rx-btn {
+    background: var(--color-base-900);
+    border-color: var(--color-base-700);
+    color: var(--color-base-200);
+}
+.dark .rx-btn:hover {
+    color: var(--color-primary-500);
+}
+
+/* Plne barevne varianty - text je vzdy bily, proto hover jen ztmavi. */
+.rx-btn.rx-btn-primary,
+.rx-btn.rx-btn-danger,
+.rx-btn.rx-btn-success {
+    color: #fff;
+    border-color: transparent;
+    font-weight: 600;
+}
+.rx-btn.rx-btn-primary { background: var(--color-primary-600); }
+.rx-btn.rx-btn-primary:hover { background: var(--color-primary-700); color: #fff; }
+.dark .rx-btn.rx-btn-primary { background: var(--color-primary-600); color: #fff; }
+.dark .rx-btn.rx-btn-primary:hover { background: var(--color-primary-500); color: #fff; }
+
+.rx-btn.rx-btn-danger { background: var(--color-red-600); }
+.rx-btn.rx-btn-danger:hover { background: var(--color-red-700); color: #fff; }
+.dark .rx-btn.rx-btn-danger { background: var(--color-red-600); color: #fff; }
+.dark .rx-btn.rx-btn-danger:hover { background: var(--color-red-500); color: #fff; }
+
+.rx-btn.rx-btn-success { background: var(--color-green-600); }
+.rx-btn.rx-btn-success:hover { background: var(--color-green-700); color: #fff; }
+.dark .rx-btn.rx-btn-success { background: var(--color-green-600); color: #fff; }
+.dark .rx-btn.rx-btn-success:hover { background: var(--color-green-500); color: #fff; }
+
+/* Mensi varianta do radku tabulky (akce u Obdobi) */
+.rx-btn.rx-btn-sm {
+    padding: 4px 10px;
+    font-size: 12px;
+    gap: 4px;
+}
+
+/* Ikonka uvnitr tlacitka nema prerustat text */
+.rx-btn .material-symbols-outlined {
+    font-size: 18px;
+    line-height: 1;
+}
+
+/* Skupina tlacitek v jedne bunce/radku */
+.rx-btn-group {
+    display: inline-flex;
+    gap: 6px;
+    flex-wrap: wrap;
+}

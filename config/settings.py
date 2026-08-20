@@ -173,6 +173,7 @@ UNFOLD = {
         "core.admin_branding.report_filters_css",
         "core.admin_branding.changelist_header_wrap_css",
         "core.admin_branding.sidebar_extras_css",
+        "core.admin_branding.buttons_css",
     ],
     "SIDEBAR": {
         "show_search": True,

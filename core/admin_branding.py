@@ -37,6 +37,11 @@ def changelist_header_wrap_css(request):
     return static("core/css/changelist_header_wrap.css")
 
 
+def buttons_css(request):
+    from django.templatetags.static import static
+    return static("core/css/buttons.css")
+
+
 def sidebar_extras_css(request):
     from django.templatetags.static import static
     return static("core/css/sidebar_extras.css")
