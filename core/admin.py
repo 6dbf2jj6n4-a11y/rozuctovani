@@ -826,14 +826,28 @@ class ContractAdminForm(forms.ModelForm):
         super().__init__(*args, **kwargs)
         self.fields["number"].required = True
         self.fields["valid_from"].required = True
-        self.fields["notice_period_months"].required = True
         if not self.instance.pk or not self.instance.valid_to:
             self.fields["na_dobu_neurcitou"].initial = True
+
+        # Vypovedni lhuta ma smysl jen u smlouvy na dobu neurcitou - na dobu
+        # urcitou se vypovedet bez udani duvodu neda (cl. 7.2 pism. b) se
+        # v takove smlouve negeneruje), takze je pole skryte (viz
+        # conditional_fields) a nesmi byt povinne, jinak by slo formular
+        # ulozit jen po vyplneni pole, ktere uzivatel nevidi. Pri odeslani
+        # se stav bere z odeslanych dat, ne z instance - uzivatel mohl
+        # prepinac prave prehodit.
+        if self.is_bound:
+            na_dobu_neurcitou = bool(self.data.get(self.add_prefix("na_dobu_neurcitou")))
+        else:
+            na_dobu_neurcitou = bool(self.fields["na_dobu_neurcitou"].initial)
+        self.fields["notice_period_months"].required = na_dobu_neurcitou
 
     def clean(self):
         cleaned_data = super().clean()
         if cleaned_data.get("na_dobu_neurcitou"):
             cleaned_data["valid_to"] = None
+        else:
+            cleaned_data["notice_period_months"] = None
         return cleaned_data
 
 
@@ -901,6 +915,7 @@ class ContractAdmin(DuplicateModelAdminMixin, ModelAdmin):
 
     conditional_fields = {
         "valid_to": "na_dobu_neurcitou == false",
+        "notice_period_months": "na_dobu_neurcitou == true",
     }
 
     @admin.action(description="Vygenerovat nové karty s inflací")
