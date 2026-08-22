@@ -142,6 +142,7 @@ def contract_to_template_data(contract):
         "invoicing_email": contract.invoicing_email,
         "signed_on": contract.signed_on,
         "valid_from": contract.valid_from,
+        "valid_to": contract.valid_to,
         "notice_period_months": contract.notice_period_months,
         "insurance_amount_czk": contract.insurance_amount_czk,
         "deposit_czk": contract.deposit_czk,
@@ -362,6 +363,8 @@ def fill_contract_template(data, output_path, template_path=TEMPLATE_PATH):
       client_ico, client_dic (s nebo bez "CZ" prefixu), registry_court,
       registry_section, registry_insert, representative_name, representative_role,
       invoicing_email, signed_on (date), valid_from (date),
+      valid_to (date/None - None = na dobu neurčitou, jinak na dobu určitou
+      do tohoto data, viz cl. 7.1 a poznamka u is_fixed_term nize),
       notice_period_months (int), insurance_amount_czk (Decimal/int),
       deposit_czk (Decimal/int), inflation_increase_from (date).
 
@@ -427,6 +430,35 @@ def fill_contract_template(data, output_path, template_path=TEMPLATE_PATH):
     # --- clanek 1: vlastni text podle arealu (meni pocet odstavcu dokumentu) ---
     _fill_article1(doc, data.get("lease_subject_text"))
 
+    # --- cl. 7.1 (Trvani Smlouvy): sablona obsahuje DVE varianty tohoto
+    # odstavce (na dobu neurcitou / na dobu urcitou), obe se stejnym
+    # cislovanim (numId) - podle Contract.valid_to se ta nepouzita SMAZE
+    # jeste PRED doplnovanim placeholderu nize, protoze obe varianty sdili
+    # placeholder "[DATUM PLATNOSTI SMLOUVY]" a kdyby zbyly obe, doplnil by
+    # se jen do prvni z nich (viz _find_paragraph_index). U smlouvy na dobu
+    # urcitou navic mizi odst. 7.2 pism. b) "vypoved bez udani duvodu" (na
+    # pevnem konci nedava smysl, viz zadani) a s nim i navazujici odkaz na
+    # "pismene (B)" v puvodnim pism. c), ktere se tak stane novym pism. b). ---
+    is_fixed_term = bool(data.get("valid_to"))
+    paragraphs = doc.paragraphs
+    if is_fixed_term:
+        idx = _find_paragraph_index(paragraphs, "na dobu neurčitou")
+    else:
+        idx = _find_paragraph_index(paragraphs, "na dobu určitou")
+    paragraphs[idx]._p.getparent().remove(paragraphs[idx]._p)
+
+    if is_fixed_term:
+        paragraphs = doc.paragraphs
+        idx_b = _find_paragraph_index(paragraphs, "vypovědět i bez udání důvodu")
+        paragraphs[idx_b]._p.getparent().remove(paragraphs[idx_b]._p)
+
+        paragraphs = doc.paragraphs
+        _replace_run_text(
+            paragraphs, "písmene (B) nepoužije",
+            " V\xa0případě výpovědi dle tohoto písmene se ustanovení písmene (B) nepoužije.", "",
+            highlight=False,
+        )
+
     # --- vse ZA clankem 1: dohledavat podle textu, ne podle indexu (viz docstring) ---
     paragraphs = doc.paragraphs
     _replace_run_text(
@@ -443,11 +475,20 @@ def fill_contract_template(data, output_path, template_path=TEMPLATE_PATH):
         paragraphs, "[DATUM PLATNOSTI SMLOUVY]", "[DATUM PLATNOSTI SMLOUVY]",
         format_date_cz(data.get("valid_from")),
     )
-    paragraphs = doc.paragraphs
-    _replace_run_text(
-        paragraphs, "[VÝPOVĚDNÍ LHŮTA]", "[VÝPOVĚDNÍ LHŮTA]",
-        format_months(data.get("notice_period_months")),
-    )
+    if is_fixed_term:
+        paragraphs = doc.paragraphs
+        _replace_run_text(
+            paragraphs, "[DATUM UKONČENÍ SMLOUVY]", "[DATUM UKONČENÍ SMLOUVY]",
+            format_date_cz(data.get("valid_to")),
+        )
+    if not is_fixed_term:
+        # placeholder je jen v odst. 7.2 pism. b) "vypoved bez udani duvodu",
+        # ktere u smlouvy na dobu urcitou vyse jiz zmizelo
+        paragraphs = doc.paragraphs
+        _replace_run_text(
+            paragraphs, "[VÝPOVĚDNÍ LHŮTA]", "[VÝPOVĚDNÍ LHŮTA]",
+            format_months(data.get("notice_period_months")),
+        )
     paragraphs = doc.paragraphs
     _replace_run_text(
         paragraphs, "[VÝŠE KAUCE]", "[VÝŠE KAUCE]",
