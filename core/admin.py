@@ -461,6 +461,11 @@ class ClientCardInline(TabularInline):
     verbose_name = "Karta"
     verbose_name_plural = "Karty klientů"
     template = "admin/core/client/clientcard_inline_tabular.html"
+    # Unfold nad kazdym radkem inline vypisuje jeste nazev objektu
+    # (ClientCard.__str__ = "Klient - Plocha - od M/RRRR"). Tady je to
+    # zbytecne: klient je z te stranky zrejmy a popis karty je hned prvni
+    # sloupec radku. Viz unfold/helpers/edit_inline/tabular_title.html.
+    hide_title = True
 
     def has_add_permission(self, request, obj=None):
         return False
@@ -509,6 +514,26 @@ class SiteFilter(admin.SimpleListFilter):
             return queryset.filter(
                 cards__card_units__unit__site_id=self.value()
             ).distinct()
+        return queryset
+
+
+class ClientCardSiteFilter(admin.SimpleListFilter):
+    """Filtr Karet klientu podle arealu.
+
+    Karta neni na areal navazana primo - vede k nemu pres Plochy karty
+    (CardUnit -> Unit -> Site), stejne jako to dela SiteFilter u Klienta.
+    Karta s plochami ve VIC arealech se proto zobrazi u kazdeho z nich;
+    distinct() zajisti, ze se v seznamu neobjevi vickrat. Viz konverzace
+    s Danielem 2026-08-19."""
+    title = "Areál"
+    parameter_name = "site"
+
+    def lookups(self, request, model_admin):
+        return [(s.id, s.name) for s in Site.objects.all()]
+
+    def queryset(self, request, queryset):
+        if self.value():
+            return queryset.filter(card_units__unit__site_id=self.value()).distinct()
         return queryset
 
 
@@ -1150,7 +1175,7 @@ class ClientCardAdmin(ModelAdmin):
     class Media:
         js = ("core/js/warn_unsaved.js",)
     list_select_related = ("client",)
-    list_filter = (ClientCardClientActiveFilter, ClientCardActiveFilter)
+    list_filter = (ClientCardClientActiveFilter, ClientCardActiveFilter, ClientCardSiteFilter)
     autocomplete_fields = ("client",)
     search_fields = ("client__name", "description")
     fieldsets = (
