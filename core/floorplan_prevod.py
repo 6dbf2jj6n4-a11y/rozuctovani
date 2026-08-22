@@ -16,6 +16,9 @@ from decimal import Decimal
 
 from django.db import transaction
 
+#: přípona v Popisu pokračovací Karty, aby bylo poznat, proč vznikla
+PRIZNAK_PRESUNU = "(část přesunuta)"
+
 #: typy klíčů, jejichž hodnota je výměra - přepočítají se podle m²
 PLOSNE_TYPY = ("weighted_count", "area_price", "submeter")
 
@@ -54,11 +57,11 @@ class Prevod:
 
     @property
     def klice_z_ploch(self):
-        """True, když si nová Karta klíče odvodí z Výchozích služeb ploch.
+        """True, když aspoň jedna převáděná plocha má Výchozí služby.
 
-        Když plochy Výchozí služby nemají, vezme se vzor z původní Karty -
-        viz :func:`proved`. Náhled to má říct dopředu, ať je jasné, odkud
-        klíče přijdou.
+        Z těch si nová Karta odvodí klíče sama. Ze staré Karty se nekopíruje
+        nic, takže když je False, vznikne Karta bez klíčů a doplní se ručně -
+        náhled na to musí upozornit dopředu.
         """
         return any(u.unit_services.exists() for u in self.vsechny_plochy)
 
@@ -147,14 +150,10 @@ def priprav(units, klient, datum, sazba=None):
 @transaction.atomic
 def proved(prevod):
     """Provede připravený převod. Vrací novou Kartu nájemce."""
-    from core.models import AllocationKey, CardUnit, ClientCard
-
-    vzor_klicu = None
+    from core.models import CardUnit, ClientCard
 
     for zdroj in prevod.zdroje:
         card = zdroj["card"]
-        if vzor_klicu is None:
-            vzor_klicu = zdroj
 
         # 1) pokračovací Karta původního držitele - kopíruje se DŘÍV, než se
         #    originál uzavře, aby si nepřenesla jeho nové valid_to
@@ -168,6 +167,10 @@ def proved(prevod):
                    prevod.datum.strftime("%-d. %-m. %Y"))
             )
             pokracovani.save()
+            # ať je v seznamu Karet na první pohled poznat, proč jich má
+            # klient v jednom roce víc - Danielovo přání
+            pokracovani.description = "%s %s" % (pokracovani.description, PRIZNAK_PRESUNU)
+            pokracovani.save(update_fields=["description"])
 
             CardUnit.objects.filter(
                 card=pokracovani, unit__in=[u.id for u in zdroj["plochy"]]
@@ -195,25 +198,9 @@ def proved(prevod):
             rate_per_m2=prevod.sazba,
         )
 
-    # 4) Klíče. Přednost mají Výchozí služby plochy (UnitService) - ty už
-    #    založil CardUnit.save() -> create_default_keys() o kus výš. Je to
-    #    správný zdroj: klíč patří k ploše, ne ke Kartě, ze které se zrovna
-    #    převádí. Dokud ale Prostory Výchozí služby vyplněné nemají, vznikla
-    #    by Karta úplně bez klíčů - proto se v tom případě vezme vzor
-    #    z původní Karty. Až budou Výchozí služby doplněné, tahle větev se
-    #    přestane používat sama od sebe.
-    if vzor_klicu and not nova.allocation_keys.exists():
-        nova_m2 = _soucet_m2(nova)
-        for klic in vzor_klicu["plosne_klice"]:
-            AllocationKey.objects.create(
-                client_card=nova, service_item=klic.service_item,
-                allocation_type=klic.allocation_type, value=nova_m2,
-                meter=klic.meter, deduct_from_pool=klic.deduct_from_pool,
-            )
-        for klic in vzor_klicu["ostatni_klice"]:
-            AllocationKey.objects.create(
-                client_card=nova, service_item=klic.service_item,
-                allocation_type=klic.allocation_type, value=klic.value,
-                meter=klic.meter, deduct_from_pool=klic.deduct_from_pool,
-            )
+    # Klíče nové Karty vznikly z Výchozích služeb ploch (UnitService) uvnitř
+    # CardUnit.save() -> create_default_keys(). Ze staré Karty se ZÁMĚRNĚ nic
+    # nekopíruje: klíč patří k ploše, ne ke Kartě, ze které se zrovna převádí.
+    # Když plocha Výchozí služby nemá, vznikne Karta bez klíčů a doplní se
+    # ručně - náhled na to upozorní dopředu (Prevod.klice_z_ploch).
     return nova

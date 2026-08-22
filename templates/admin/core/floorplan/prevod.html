@@ -64,7 +64,6 @@
                     <p class="rx-planek-napoveda">
                         Beze změny zůstanou klíče, které se z výměry odvodit nedají:
                         {% for k in z.ostatni_klice %}{{ k.service_item.name }} ({{ k.value|floatformat:0 }}){% if not forloop.last %} · {% endif %}{% endfor %}.
-                        Na nové kartě je zkontroluj.
                     </p>
                 {% endif %}
             {% endfor %}
@@ -76,15 +75,18 @@
                 </p>
             {% endif %}
 
-            <p class="rx-planek-napoveda">
-                {% if prevod.klice_z_ploch %}
-                    Klíče se odvodí z <strong>Výchozích služeb ploch</strong>.
-                {% else %}
-                    Plochy nemají vyplněné Výchozí služby, takže se klíče převezmou
-                    jako vzor z původní Karty. Až Výchozí služby doplníš, budou se
-                    brát odtamtud.
-                {% endif %}
-            </p>
+            {% if prevod.klice_z_ploch %}
+                <p class="rx-planek-napoveda">
+                    Klíče nové karty se odvodí z <strong>Výchozích služeb ploch</strong>.
+                </p>
+            {% else %}
+                <p class="rx-planek-chyba">
+                    Převáděné plochy nemají vyplněné <strong>Výchozí služby plochy</strong>,
+                    takže nová karta vznikne <strong>bez klíčů</strong> a do rozúčtování
+                    zatím nevstoupí. Doplň je u Pronajímaných prostorů, nebo klíče zadej
+                    na nové kartě ručně.
+                </p>
+            {% endif %}
 
             <p class="rx-odstavec">
                 Nová karta pro <strong>{{ prevod.klient }}</strong> od
