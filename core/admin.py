@@ -13,6 +13,7 @@ except admin.sites.NotRegistered:
     pass
 from django import forms
 from unfold.decorators import display
+from unfold.widgets import UnfoldBooleanSwitchWidget
 from .admin_mixins import ModelAdmin, TabularInline
 
 from .models import (
@@ -806,9 +807,15 @@ class ClientAdmin(ModelAdmin):
 
 
 class ContractAdminForm(forms.ModelForm):
+    # Widget se musi nastavit rucne: Unfold prepina BooleanField na prepinac
+    # pres FORMFIELD_OVERRIDES, ktere se ale aplikuji jen na pole MODELU
+    # (formfield_for_dbfield). Tohle je pole formulare (v modelu neexistuje,
+    # uklada se jen jako valid_to=None v clean()), takze by jinak zustalo
+    # obycejnym zaskrtavatkem a nesedelo by k prepinaci Inflacni dolozky.
     na_dobu_neurcitou = forms.BooleanField(
         label="Na dobu neurčitou", required=False,
-        help_text="Zaškrtnuto (výchozí) = pole 'Platnost do' se nepoužije a zůstane prázdné.",
+        widget=UnfoldBooleanSwitchWidget,
+        help_text="Zapnuto (výchozí) = pole 'Platnost do' se nepoužije a zůstane prázdné.",
     )
 
     class Meta:
@@ -1053,7 +1060,7 @@ class ContractAdmin(DuplicateModelAdminMixin, ModelAdmin):
             "fields": (("client", "site", "number"), "signed_on")
         }),
         ("Platnost", {
-            "fields": ("valid_from", "na_dobu_neurcitou", "valid_to", "notice_period_months")
+            "fields": ("na_dobu_neurcitou", ("valid_from", "valid_to"), "notice_period_months")
         }),
         ("Kauce a pojištění", {
             "fields": (("deposit_czk", "deposit_paid"), "insurance_amount_czk")
