@@ -35,6 +35,32 @@
             <button type="submit" class="rx-btn rx-btn-primary rx-btn-sm">Spočítat</button>
         </div>
 
+        {% if cil_karta %}
+            <p class="rx-planek-napoveda">
+                {{ klient }} má k tomuto datu platnou kartu
+                <strong>{{ cil_karta.description }}</strong>
+                (od {{ cil_karta.valid_from|date:'j. n. Y' }},
+                {{ cil_karta.card_units.count }} ploch).
+            </p>
+            <div class="rx-rezimy">
+                <label class="rx-prepinac">
+                    <input type="radio" name="rezim" value="{{ REZIM_NAVAZAT }}"
+                           {% if rezim == REZIM_NAVAZAT %}checked{% endif %}>
+                    Uzavřít ji a navázat novou kartou s plochami navíc
+                </label>
+                <label class="rx-prepinac">
+                    <input type="radio" name="rezim" value="{{ REZIM_PRIDAT }}"
+                           {% if rezim == REZIM_PRIDAT %}checked{% endif %}>
+                    Přidat plochy rovnou do téhle karty
+                </label>
+                <label class="rx-prepinac">
+                    <input type="radio" name="rezim" value="{{ REZIM_NOVA }}"
+                           {% if rezim == REZIM_NOVA %}checked{% endif %}>
+                    Založit další samostatnou kartu
+                </label>
+            </div>
+        {% endif %}
+
         {% if prevod %}
             <h2 class="rx-nadpis">Co se stane</h2>
 
@@ -45,13 +71,25 @@
                 <p class="rx-planek-napoveda">{{ p }}</p>
             {% endfor %}
 
+            {% if not prevod.potize %}
             {% for z in prevod.zdroje %}
-                <p class="rx-odstavec">
-                    Karta <strong>{{ z.card }}</strong> se uzavře k <strong>{{ prevod.den_uzavreni|date:'j. n. Y' }}</strong>.
-                    Odchází {{ z.odchazi_m2 }} m²
-                    ({% for u in z.plochy %}{{ u.name }}{% if not forloop.last %}, {% endif %}{% endfor %}).
-                </p>
-                {% if z.zbyde_ploch %}
+                {% if z.rovnou %}
+                    <p class="rx-odstavec">
+                        Z karty <strong>{{ z.card }}</strong> se plochy jen odeberou –
+                        začíná přesně {{ prevod.datum|date:'j. n. Y' }}, takže ještě za žádné
+                        období neúčtovala a není co uzavírat. Odchází {{ z.odchazi_m2 }} m²
+                        ({% for u in z.plochy %}{{ u.name }}{% if not forloop.last %}, {% endif %}{% endfor %}),
+                        zbyde {{ z.zbyde_m2 }} m².
+                    </p>
+                {% else %}
+                    <p class="rx-odstavec">
+                        Karta <strong>{{ z.card }}</strong> se uzavře k <strong>{{ prevod.den_uzavreni|date:'j. n. Y' }}</strong>.
+                        Odchází {{ z.odchazi_m2 }} m²
+                        ({% for u in z.plochy %}{{ u.name }}{% if not forloop.last %}, {% endif %}{% endfor %}).
+                    </p>
+                {% endif %}
+                {% if z.rovnou %}
+                {% elif z.zbyde_ploch %}
                     <p class="rx-odstavec">
                         Od {{ prevod.datum|date:'j. n. Y' }} vznikne pokračovací karta se zbývajícími
                         {{ z.zbyde_ploch }} plochami ({{ z.zbyde_m2 }} m²). Plošné klíče se přepočítají:
@@ -75,7 +113,8 @@
                 </p>
             {% endif %}
 
-            {% if prevod.klice_z_ploch %}
+            {% if prevod.rezim != REZIM_NOVA %}
+            {% elif prevod.klice_z_ploch %}
                 <p class="rx-planek-napoveda">
                     Klíče nové karty se odvodí z <strong>Výchozích služeb ploch</strong>.
                 </p>
@@ -88,11 +127,36 @@
                 </p>
             {% endif %}
 
-            <p class="rx-odstavec">
-                Nová karta pro <strong>{{ prevod.klient }}</strong> od
-                <strong>{{ prevod.datum|date:'j. n. Y' }}</strong>, celkem
-                <strong>{{ prevod.prevadene_m2 }} m²</strong>.
-            </p>
+            {% if prevod.rezim == REZIM_PRIDAT %}
+                <p class="rx-odstavec">
+                    Do karty <strong>{{ prevod.cil_karta.description }}</strong> přibude
+                    <strong>{{ prevod.prevadene_m2 }} m²</strong>:
+                    {{ prevod.cil_m2_pred }} → <strong>{{ prevod.cil_m2_po }} m²</strong>.
+                    {% if prevod.cil_plosne_klice %}Plošné klíče se přepočítají:
+                        {% for k in prevod.cil_plosne_klice %}<em>{{ k.service_item.name }}</em>
+                        {{ k.value|floatformat:0 }} → {{ prevod.cil_m2_po|floatformat:0 }}{% if not forloop.last %} · {% endif %}{% endfor %}.
+                    {% endif %}
+                </p>
+            {% elif prevod.rezim == REZIM_NAVAZAT %}
+                <p class="rx-odstavec">
+                    Karta <strong>{{ prevod.cil_karta.description }}</strong> se uzavře k
+                    <strong>{{ prevod.den_uzavreni|date:'j. n. Y' }}</strong> a od
+                    {{ prevod.datum|date:'j. n. Y' }} na ni naváže nová s plochami navíc:
+                    {{ prevod.cil_m2_pred }} → <strong>{{ prevod.cil_m2_po }} m²</strong>.
+                    {% if prevod.cil_plosne_klice %}Plošné klíče se přepočítají:
+                        {% for k in prevod.cil_plosne_klice %}<em>{{ k.service_item.name }}</em>
+                        {{ k.value|floatformat:0 }} → {{ prevod.cil_m2_po|floatformat:0 }}{% if not forloop.last %} · {% endif %}{% endfor %}.
+                    {% endif %}
+                </p>
+            {% else %}
+                <p class="rx-odstavec">
+                    Nová karta pro <strong>{{ prevod.klient }}</strong> od
+                    <strong>{{ prevod.datum|date:'j. n. Y' }}</strong>, celkem
+                    <strong>{{ prevod.prevadene_m2 }} m²</strong>.
+                </p>
+            {% endif %}
+
+            {% endif %}
 
             {% if not prevod.potize %}
                 <p style="margin-top:14px">

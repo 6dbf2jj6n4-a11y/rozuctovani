@@ -20,6 +20,10 @@
             </span>
         {% endif %}
 
+        <label class="rx-prepinac">
+            <input type="checkbox" id="rx-kody" checked> kódy klientů v plánku
+        </label>
+
         <a class="rx-btn rx-btn-sm rx-planek-kontrola"
            href="{% url 'admin:core_floorplan_kontrola' %}?site={{ plan.site.pk }}">Kontrola párování</a>
     </form>
@@ -152,6 +156,13 @@
             .forEach(function (el) { el.classList.toggle('rx-vybrano', vybrane.has(kod)); });
         prekresliVyber();
     });
+
+    const prepinacKodu = document.getElementById('rx-kody');
+    if (prepinacKodu) {
+        prepinacKodu.addEventListener('change', function () {
+            plocha.classList.toggle('rx-bez-kodu', !prepinacKodu.checked);
+        });
+    }
 
     const zrusit = document.getElementById('rx-vyber-zrusit');
     if (zrusit) {

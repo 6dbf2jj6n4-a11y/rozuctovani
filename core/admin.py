@@ -4300,7 +4300,9 @@ class FloorplanAdmin(ModelAdmin):
 
         from django.shortcuts import get_object_or_404, redirect, render
 
-        from core.floorplan_prevod import priprav, proved
+        from core.floorplan_prevod import (
+            REZIM_NAVAZAT, REZIM_NOVA, REZIM_PRIDAT, karta_klienta_k_datu, priprav, proved,
+        )
 
         plan = get_object_or_404(Floorplan, pk=plan_id)
         kody = [k for k in request.POST.getlist("plochy") or
@@ -4317,15 +4319,28 @@ class FloorplanAdmin(ModelAdmin):
                 messages.error(request, "Datum nedává smysl.")
 
         prevod = None
+        cil_karta = None
+        rezim = request.POST.get("rezim") or ""
+        if klient and datum:
+            cil_karta = karta_klienta_k_datu(klient, datum)
+            if not cil_karta:
+                rezim = REZIM_NOVA
+            elif rezim not in (REZIM_NOVA, REZIM_NAVAZAT, REZIM_PRIDAT):
+                # když karta začíná přesně v den převodu, není co uzavírat
+                rezim = REZIM_PRIDAT if cil_karta.valid_from == datum else REZIM_NAVAZAT
+
         if klient and datum and units:
-            prevod = priprav(units, klient, datum, Decimal(sazba) if sazba else None)
+            prevod = priprav(
+                units, klient, datum, Decimal(sazba) if sazba else None,
+                cil_karta if rezim != REZIM_NOVA else None, rezim,
+            )
 
             if request.POST.get("potvrzeno") and not prevod.potize:
                 nova = proved(prevod)
                 self.message_user(
                     request,
-                    "Plochy převedeny na %s od %s. Zkontroluj klíče na teplo a vodu – "
-                    "ty se z výměry odvodit nedají." % (klient, datum),
+                    "Plochy převedeny na %s od %s. Zkontroluj klíče, které se z výměry "
+                    "odvodit nedají – teplo, voda, paušály." % (klient, datum),
                 )
                 return redirect(f"/admin/core/clientcard/{nova.pk}/change/")
 
@@ -4339,6 +4354,11 @@ class FloorplanAdmin(ModelAdmin):
             "datum": datum,
             "sazba": sazba,
             "prevod": prevod,
+            "cil_karta": cil_karta,
+            "rezim": rezim,
+            "REZIM_NOVA": REZIM_NOVA,
+            "REZIM_NAVAZAT": REZIM_NAVAZAT,
+            "REZIM_PRIDAT": REZIM_PRIDAT,
             "opts": self.model._meta,
             "title": "Převod ploch na Kartu",
         })

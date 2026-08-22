@@ -61,6 +61,15 @@
     margin-left: auto;
 }
 
+.rx-prepinac {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 13px;
+    cursor: pointer;
+    user-select: none;
+}
+
 .rx-planek-napoveda {
     font-size: 13px;
     color: rgb(var(--color-base-400));
@@ -196,6 +205,24 @@
     fill-opacity: .62;
 }
 
+/* kód klienta vypsaný do plochy - pod číslem místnosti z podkladu */
+.rx-kod-klienta {
+    fill: #1e3a8a;
+    font-family: Inter, system-ui, sans-serif;
+    font-weight: 700;
+    text-anchor: middle;
+    paint-order: stroke;
+    stroke: #fff;
+    stroke-width: 2.5;
+    stroke-linejoin: round;
+    pointer-events: none;   /* ať nepřekáží klikání a najíždění na plochu */
+}
+
+/* vypínatelné zaškrtávátkem v liště */
+.rx-planek-plocha.rx-bez-kodu .rx-kod-klienta {
+    display: none;
+}
+
 /* vybrané plochy pro převod - výrazný rámeček, ať je vidět i na tmavé výplni */
 .rx-plocha.rx-vybrano {
     fill-opacity: .70;
@@ -242,3 +269,11 @@
 .rx-planek-seznam .rx-konci       td:first-child { border-left-color: #f59e0b; }
 .rx-planek-seznam .rx-volne       td:first-child { border-left-color: #9ca3af; }
 .rx-planek-seznam .rx-neprirazeno td:first-child { border-left-color: #dc2626; }
+
+/* volba, co se má stát s běžící kartou nájemce */
+.rx-rezimy {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    margin: 6px 0 10px 2px;
+}

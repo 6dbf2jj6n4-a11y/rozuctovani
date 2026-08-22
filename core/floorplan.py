@@ -97,6 +97,53 @@ def _nahrad_stav_stylu(prvek):
         prvek.attrib.pop(atribut, None)
 
 
+def _stred_tvaru(prvek):
+    """Přibližný střed tvaru v souřadnicích výkresu, nebo None.
+
+    U obdélníku je to skutečný střed, u cesty průměr vrcholů - pro naše
+    plochy (obdélníky a zalomená „el“) leží uvnitř, což na popisek stačí.
+    """
+    druh = _bez_ns(prvek.tag)
+    if druh == "rect":
+        try:
+            return (
+                float(prvek.get("x", 0)) + float(prvek.get("width", 0)) / 2,
+                float(prvek.get("y", 0)) + float(prvek.get("height", 0)) / 2,
+                float(prvek.get("height", 0)),
+            )
+        except (TypeError, ValueError):
+            return None
+    if druh in ("path", "polygon"):
+        souradnice = prvek.get("d") or prvek.get("points") or ""
+        body = _body_cesty('<path d="%s"/>' % souradnice) if druh == "path" else []
+        if druh == "polygon":
+            cisla = [float(v) for v in re.findall(r"-?\d+\.?\d*", souradnice)]
+            body = list(zip(cisla[0::2], cisla[1::2]))
+        if not body:
+            return None
+        xs = [b[0] for b in body]
+        ys = [b[1] for b in body]
+        return (sum(xs) / len(xs), sum(ys) / len(ys), max(ys) - min(ys))
+    return None
+
+
+def _popisek(prvek, text, trida):
+    """Vytvoří <text> se jménem klienta pod středem tvaru."""
+    stred = _stred_tvaru(prvek)
+    if not stred:
+        return None
+    x, y, vyska = stred
+    velikost = max(7.0, min(13.0, vyska / 6))
+    popisek = ET.Element("{%s}text" % SVG_NS)
+    popisek.set("x", "%.1f" % x)
+    # pod číslo místnosti z podkladu, ne přes něj
+    popisek.set("y", "%.1f" % (y + velikost * 1.5))
+    popisek.set("class", trida)
+    popisek.set("font-size", "%.1f" % velikost)
+    popisek.text = text
+    return popisek
+
+
 def oznac_plochy(svg_text, stavy):
     """Vrati SVG pripravene k vlozeni do stranky.
 
@@ -113,6 +160,7 @@ def oznac_plochy(svg_text, stavy):
 
     vrstva = vrstvy.get(VRSTVA_PRONAJIMANE)
     if vrstva is not None:
+        popisky = []
         for prvek in vrstva:
             if _bez_ns(prvek.tag) not in TVARY or not prvek.get("id"):
                 continue
@@ -125,6 +173,15 @@ def oznac_plochy(svg_text, stavy):
                 prvek.set("data-popis", udaje["popis"])
             if udaje.get("odkaz"):
                 prvek.set("data-odkaz", udaje["odkaz"])
+
+            kod = udaje.get("kod_klienta")
+            if kod:
+                popisek = _popisek(prvek, kod, "rx-kod-klienta")
+                if popisek is not None:
+                    popisky.append(popisek)
+        # až po tvarech, aby se popisky kreslily navrch
+        for popisek in popisky:
+            vrstva.append(popisek)
 
     vrstva = vrstvy.get(VRSTVA_SPOLECNE)
     if vrstva is not None:
@@ -385,6 +442,9 @@ def stavy_ploch(site, k_datu, dni_do_konce=DNI_DO_KONCE):
             "stav": stav,
             "popis": popis,
             "klient": klient.name,
+            # kód se vypisuje přímo do plánku - celé jméno by se do kanceláře
+            # nevešlo, kód je krátký a Daniel ho zná
+            "kod_klienta": klient.code or klient.name[:10],
             "vymera": cu.area_m2,
             "odkaz": reverse("admin:core_clientcard_change", args=[karta.pk]),
         }
