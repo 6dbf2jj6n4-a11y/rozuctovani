@@ -11,3 +11,4 @@ requests
 reportlab
 Pillow
 django-storages[s3]
+svglib

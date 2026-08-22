@@ -15,7 +15,9 @@ from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import ParagraphStyle
 from reportlab.lib.units import mm
 from reportlab.pdfgen import canvas as _canvas
-from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
+from reportlab.platypus import (
+    PageBreak, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle,
+)
 
 from core.contract_generator import format_date_cz, get_landlord
 from core.models import AllocationKey, InvoiceClassColor, ServicePoolItem
@@ -112,6 +114,56 @@ def _fmt_key_value(key):
     if key.allocation_type == t.WEIGHTED_COUNT and key.weight_unit_label:
         return f"{value} ({key.weight_unit_label})"
     return f"{value}"
+
+
+_STYLE_PLAN_POPIS = ParagraphStyle(
+    "CardPlanPopis", fontName=FONT_REGULAR, fontSize=_FONT_SIZE, leading=_FONT_SIZE + 3,
+)
+
+
+def _planek_stranky(card, sirka, vyska):
+    """Stranky s pudorysy pater, na kterych ma Karta plochy.
+
+    Vraci flowables k pripojeni na konec dokumentu - kazdy planek zacina na
+    nove strane. Kdyz planek chybi, nejde precist nebo neni nainstalovana
+    svglib, vrati se prazdny seznam a Karta se vygeneruje jako driv; priloha
+    je hezka navic, ne duvod, proc by nemela jit vytisknout smlouva.
+    """
+    from io import BytesIO
+
+    try:
+        from svglib.svglib import svg2rlg
+    except ImportError:
+        return []
+
+    from core.floorplan import oznac_plochy_pro_tisk, planky_pro_kartu
+
+    out = []
+    for plan, moje in planky_pro_kartu(card):
+        try:
+            svg = oznac_plochy_pro_tisk(plan.read_svg(), moje)
+            kresba = svg2rlg(BytesIO(svg.encode("utf-8")))
+        except Exception:
+            continue
+        if kresba is None or not kresba.width or not kresba.height:
+            continue
+
+        pomer = min(sirka / kresba.width, vyska / kresba.height)
+        kresba.width *= pomer
+        kresba.height *= pomer
+        kresba.scale(pomer, pomer)
+        kresba.hAlign = "CENTER"
+
+        out.append(PageBreak())
+        out.append(Paragraph(f"Plánek – {plan.name}", _STYLE_H2))
+        out.append(Paragraph(
+            "Tmavě zvýrazněné jsou plochy této Karty ({}). Ostatní plochy jsou "
+            "světlé, jen pro orientaci v patře.".format(", ".join(moje)),
+            _STYLE_PLAN_POPIS,
+        ))
+        out.append(Spacer(1, 3 * mm))
+        out.append(kresba)
+    return out
 
 
 def generate_client_card_document(card, output_path):
@@ -233,6 +285,9 @@ def generate_client_card_document(card, output_path):
         ("TOPPADDING", (0, 1), (-1, 1), _SIG_GAP),
     ]))
     elements.append(sig_table)
+
+    # --- Plánky pater, kde má karta plochy (každý na vlastní straně) ---
+    elements.extend(_planek_stranky(card, doc.width, doc.height - 20 * mm))
 
     doc.build(elements, canvasmaker=_NumberedCanvas)
     return output_path

@@ -140,6 +140,79 @@ def oznac_plochy(svg_text, stavy):
     return re.sub(r'\s+xmlns:ns\d+="[^"]*"', "", xml)
 
 
+# -------------------------------------------------------------------- tisk
+
+# Barvy pro tisk musi byt primo v atributech tvaru - svglib CSS neresi.
+# Karta najemce je cernobila (viz core/client_card_generator.py), takze se
+# rozlisuje jen sytosti sedi a silou obrysu. Vyplne jsou pruhledne, aby pod
+# nimi zustala citelna cisla mistnosti a zdi z podkladu.
+TISK_MOJE = {"fill": "#000000", "fill-opacity": "0.28", "stroke": "#000000", "stroke-width": "2.5"}
+TISK_CIZI = {"fill": "#000000", "fill-opacity": "0.07", "stroke": "#808080", "stroke-width": "0.8"}
+TISK_SPOLECNE = {"fill": "#000000", "fill-opacity": "0.04", "stroke": "#a0a0a0", "stroke-width": "0.6"}
+
+
+def oznac_plochy_pro_tisk(svg_text, moje_kody):
+    """SVG pripravene pro svglib -> reportlab (priloha Karty najemce).
+
+    Plochy klienta se zvyrazni, ostatni pronajimatelne zesednou (klient
+    nema videt, kdo sedi vedle) a spolecne zustanou jen naznacene.
+    Na rozdil od :func:`oznac_plochy` se barvy zapisuji primo do atributu,
+    protoze svglib nezna CSS ani tridy.
+    """
+    ET.register_namespace("", SVG_NS)
+    ET.register_namespace("inkscape", INKSCAPE_NS)
+    ET.register_namespace("sodipodi", "http://sodipodi.sourceforge.net/DTD/sodipodi-0.0.dtd")
+    koren = ET.fromstring(svg_text)
+    vrstvy = _vrstvy(koren)
+    moje = {nazev_na_id(k) for k in moje_kody}
+
+    def _obarvi(prvek, barvy):
+        _nahrad_stav_stylu(prvek)
+        for atribut, hodnota in barvy.items():
+            prvek.set(atribut, hodnota)
+
+    vrstva = vrstvy.get(VRSTVA_PRONAJIMANE)
+    if vrstva is not None:
+        for prvek in vrstva:
+            if _bez_ns(prvek.tag) not in TVARY or not prvek.get("id"):
+                continue
+            _obarvi(prvek, TISK_MOJE if prvek.get("id") in moje else TISK_CIZI)
+
+    vrstva = vrstvy.get(VRSTVA_SPOLECNE)
+    if vrstva is not None:
+        for prvek in vrstva:
+            if _bez_ns(prvek.tag) in TVARY:
+                _obarvi(prvek, TISK_SPOLECNE)
+
+    return ET.tostring(koren, encoding="unicode")
+
+
+def planky_pro_kartu(card):
+    """Vrati [(Planek, [nazvy ploch karty na nem])] pro Kartu klienta.
+
+    Jen patra, kde karta opravdu neco ma - najemce jedne kancelare nema co
+    delat s pudorysem haly D3.
+    """
+    from core.models import Floorplan
+
+    moje = {cu.unit.name for cu in card.card_units.select_related("unit") if cu.unit}
+    if not moje:
+        return []
+
+    out = []
+    for plan in Floorplan.objects.filter(
+        site__units__card_units__card=card, is_active=True
+    ).distinct():
+        try:
+            pronajimane, _ = kody_ploch(plan.read_svg())
+        except Exception:
+            continue
+        na_planku = sorted(moje & set(pronajimane))
+        if na_planku:
+            out.append((plan, na_planku))
+    return out
+
+
 # ---------------------------------------------------------------- obsazenost
 
 #: kolik dni dopredu se konec najmu uz hlasi jako "konci"
