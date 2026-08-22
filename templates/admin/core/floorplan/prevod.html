@@ -76,6 +76,16 @@
                 </p>
             {% endif %}
 
+            <p class="rx-planek-napoveda">
+                {% if prevod.klice_z_ploch %}
+                    Klíče se odvodí z <strong>Výchozích služeb ploch</strong>.
+                {% else %}
+                    Plochy nemají vyplněné Výchozí služby, takže se klíče převezmou
+                    jako vzor z původní Karty. Až Výchozí služby doplníš, budou se
+                    brát odtamtud.
+                {% endif %}
+            </p>
+
             <p class="rx-odstavec">
                 Nová karta pro <strong>{{ prevod.klient }}</strong> od
                 <strong>{{ prevod.datum|date:'j. n. Y' }}</strong>, celkem

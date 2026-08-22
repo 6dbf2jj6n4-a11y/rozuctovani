@@ -53,6 +53,16 @@ class Prevod:
         self.potize = []        # blokující - převod nemá co dělat
 
     @property
+    def klice_z_ploch(self):
+        """True, když si nová Karta klíče odvodí z Výchozích služeb ploch.
+
+        Když plochy Výchozí služby nemají, vezme se vzor z původní Karty -
+        viz :func:`proved`. Náhled to má říct dopředu, ať je jasné, odkud
+        klíče přijdou.
+        """
+        return any(u.unit_services.exists() for u in self.vsechny_plochy)
+
+    @property
     def vsechny_plochy(self):
         """Plochy pro novou Kartu, každá jen jednou.
 
@@ -185,9 +195,14 @@ def proved(prevod):
             rate_per_m2=prevod.sazba,
         )
 
-    # 4) klíče podle vzoru z původní karty - plošné přepočítané na m² nové
-    #    karty, ostatní (teplo, voda, internet) převzaté a k ruční kontrole
-    if vzor_klicu:
+    # 4) Klíče. Přednost mají Výchozí služby plochy (UnitService) - ty už
+    #    založil CardUnit.save() -> create_default_keys() o kus výš. Je to
+    #    správný zdroj: klíč patří k ploše, ne ke Kartě, ze které se zrovna
+    #    převádí. Dokud ale Prostory Výchozí služby vyplněné nemají, vznikla
+    #    by Karta úplně bez klíčů - proto se v tom případě vezme vzor
+    #    z původní Karty. Až budou Výchozí služby doplněné, tahle větev se
+    #    přestane používat sama od sebe.
+    if vzor_klicu and not nova.allocation_keys.exists():
         nova_m2 = _soucet_m2(nova)
         for klic in vzor_klicu["plosne_klice"]:
             AllocationKey.objects.create(
