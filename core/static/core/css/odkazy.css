@@ -1,0 +1,43 @@
+/*
+Odkazy v textu vlastnich sestav musi byt poznat.
+
+Unfold barvi odkazy jen tam, kde si je sam stylizuje (menu, drobeckova
+navigace, seznamy zaznamu). V nasich vlastnich strankach a sestavach
+zustaval <a> v barve okolniho textu, takze nebyl k rozeznani od bezneho
+odstavce - Daniel na to upozornil u Kontroly planku 2026-08-19 s tim, ze
+to same videl i jinde.
+
+Zamerne se cili jen na odkazy v TEXTU (odstavce, seznamy) uvnitr obsahu
+stranky, ne na vsechny <a> v #content: seznamy zaznamu, inline tabulky a
+ikonky u navazanych objektu si Unfold stylizuje sam a podtrhavat je
+vsechny by cely admin rozhodilo. Tlacitka (rx-btn) se vynechavaji taky -
+ta uz jako klikatelna vypadaji.
+
+Promenna --color-primary-* se pouziva primo (ne pres rgb()), stejne jako
+to dela Unfold ve svem stylesheetu a core/static/core/css/buttons.css.
+*/
+#content p a:not(.rx-btn),
+#content li a:not(.rx-btn),
+#content dd a:not(.rx-btn) {
+    color: var(--color-primary-600);
+    text-decoration: underline;
+    text-underline-offset: 2px;
+}
+
+#content p a:not(.rx-btn):hover,
+#content li a:not(.rx-btn):hover,
+#content dd a:not(.rx-btn):hover {
+    color: var(--color-primary-700);
+}
+
+html.dark #content p a:not(.rx-btn),
+html.dark #content li a:not(.rx-btn),
+html.dark #content dd a:not(.rx-btn) {
+    color: var(--color-primary-400);
+}
+
+html.dark #content p a:not(.rx-btn):hover,
+html.dark #content li a:not(.rx-btn):hover,
+html.dark #content dd a:not(.rx-btn):hover {
+    color: var(--color-primary-300);
+}

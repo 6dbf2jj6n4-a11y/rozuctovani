@@ -50,3 +50,8 @@ def sidebar_extras_css(request):
 def planky_css(request):
     from django.templatetags.static import static
     return static("core/css/planky.css")
+
+
+def odkazy_css(request):
+    from django.templatetags.static import static
+    return static("core/css/odkazy.css")
