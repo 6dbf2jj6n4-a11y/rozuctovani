@@ -892,29 +892,6 @@ class ContractAdmin(DuplicateModelAdminMixin, ModelAdmin):
         initial.setdefault("inflation_increase_from", date(today.year + 1, 1, 1))
         return initial
 
-    fieldsets = (
-        ("Základní údaje", {
-            "fields": (("client", "site"), ("number", "signed_on"))
-        }),
-        ("Trvání a výpověď", {
-            "fields": ("valid_from", "na_dobu_neurcitou", "valid_to", "notice_period_months")
-        }),
-        ("Kauce a pojištění", {
-            "fields": (("deposit_czk", "deposit_paid"), "insurance_amount_czk")
-        }),
-        ("Inflační doložka", {
-            "fields": ("has_inflation_clause", "inflation_increase_from")
-        }),
-        ("Fakturace a zástupce", {
-            "fields": ("invoicing_email", ("representative_name", "representative_role"))
-        }),
-        ("Dokument", {
-            "fields": ("generate_button", "document")
-        }),
-        ("Poznámka", {
-            "fields": ("note",)
-        }),
-    )
     conditional_fields = {
         "valid_to": "na_dobu_neurcitou == false",
     }
@@ -1076,7 +1053,7 @@ class ContractAdmin(DuplicateModelAdminMixin, ModelAdmin):
             "fields": (("client", "site", "number"), "signed_on")
         }),
         ("Platnost", {
-            "fields": (("valid_from", "valid_to"), "notice_period_months")
+            "fields": ("valid_from", "na_dobu_neurcitou", "valid_to", "notice_period_months")
         }),
         ("Kauce a pojištění", {
             "fields": (("deposit_czk", "deposit_paid"), "insurance_amount_czk")
