@@ -106,12 +106,20 @@ class Floorplan(models.Model):
         return f"{self.site} – {self.name}"
 
     def save(self, *args, **kwargs):
-        """Po ulozeni si obsah nahraneho souboru zkopiruje do `svg_text`.
+        """Po nahrani noveho souboru si jeho obsah zkopiruje do `svg_text`.
 
-        Soubor na disku slouzi uz jen jako pohodlny nahravaci widget v adminu -
-        po nasazeni tam nemusi byt, proto se pri nedostupnem souboru jen necha
-        to, co uz je v databazi."""
+        Deje se to JEN pri skutecnem nahrani (a kdyz je `svg_text` z nejakeho
+        duvodu prazdny), ne pri kazdem ulozeni - jinak by pouhe prejmenovani
+        planku v adminu prepsalo zmenseny text zpatky puvodnim, nafouklym
+        souborem (viz akce „Zmenšit výkres“).
+
+        `_committed` je vnitrni priznak FieldFile: False znamena, ze v poli
+        sedi cerstve nahrany soubor, ktery se jeste neulozil.
+        """
+        novy_soubor = bool(self.svg) and not getattr(self.svg, "_committed", True)
         super().save(*args, **kwargs)
+        if not novy_soubor and self.svg_text:
+            return
         try:
             text = self._precti_soubor()
         except Exception:

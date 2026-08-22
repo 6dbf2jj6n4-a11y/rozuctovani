@@ -140,6 +140,119 @@ def oznac_plochy(svg_text, stavy):
     return re.sub(r'\s+xmlns:ns\d+="[^"]*"', "", xml)
 
 
+# ------------------------------------------------------------------ zmenseni
+
+#: na kolik desetinnych mist se krati souradnice cest
+DESETINNA_MISTA = 1
+
+_VZOR_CESTA = re.compile(r'(<path\b[^>]*?)\sd="([^"]*)"', re.S)
+_VZOR_CISLO = re.compile(r"-?\d+\.\d+")
+
+
+def _body_cesty(tag):
+    """Koncove body cesty v souradnicich dokumentu (vcetne transformace)."""
+    d = re.search(r'\sd="([^"]*)"', tag)
+    if not d:
+        return []
+    tr = re.search(r'transform="matrix\(([^)]*)\)"', tag)
+    if tr:
+        a, b, c, dd, e, f = [float(v) for v in re.split(r"[,\s]+", tr.group(1).strip())]
+    else:
+        a, b, c, dd, e, f = 1, 0, 0, 1, 0, 0
+
+    toks = re.findall(r"[MmLlHhVvCcZz]|-?\d*\.?\d+(?:e-?\d+)?", d.group(1))
+    x = y = 0.0
+    cmd = None
+    i = 0
+    pts = []
+    while i < len(toks):
+        t = toks[i]
+        if re.match(r"[A-Za-z]", t):
+            cmd = t
+            i += 1
+            continue
+        try:
+            if cmd in "MmLl":
+                dx, dy = float(toks[i]), float(toks[i + 1])
+                i += 2
+                x, y = (x + dx, y + dy) if cmd in "ml" else (dx, dy)
+                cmd = "l" if cmd == "m" else ("L" if cmd == "M" else cmd)
+            elif cmd in "Hh":
+                dx = float(toks[i]); i += 1
+                x = x + dx if cmd == "h" else dx
+            elif cmd in "Vv":
+                dy = float(toks[i]); i += 1
+                y = y + dy if cmd == "v" else dy
+            elif cmd in "Cc":
+                v = [float(toks[i + k]) for k in range(6)]; i += 6
+                x, y = (x + v[4], y + v[5]) if cmd == "c" else (v[4], v[5])
+            else:
+                i += 1
+                continue
+        except (IndexError, ValueError):
+            i += 1
+            continue
+        pts.append((a * x + c * y + e, b * x + dd * y + f))
+    return pts
+
+
+def zmensi(svg_text, mist=DESETINNA_MISTA, rezerva=2.0):
+    """Vyhodi z vykresu balast po exportu z CADu a zkrati souradnice.
+
+    Vraci (novy_text, prehled). Delaji se dve veci:
+
+    1. **Smazou se tvary uplne mimo vykres** - ram listu A3, znacky pro
+       skladani a registracni znacky mimo list. V oriznutem pohledu je
+       nevidis, jen nafukuji soubor a rozhazuji vyber pres Ctrl+A.
+    2. **Zkrati se souradnice cest.** CAD pise pet desetinnych mist,
+       pritom jedna jednotka odpovida na vytistene A4 asi 0,064 mm - paté
+       desetinne misto je tedy sest desetimiliontin milimetru. Na jedno
+       desetinne misto vyjde krok 0,006 mm, porad o rad jemneji, nez
+       rozlisi tiskarna. **Na nulu desetinnych mist nechodit** - kotovaci
+       cisla jsou vektorove obrysy a zacnou se drolit.
+
+    Tvary ploch (rect/polygon ve vrstvach Plochy_*) se nedotýka, aby se
+    nemohlo stat, ze se rozejdou s `id`.
+    """
+    vb = re.search(r'viewBox="([^"]*)"', svg_text)
+    smazano = 0
+    if vb:
+        x0, y0, w, h = [float(v) for v in vb.group(1).split()]
+        x1, y1 = x0 + w, y0 + h
+        ke_smazani = []
+        for m in re.finditer(r"<path\b[^>]*?/>", svg_text, re.S):
+            pts = _body_cesty(m.group(0))
+            if pts and all(
+                px < x0 - rezerva or px > x1 + rezerva or py < y0 - rezerva or py > y1 + rezerva
+                for px, py in pts
+            ):
+                ke_smazani.append((m.start(), m.end()))
+        for zacatek, konec in sorted(ke_smazani, key=lambda z: -z[0]):
+            svg_text = svg_text[:zacatek] + svg_text[konec:]
+        smazano = len(ke_smazani)
+
+    puvodni = len(svg_text)
+
+    def _cislo(m):
+        out = "%.*f" % (mist, round(float(m.group(0)), mist))
+        if "." in out:
+            out = out.rstrip("0").rstrip(".")
+        return "0" if out in ("", "-", "-0") else out
+
+    # POZOR: jen atribut `d` u <path>. Sirsi vzor by sedl i na konec
+    # `id="AB_3.10"` a udelal by z nej `AB_3.1`.
+    novy = _VZOR_CESTA.sub(
+        lambda m: '%s d="%s"' % (m.group(1), _VZOR_CISLO.sub(_cislo, m.group(2))), svg_text
+    )
+
+    return novy, {
+        "smazano": smazano,
+        "pred": puvodni,
+        "po": len(novy),
+        "usporeno": puvodni - len(novy),
+    }
+
+
 # -------------------------------------------------------------------- tisk
 
 # Barvy pro tisk musi byt primo v atributech tvaru - svglib CSS neresi.

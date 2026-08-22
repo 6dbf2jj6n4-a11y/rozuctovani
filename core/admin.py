@@ -4201,10 +4201,53 @@ class FloorplanAdmin(ModelAdmin):
     """Planky (2D pudorysy). Tvary ploch zustavaji ve vykresu, obsazenost
     v Kartach - parovani je jen pres `id` polygonu (viz core/floorplan.py)."""
 
-    list_display = ("name", "site", "order", "ploch", "is_active", "prohlizec_odkaz")
+    list_display = ("name", "site", "order", "ploch", "velikost", "is_active", "prohlizec_odkaz")
     list_filter = ("site", "is_active")
     search_fields = ("name", "note")
     ordering = ("site", "order", "name")
+    actions = ["zmensit_vykres"]
+
+    @display(description="Velikost")
+    def velikost(self, obj):
+        return "%.2f MB" % (len(obj.svg_text or "") / 1024 / 1024)
+
+    @admin.action(description="Zmenšit výkres (vyčistit balast a zkrátit souřadnice)")
+    def zmensit_vykres(self, request, queryset):
+        """Vyhodi zbytky po exportu z CADu a zkrati souradnice na jedno
+        desetinne misto - viz core.floorplan.zmensi. Puvodne nahrany soubor
+        zustava netknuty, meni se jen kopie v databazi, ze ktere se kresli."""
+        from core.floorplan import zmensi
+
+        celkem = 0
+        for plan in queryset:
+            try:
+                text = plan.read_svg()
+            except Exception as potiz:
+                self.message_user(request, f"{plan.name}: výkres nejde přečíst – {potiz}",
+                                  level=messages.ERROR)
+                continue
+
+            novy, prehled = zmensi(text)
+            if prehled["usporeno"] <= 0 and not prehled["smazano"]:
+                self.message_user(request, f"{plan.name}: už je zmenšený, nic k úpravě.")
+                continue
+
+            # pres queryset, aby se obesel Floorplan.save() a nesahal na soubor
+            Floorplan.objects.filter(pk=plan.pk).update(svg_text=novy)
+            plan.svg_text = novy
+            celkem += prehled["usporeno"]
+            self.message_user(request, (
+                "{}: smazáno {} tvarů mimo výkres, {:.2f} → {:.2f} MB "
+                "(úspora {:.0f} %)".format(
+                    plan.name, prehled["smazano"],
+                    prehled["pred"] / 1024 / 1024, prehled["po"] / 1024 / 1024,
+                    100 - 100.0 * prehled["po"] / prehled["pred"],
+                )
+            ))
+
+        if celkem:
+            self.message_user(request, "Celkem ušetřeno %.2f MB. Menší je i PDF Karty nájemce."
+                              % (celkem / 1024 / 1024))
 
     @display(description="Ploch ve výkresu")
     def ploch(self, obj):
