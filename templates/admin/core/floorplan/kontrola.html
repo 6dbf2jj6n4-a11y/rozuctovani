@@ -9,14 +9,21 @@
         (<code class="rx-kod">AB_3.03</code> = <code class="rx-kod">AB 3.03</code>). Obojí musí sedět znak po znaku.
     </p>
 
-    <form method="get" class="rx-planek-ovladani">
-        <label for="site">Areál:</label>
-        <select name="site" id="site" onchange="this.form.submit()">
-            {% for s in sites %}
-                <option value="{{ s.pk }}" {% if vybrany and s.pk == vybrany.pk %}selected{% endif %}>{{ s.name }}</option>
-            {% endfor %}
-        </select>
-        <noscript><button type="submit" class="rx-btn rx-btn-sm rx-btn-primary">Zobrazit</button></noscript>
+    <form method="get" class="rx-filters">
+        <div>
+            <label for="site">Areál</label>
+            <select name="site" id="site" onchange="this.form.submit()">
+                {% for s in sites %}
+                    <option value="{{ s.pk }}" {% if vybrany and s.pk == vybrany.pk %}selected{% endif %}>{{ s.name }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <noscript>
+            <div>
+                <label>&nbsp;</label>
+                <button type="submit" class="rx-btn rx-btn-sm rx-btn-primary">Zobrazit</button>
+            </div>
+        </noscript>
     </form>
 
     {% if not vysledek %}

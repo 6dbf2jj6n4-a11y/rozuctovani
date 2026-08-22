@@ -17,22 +17,31 @@
         {% for k in kody %}<input type="hidden" name="plochy" value="{{ k }}">{% endfor %}
 
         <h2 class="rx-nadpis">Komu a od kdy</h2>
-        <div class="rx-planek-ovladani">
-            <label for="klient">Nájemce:</label>
+        <div class="rx-filters">
+            <div>
+            <label for="klient">Nájemce</label>
             <select name="klient" id="klient">
                 <option value="">— vyber klienta —</option>
                 {% for c in klienti %}
                     <option value="{{ c.pk }}" {% if klient and c.pk == klient.pk %}selected{% endif %}>{{ c.name }}</option>
                 {% endfor %}
             </select>
+            </div>
 
-            <label for="datum">Platnost od:</label>
-            <input type="date" name="datum" id="datum" value="{{ datum|date:'Y-m-d' }}">
+            <div>
+                <label for="datum">Platnost od</label>
+                <input type="date" name="datum" id="datum" value="{{ datum|date:'Y-m-d' }}">
+            </div>
 
-            <label for="sazba">Sazba Kč/m²/rok:</label>
-            <input type="number" step="0.01" name="sazba" id="sazba" value="{{ sazba|default_if_none:'' }}" style="width:8em">
+            <div>
+                <label for="sazba">Sazba Kč/m²/rok</label>
+                <input type="number" step="0.01" name="sazba" id="sazba" value="{{ sazba|default_if_none:'' }}" style="width:8em">
+            </div>
 
-            <button type="submit" class="rx-btn rx-btn-primary rx-btn-sm">Spočítat</button>
+            <div>
+                <label>&nbsp;</label>
+                <button type="submit" class="rx-btn rx-btn-primary rx-btn-sm">Spočítat</button>
+            </div>
         </div>
 
         {% if cil_karta %}
