@@ -3,29 +3,57 @@
 {% block content %}
 <div class="rx-planek-stranka">
 
-    <form method="get" class="rx-planek-ovladani">
-        <label for="datum">Stav k datu:</label>
-        <input type="date" id="datum" name="datum" value="{{ k_datu|date:'Y-m-d' }}">
-        <button type="submit" class="rx-btn rx-btn-primary rx-btn-sm">Zobrazit</button>
+    <form method="get" class="rx-filters">
+        <div>
+            <label for="obdobi">Stav za období</label>
+            <select name="obdobi" id="obdobi" onchange="this.form.submit()">
+                <option value="">— podle data —</option>
+                {% for o in obdobi %}
+                    <option value="{{ o.pk }}" {% if vybrane_obdobi and o.pk == vybrane_obdobi.pk %}selected{% endif %}>
+                        {{ o.month }}/{{ o.year }}{% if o.is_current %} (aktuální){% endif %}
+                    </option>
+                {% endfor %}
+            </select>
+        </div>
+
+        <div>
+            <label for="datum">nebo k datu</label>
+            <input type="date" id="datum" name="datum" value="{{ k_datu|date:'Y-m-d' }}"
+                   onchange="document.getElementById('obdobi').value='';">
+        </div>
+
+        <div>
+            <label>&nbsp;</label>
+            <button type="submit" class="rx-btn rx-btn-primary rx-btn-sm">Zobrazit</button>
+        </div>
 
         {% if plany_arealu|length > 1 %}
-            <span class="rx-planek-prepinac">
-                {% for p in plany_arealu %}
-                    {% if p.pk == plan.pk %}
-                        <strong>{{ p.name }}</strong>
-                    {% else %}
-                        <a href="{% url 'admin:core_floorplan_prohlizec' p.pk %}?datum={{ k_datu|date:'Y-m-d' }}">{{ p.name }}</a>
-                    {% endif %}
-                {% endfor %}
-            </span>
+            <div>
+                <label>Patro</label>
+                <span class="rx-planek-prepinac">
+                    {% for p in plany_arealu %}
+                        {% if p.pk == plan.pk %}
+                            <strong>{{ p.name }}</strong>
+                        {% else %}
+                            <a href="{% url 'admin:core_floorplan_prohlizec' p.pk %}?datum={{ k_datu|date:'Y-m-d' }}">{{ p.name }}</a>
+                        {% endif %}
+                    {% endfor %}
+                </span>
+            </div>
         {% endif %}
 
-        <label class="rx-prepinac">
-            <input type="checkbox" id="rx-kody" checked> kódy klientů v plánku
-        </label>
+        <div>
+            <label>Zobrazit</label>
+            <label class="rx-prepinac">
+                <input type="checkbox" id="rx-kody" checked> kódy klientů
+            </label>
+        </div>
 
-        <a class="rx-btn rx-btn-sm rx-planek-kontrola"
-           href="{% url 'admin:core_floorplan_kontrola' %}?site={{ plan.site.pk }}">Kontrola párování</a>
+        <div class="rx-planek-kontrola">
+            <label>&nbsp;</label>
+            <a class="rx-btn rx-btn-sm"
+               href="{% url 'admin:core_floorplan_kontrola' %}?site={{ plan.site.pk }}">Kontrola párování</a>
+        </div>
     </form>
 
     <form method="post" action="{% url 'admin:core_floorplan_prevod' plan.pk %}"

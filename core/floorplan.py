@@ -127,8 +127,8 @@ def _stred_tvaru(prvek):
     return None
 
 
-def _popisek(prvek, text, trida):
-    """Vytvoří <text> se jménem klienta pod středem tvaru."""
+def _popisek(prvek, text, trida, radek=1):
+    """Vytvoří <text> pod středem tvaru. `radek` posouvá pod sebe."""
     stred = _stred_tvaru(prvek)
     if not stred:
         return None
@@ -137,7 +137,7 @@ def _popisek(prvek, text, trida):
     popisek = ET.Element("{%s}text" % SVG_NS)
     popisek.set("x", "%.1f" % x)
     # pod číslo místnosti z podkladu, ne přes něj
-    popisek.set("y", "%.1f" % (y + velikost * 1.5))
+    popisek.set("y", "%.1f" % (y + velikost * (0.5 + radek)))
     popisek.set("class", trida)
     popisek.set("font-size", "%.1f" % velikost)
     popisek.text = text
@@ -177,6 +177,11 @@ def oznac_plochy(svg_text, stavy):
             kod = udaje.get("kod_klienta")
             if kod:
                 popisek = _popisek(prvek, kod, "rx-kod-klienta")
+                if popisek is not None:
+                    popisky.append(popisek)
+            budouci_kod = udaje.get("budouci_kod")
+            if budouci_kod:
+                popisek = _popisek(prvek, "→ " + budouci_kod, "rx-kod-budouci", radek=2)
                 if popisek is not None:
                     popisky.append(popisek)
         # až po tvarech, aby se popisky kreslily navrch
@@ -422,6 +427,16 @@ def stavy_ploch(site, k_datu, dni_do_konce=DNI_DO_KONCE):
         .order_by("card__valid_from")
     )
 
+    # Kdo plochu převezme AŽ POTOM. Bez toho plánek k dnešku mlčí o tom, že
+    # je plocha od příštího měsíce slíbená - a člověk ji pak marně převádí.
+    budouci = {}
+    for cu in (
+        CardUnit.objects.select_related("card", "card__client", "unit")
+        .filter(unit__site=site, card__is_active=True, card__valid_from__gt=k_datu)
+        .order_by("-card__valid_from")          # dřívější přepíše pozdější
+    ):
+        budouci[cu.unit.name] = cu.card
+
     hranice = k_datu + timedelta(days=dni_do_konce)
     out = {}
     for cu in radky:
@@ -438,9 +453,16 @@ def stavy_ploch(site, k_datu, dni_do_konce=DNI_DO_KONCE):
             popis = klient.name
         # pozdejsi Karta prepise drivejsi (order_by vyse), takze u prekryvu
         # vyhrava ta, ktera zacala pozdeji
+        prijde = budouci.get(cu.unit.name)
+        if prijde:
+            popis += " · od %s %s" % (
+                prijde.valid_from.strftime("%-d. %-m. %Y"), prijde.client.name)
+
         out[cu.unit.name] = {
             "stav": stav,
             "popis": popis,
+            "budouci_kod": (prijde.client.code or prijde.client.name[:10]) if prijde else "",
+            "budouci_od": prijde.valid_from if prijde else None,
             "klient": klient.name,
             # kód se vypisuje přímo do plánku - celé jméno by se do kanceláře
             # nevešlo, kód je krátký a Daniel ho zná

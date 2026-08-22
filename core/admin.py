@@ -4401,13 +4401,22 @@ class FloorplanAdmin(ModelAdmin):
 
         plan = get_object_or_404(Floorplan, pk=plan_id)
 
+        # Období má přednost před datem: Daniel s ním pracuje běžněji než
+        # s kalendářem a stav plánku se mění hlavně mezi měsíci.
         k_datu = date.today()
-        zadane = request.GET.get("datum")
-        if zadane:
-            try:
-                k_datu = date.fromisoformat(zadane)
-            except ValueError:
-                messages.warning(request, "Datum nedává smysl, používám dnešek.")
+        vybrane_obdobi = None
+        obdobi_id = request.GET.get("obdobi")
+        if obdobi_id:
+            vybrane_obdobi = Period.objects.filter(pk=obdobi_id).first()
+        if vybrane_obdobi:
+            k_datu = date(vybrane_obdobi.year, vybrane_obdobi.month, 1)
+        else:
+            zadane = request.GET.get("datum")
+            if zadane:
+                try:
+                    k_datu = date.fromisoformat(zadane)
+                except ValueError:
+                    messages.warning(request, "Datum nedává smysl, používám dnešek.")
 
         stavy = stavy_ploch(plan.site, k_datu)
         try:
@@ -4434,6 +4443,8 @@ class FloorplanAdmin(ModelAdmin):
             "svg": mark_safe(svg),
             "chyba": chyba,
             "k_datu": k_datu,
+            "obdobi": Period.objects.all()[:36],
+            "vybrane_obdobi": vybrane_obdobi,
             "radky": radky,
             "plany_arealu": Floorplan.objects.filter(site=plan.site, is_active=True),
             "opts": self.model._meta,
