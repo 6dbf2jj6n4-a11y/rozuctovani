@@ -196,6 +196,31 @@
     fill-opacity: .62;
 }
 
+/* vybrané plochy pro převod - výrazný rámeček, ať je vidět i na tmavé výplni */
+.rx-plocha.rx-vybrano {
+    fill-opacity: .70;
+    stroke: #7c3aed;
+    stroke-width: 4;
+    stroke-dasharray: 10 5;
+}
+
+.rx-planek-vyber {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin: 0 0 10px;
+    padding: 8px 12px;
+    border-radius: 8px;
+    background: rgb(var(--color-base-100));
+    border: 1px solid rgb(var(--color-primary-500));
+    font-size: 13px;
+}
+
+#rx-vyber-popis {
+    font-weight: 600;
+}
+
 /* barvy jsou schválně napevno, ne z motivu - musí být čitelné na bílém
    výkresu a hlavně stejné v prohlížeči i v PDF Karty */
 .rx-obsazeno    { fill: #2563eb; stroke: #1d4ed8; }

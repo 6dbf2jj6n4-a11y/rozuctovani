@@ -24,6 +24,15 @@
            href="{% url 'admin:core_floorplan_kontrola' %}?site={{ plan.site.pk }}">Kontrola párování</a>
     </form>
 
+    <form method="post" action="{% url 'admin:core_floorplan_prevod' plan.pk %}"
+          id="rx-vyber" class="rx-planek-vyber" hidden>
+        {% csrf_token %}
+        <span id="rx-vyber-popis"></span>
+        <span id="rx-vyber-pole"></span>
+        <button type="submit" class="rx-btn rx-btn-primary rx-btn-sm">Převést na Kartu</button>
+        <button type="button" id="rx-vyber-zrusit" class="rx-btn rx-btn-sm">Zrušit výběr</button>
+    </form>
+
     {% if chyba %}
         <p class="rx-planek-chyba">Výkres se nepodařilo přečíst: {{ chyba }}</p>
     {% endif %}
@@ -102,10 +111,58 @@
         const tvar = e.target.closest('.rx-plocha[data-kod]');
         if (tvar) { zvyrazni(tvar.dataset.kod, false); }
     });
-    plocha.addEventListener('click', function (e) {
-        const tvar = e.target.closest('.rx-plocha[data-odkaz]');
-        if (tvar) { window.location = tvar.dataset.odkaz; }
+    // Klik vybírá plochy pro převod, Ctrl/Cmd+klik otevře Kartu. Výběr je
+    // schválně na klik a ne na Ctrl - Daniel chce vybrat víc ploch najednou
+    // a nechce se překliknout.
+    const vybrane = new Map();
+    const listaVyberu = document.getElementById('rx-vyber');
+    const popisVyberu = document.getElementById('rx-vyber-popis');
+    const poleVyberu = document.getElementById('rx-vyber-pole');
+    const vymery = {};
+    document.querySelectorAll('.rx-radek').forEach(function (tr) {
+        const m2 = parseFloat((tr.querySelector('.rx-cislo').textContent || '').replace(',', '.'));
+        vymery[tr.dataset.kod] = isNaN(m2) ? 0 : m2;
     });
+
+    function prekresliVyber() {
+        if (!listaVyberu) { return; }
+        listaVyberu.hidden = vybrane.size === 0;
+        let soucet = 0;
+        vybrane.forEach(function (_, kod) { soucet += vymery[kod] || 0; });
+        popisVyberu.textContent = 'Vybráno ' + vybrane.size + ' ploch, ' +
+            soucet.toFixed(2).replace('.', ',') + ' m²: ' + [...vybrane.keys()].join(', ');
+        poleVyberu.innerHTML = '';
+        vybrane.forEach(function (_, kod) {
+            const i = document.createElement('input');
+            i.type = 'hidden'; i.name = 'plochy'; i.value = kod;
+            poleVyberu.appendChild(i);
+        });
+    }
+
+    plocha.addEventListener('click', function (e) {
+        const tvar = e.target.closest('.rx-plocha[data-kod]');
+        if (!tvar) { return; }
+        if (e.metaKey || e.ctrlKey) {
+            if (tvar.dataset.odkaz) { window.location = tvar.dataset.odkaz; }
+            return;
+        }
+        const kod = tvar.dataset.kod;
+        if (vybrane.has(kod)) { vybrane.delete(kod); } else { vybrane.set(kod, true); }
+        plocha.querySelectorAll('.rx-plocha[data-kod="' + kod + '"]')
+            .forEach(function (el) { el.classList.toggle('rx-vybrano', vybrane.has(kod)); });
+        prekresliVyber();
+    });
+
+    const zrusit = document.getElementById('rx-vyber-zrusit');
+    if (zrusit) {
+        zrusit.addEventListener('click', function () {
+            vybrane.clear();
+            plocha.querySelectorAll('.rx-vybrano').forEach(function (el) {
+                el.classList.remove('rx-vybrano');
+            });
+            prekresliVyber();
+        });
+    }
 
     document.querySelectorAll('.rx-radek').forEach(function (tr) {
         tr.addEventListener('mouseenter', function () { zvyrazni(tr.dataset.kod, true); });

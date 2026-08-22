@@ -4283,8 +4283,66 @@ class FloorplanAdmin(ModelAdmin):
                 self.admin_site.admin_view(self.kontrola_view),
                 name="core_floorplan_kontrola",
             ),
+            path(
+                "prevod/<int:plan_id>/",
+                self.admin_site.admin_view(self.prevod_view),
+                name="core_floorplan_prevod",
+            ),
         ]
         return custom + super().get_urls()
+
+    def prevod_view(self, request, plan_id):
+        """Převod vybraných ploch z plánku na Kartu jiného klienta.
+
+        Dva kroky: nejdřív se ukáže, co přesně se stane (které Karty se
+        uzavřou, co vznikne, jak se přepočítají klíče), a teprve po
+        potvrzení se to zapíše. Zápis je v jedné transakci."""
+        from datetime import date
+
+        from django.shortcuts import get_object_or_404, redirect, render
+
+        from core.floorplan_prevod import priprav, proved
+
+        plan = get_object_or_404(Floorplan, pk=plan_id)
+        kody = [k for k in request.POST.getlist("plochy") or
+                request.GET.get("plochy", "").split(",") if k]
+        units = list(Unit.objects.filter(site=plan.site, name__in=kody))
+
+        klient = Client.objects.filter(pk=request.POST.get("klient")).first()
+        sazba = request.POST.get("sazba") or None
+        datum = None
+        if request.POST.get("datum"):
+            try:
+                datum = date.fromisoformat(request.POST["datum"])
+            except ValueError:
+                messages.error(request, "Datum nedává smysl.")
+
+        prevod = None
+        if klient and datum and units:
+            prevod = priprav(units, klient, datum, Decimal(sazba) if sazba else None)
+
+            if request.POST.get("potvrzeno") and not prevod.potize:
+                nova = proved(prevod)
+                self.message_user(
+                    request,
+                    "Plochy převedeny na %s od %s. Zkontroluj klíče na teplo a vodu – "
+                    "ty se z výměry odvodit nedají." % (klient, datum),
+                )
+                return redirect(f"/admin/core/clientcard/{nova.pk}/change/")
+
+        return render(request, "admin/core/floorplan/prevod.html", {
+            **self.admin_site.each_context(request),
+            "plan": plan,
+            "kody": kody,
+            "units": units,
+            "klienti": Client.objects.filter(is_active=True).order_by("name"),
+            "klient": klient,
+            "datum": datum,
+            "sazba": sazba,
+            "prevod": prevod,
+            "opts": self.model._meta,
+            "title": "Převod ploch na Kartu",
+        })
 
     def prohlizec_view(self, request, plan_id):
         """Planek obarveny podle obsazenosti k zadanemu datu. SVG se vklada

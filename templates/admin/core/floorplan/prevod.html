@@ -1,0 +1,96 @@
+{% extends "admin/base_site.html" %}
+
+{% block content %}
+<div class="rx-planek-stranka">
+
+    <h2 class="rx-nadpis">Vybrané plochy</h2>
+    {% if units %}
+        <p class="rx-odstavec">
+            {% for u in units %}<strong>{{ u.name }}</strong> ({{ u.area_m2 }} m²){% if not forloop.last %} · {% endif %}{% endfor %}
+        </p>
+    {% else %}
+        <p class="rx-planek-chyba">Nevybral jsi žádnou plochu. Vrať se do plánku a klikni na ně.</p>
+    {% endif %}
+
+    <form method="post">
+        {% csrf_token %}
+        {% for k in kody %}<input type="hidden" name="plochy" value="{{ k }}">{% endfor %}
+
+        <h2 class="rx-nadpis">Komu a od kdy</h2>
+        <div class="rx-planek-ovladani">
+            <label for="klient">Nájemce:</label>
+            <select name="klient" id="klient">
+                <option value="">— vyber klienta —</option>
+                {% for c in klienti %}
+                    <option value="{{ c.pk }}" {% if klient and c.pk == klient.pk %}selected{% endif %}>{{ c.name }}</option>
+                {% endfor %}
+            </select>
+
+            <label for="datum">Platnost od:</label>
+            <input type="date" name="datum" id="datum" value="{{ datum|date:'Y-m-d' }}">
+
+            <label for="sazba">Sazba Kč/m²/rok:</label>
+            <input type="number" step="0.01" name="sazba" id="sazba" value="{{ sazba|default_if_none:'' }}" style="width:8em">
+
+            <button type="submit" class="rx-btn rx-btn-primary rx-btn-sm">Spočítat</button>
+        </div>
+
+        {% if prevod %}
+            <h2 class="rx-nadpis">Co se stane</h2>
+
+            {% for p in prevod.potize %}
+                <p class="rx-planek-chyba">{{ p }}</p>
+            {% endfor %}
+            {% for p in prevod.poznamky %}
+                <p class="rx-planek-napoveda">{{ p }}</p>
+            {% endfor %}
+
+            {% for z in prevod.zdroje %}
+                <p class="rx-odstavec">
+                    Karta <strong>{{ z.card }}</strong> se uzavře k <strong>{{ prevod.den_uzavreni|date:'j. n. Y' }}</strong>.
+                    Odchází {{ z.odchazi_m2 }} m²
+                    ({% for u in z.plochy %}{{ u.name }}{% if not forloop.last %}, {% endif %}{% endfor %}).
+                </p>
+                {% if z.zbyde_ploch %}
+                    <p class="rx-odstavec">
+                        Od {{ prevod.datum|date:'j. n. Y' }} vznikne pokračovací karta se zbývajícími
+                        {{ z.zbyde_ploch }} plochami ({{ z.zbyde_m2 }} m²). Plošné klíče se přepočítají:
+                        {% for k in z.plosne_klice %}<em>{{ k.service_item.name }}</em> {{ k.value|floatformat:0 }} → {{ z.zbyde_m2|floatformat:0 }}{% if not forloop.last %} · {% endif %}{% endfor %}
+                    </p>
+                {% else %}
+                    <p class="rx-odstavec">Původnímu držiteli nezbude na téhle kartě žádná plocha, pokračovací se nezakládá.</p>
+                {% endif %}
+                {% if z.ostatni_klice %}
+                    <p class="rx-planek-napoveda">
+                        Beze změny zůstanou klíče, které se z výměry odvodit nedají:
+                        {% for k in z.ostatni_klice %}{{ k.service_item.name }} ({{ k.value|floatformat:0 }}){% if not forloop.last %} · {% endif %}{% endfor %}.
+                        Na nové kartě je zkontroluj.
+                    </p>
+                {% endif %}
+            {% endfor %}
+
+            {% if prevod.bez_karty %}
+                <p class="rx-odstavec">
+                    Bez dosavadní karty (jen se přiřadí):
+                    {% for u in prevod.bez_karty %}{{ u.name }}{% if not forloop.last %}, {% endif %}{% endfor %}
+                </p>
+            {% endif %}
+
+            <p class="rx-odstavec">
+                Nová karta pro <strong>{{ prevod.klient }}</strong> od
+                <strong>{{ prevod.datum|date:'j. n. Y' }}</strong>, celkem
+                <strong>{{ prevod.prevadene_m2 }} m²</strong>.
+            </p>
+
+            {% if not prevod.potize %}
+                <p style="margin-top:14px">
+                    <button type="submit" name="potvrzeno" value="1" class="rx-btn rx-btn-primary">
+                        Provést převod
+                    </button>
+                    <a href="{% url 'admin:core_floorplan_prohlizec' plan.pk %}" class="rx-btn rx-btn-sm">Zpět do plánku</a>
+                </p>
+            {% endif %}
+        {% endif %}
+    </form>
+</div>
+{% endblock %}
