@@ -77,6 +77,7 @@ class Prevod:
         self.bez_karty = []     # [Unit] plochy, které dosud nikdo nedržel
         self.poznamky = []      # co se přeskočí - převod může proběhnout dál
         self.potize = []        # blokující - převod nemá co dělat
+        self.uz_drzi = []       # [(Karta, [Unit])] - plochy, které nájemce už má
 
     @property
     def klice_z_ploch(self):
@@ -146,10 +147,9 @@ def priprav(units, klient, datum, sazba=None, cil_karta=None, rezim=REZIM_NOVA):
 
     for card, cus in podle_karty.items():
         if card.client_id == klient.id:
-            prevod.poznamky.append(
-                "%s už drží %s – přeskakuje se."
-                % (klient, ", ".join(cu.unit.name for cu in cus))
-            )
+            # plochu, kterou nájemce sám drží, nelze převádět - skončila by
+            # na dvou jeho Kartách naráz
+            prevod.uz_drzi.append((card, [cu.unit for cu in cus]))
             continue
         if card.valid_from and card.valid_from > datum:
             prevod.poznamky.append(
@@ -194,7 +194,26 @@ def priprav(units, klient, datum, sazba=None, cil_karta=None, rezim=REZIM_NOVA):
             )
 
     if not prevod.nove_plochy and not prevod.bez_karty:
-        prevod.potize.append("Není co převádět.")
+        if prevod.uz_drzi:
+            prevod.potize.append(
+                "Všechny vybrané plochy už %s drží: %s. Převádět je znovu nedává "
+                "smysl – byly by na dvou jeho Kartách naráz. Když je potřebuješ mít "
+                "na jiné Kartě, uprav to přímo na Kartách klienta."
+                % (klient, "; ".join(
+                    "%s na kartě %s (od %s)"
+                    % (", ".join(u.name for u in plochy), karta.description,
+                       karta.valid_from.strftime("%-d. %-m. %Y"))
+                    for karta, plochy in prevod.uz_drzi))
+            )
+        else:
+            prevod.potize.append("Není co převádět.")
+    elif prevod.uz_drzi:
+        prevod.poznamky.append(
+            "Vynechávám plochy, které %s už drží: %s."
+            % (klient, "; ".join(
+                "%s (karta %s)" % (", ".join(u.name for u in plochy), karta.description)
+                for karta, plochy in prevod.uz_drzi))
+        )
     return prevod
 
 
