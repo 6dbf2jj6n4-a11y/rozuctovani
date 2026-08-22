@@ -74,7 +74,7 @@ class Floorplan(models.Model):
         help_text="Např. „Administrativní budova – 2.NP“.",
     )
     svg = models.FileField(
-        "Výkres (SVG)", upload_to="planky/",
+        "Výkres (SVG)", upload_to="planky/", storage=R2MediaStorage(),
         help_text=(
             "Plain/Inkscape SVG s vrstvami „podklad“, „Plochy_rentex“ a "
             "„Plochy_spolecne“. Každý tvar ve vrstvě Plochy_rentex musí mít "
@@ -84,9 +84,10 @@ class Floorplan(models.Model):
     svg_text = models.TextField(
         "Obsah výkresu", blank=True, editable=False,
         help_text=(
-            "Text nahraneho SVG. Drzi se v databazi zamerne: kontejner na "
-            "Railway nema trvaly disk (jediny volume patri Postgresu), takze "
-            "nahrany soubor by pri kazdem nasazeni zmizel."
+            "Text nahraneho SVG. Puvodni soubor lezi na R2 (stejne jako foto "
+            "odectu), tohle je jeho kopie v databazi pro vykreslovani: planek "
+            "se cte pri KAZDEM zobrazeni stranky a jeden dotaz do Postgresu je "
+            "rychlejsi a spolehlivejsi nez HTTP dotaz do objektoveho ulozistě."
         ),
     )
     order = models.IntegerField(
