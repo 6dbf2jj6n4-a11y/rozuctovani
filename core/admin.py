@@ -394,7 +394,7 @@ class CardUnitInline(TabularInline):
     extra = 0
     fields = (
         "unit", "vymera_zasobnik", "area_m2_override", "rate_per_m2",
-        "rocni_najem", "mesicni_najem", "rent_not_invoiced",
+        "monthly_rent_override", "rocni_najem", "mesicni_najem", "rent_not_invoiced",
     )
     readonly_fields = ("vymera_zasobnik", "rocni_najem", "mesicni_najem")
     autocomplete_fields = ("unit",)
@@ -411,8 +411,10 @@ class CardUnitInline(TabularInline):
     vymera_zasobnik.short_description = "Výměra (zásobník)"
 
     def rocni_najem(self, obj):
-        if obj.pk and obj.rate_per_m2 and obj.area_m2:
-            return _format_kc(obj.area_m2 * obj.rate_per_m2)
+        # Sjednana pevna castka ma prednost i tady - jinak by sloupec
+        # ukazoval neco jineho nez skutecne uctovany najem.
+        if obj.pk and obj.monthly_rent is not None:
+            return _format_kc(obj.monthly_rent * 12)
         return _format_kc(None)
     rocni_najem.short_description = "Nájemné/rok"
 

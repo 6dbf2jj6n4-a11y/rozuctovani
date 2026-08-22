@@ -1771,6 +1771,16 @@ class CardUnit(models.Model):
         blank=True,
         help_text="Vyplnit jen pokud se liší od výměry v zásobníku (např. pronajatá část plochy).",
     )
+    monthly_rent_override = models.DecimalField(
+        "Sjednané nájemné (Kč/měsíc)",
+        max_digits=10, decimal_places=2, null=True, blank=True,
+        help_text=(
+            "Vyplň, když je s klientem sjednaná PEVNÁ měsíční částka a ne "
+            "sazba za m² - typicky u nájmu za několik kanceláří dohromady. "
+            "Přebíjí výpočet z Ceny Kč/m²/rok, takže ji nemusíš zpětně "
+            "dopočítávat. Nech prázdné, když se nájem počítá z výměry."
+        ),
+    )
     rent_not_invoiced = models.DecimalField(
         "Nefakturovaná část (Kč/měsíc)",
         max_digits=10, decimal_places=2, default=Decimal("0"),
@@ -1842,6 +1852,15 @@ class CardUnit(models.Model):
 
     @property
     def monthly_rent(self):
+        """Mesicni najem za tuhle plochu.
+
+        Sjednana pevna castka (monthly_rent_override) ma prednost pred
+        vypoctem z Ceny Kc/m2/rok - u najmu dohodnuteho jednou sumou za
+        vic kancelari by se jinak musela sazba za m2 zpetne dopocitavat,
+        aby vysla ta spravna castka. Stejny princip jako
+        AllocationKey.unit_price vuci Ceniku. Viz Daniel 2026-08-17."""
+        if self.monthly_rent_override is not None:
+            return self.monthly_rent_override
         if self.rate_per_m2 and self.area_m2:
             return round(self.area_m2 * self.rate_per_m2 / 12, 2)
         return None
