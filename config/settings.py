@@ -155,7 +155,7 @@ CSRF_TRUSTED_ORIGINS = [
 # 2027.0), i kdyby se nekdo zapomnel APP_VERSION_YEAR rucne prepsat -
 # dohoda s Danielem 2026-08-15.
 APP_VERSION_YEAR = 2026
-APP_VERSION_SEQUENCE = 166
+APP_VERSION_SEQUENCE = 167
 APP_VERSION = (
     f"{APP_VERSION_YEAR}.{APP_VERSION_SEQUENCE}"
     if date.today().year == APP_VERSION_YEAR
@@ -215,6 +215,13 @@ UNFOLD = {
             {
                 "title": _("Areály/Objekty"),
                 "separator": True,
+                # Sbalovatelna sekce (nativni funkce Unfoldu) - menu ma pres
+                # 30 polozek a muselo se rolovat. Sekce, ve ktere je prave
+                # otevrena stranka, se rozbali sama (has_nav_item_active),
+                # takze se uzivatel nikam neproklikava navic. "Období" a
+                # "Klienti" zustavaji trvale otevrene - denni prace.
+                # Viz konverzace s Danielem 2026-08-19.
+                "collapsible": True,
                 "items": [
                     {
                         "title": _("Areály/Objekty"),
@@ -287,6 +294,13 @@ UNFOLD = {
             {
                 "title": _("Vyúčtování"),
                 "separator": True,
+                # Sbalovatelna sekce (nativni funkce Unfoldu) - menu ma pres
+                # 30 polozek a muselo se rolovat. Sekce, ve ktere je prave
+                # otevrena stranka, se rozbali sama (has_nav_item_active),
+                # takze se uzivatel nikam neproklikava navic. "Období" a
+                # "Klienti" zustavaji trvale otevrene - denni prace.
+                # Viz konverzace s Danielem 2026-08-19.
+                "collapsible": True,
                 "items": [
                     {
                         "title": _("Položky"),
@@ -299,12 +313,12 @@ UNFOLD = {
                         "link": reverse_lazy("admin:core_billingline_detail"),
                     },
                     {
-                        "title": _("Přehled Náklad/Výnos"),
+                        "title": _("Náklad/Výnos"),
                         "icon": "account_balance",
                         "link": reverse_lazy("admin:core_billingline_prehled"),
                     },
                     {
-                        "title": _("Přehled Náklad/Výnos (měřidla)"),
+                        "title": _("Náklad/Výnos – měřidla"),
                         "icon": "speed",
                         "link": reverse_lazy("admin:core_billingline_prehled_meridla"),
                     },
@@ -323,6 +337,13 @@ UNFOLD = {
             {
                 "title": _("Reporty"),
                 "separator": True,
+                # Sbalovatelna sekce (nativni funkce Unfoldu) - menu ma pres
+                # 30 polozek a muselo se rolovat. Sekce, ve ktere je prave
+                # otevrena stranka, se rozbali sama (has_nav_item_active),
+                # takze se uzivatel nikam neproklikava navic. "Období" a
+                # "Klienti" zustavaji trvale otevrene - denni prace.
+                # Viz konverzace s Danielem 2026-08-19.
+                "collapsible": True,
                 "items": [
                     {
                         "title": _("Plochy s více klienty"),
@@ -340,7 +361,7 @@ UNFOLD = {
                         "link": reverse_lazy("admin:core_meter_report_neprirazena"),
                     },
                     {
-                        "title": _("Spotřeby měřidel podle hierarchie"),
+                        "title": _("Spotřeby dle hierarchie"),
                         "icon": "account_tree",
                         "link": reverse_lazy("admin:core_meter_report_spotreby"),
                     },
@@ -350,7 +371,7 @@ UNFOLD = {
                         "link": reverse_lazy("admin:core_billingline_report_grafy_trid"),
                     },
                     {
-                        "title": _("Seznam klientů s kontakty"),
+                        "title": _("Kontakty klientů"),
                         "icon": "contacts",
                         "link": reverse_lazy("admin:core_client_report_kontakty"),
                     },
@@ -364,6 +385,13 @@ UNFOLD = {
             {
                 "title": _("Správa uživatelů"),
                 "separator": True,
+                # Sbalovatelna sekce (nativni funkce Unfoldu) - menu ma pres
+                # 30 polozek a muselo se rolovat. Sekce, ve ktere je prave
+                # otevrena stranka, se rozbali sama (has_nav_item_active),
+                # takze se uzivatel nikam neproklikava navic. "Období" a
+                # "Klienti" zustavaji trvale otevrene - denni prace.
+                # Viz konverzace s Danielem 2026-08-19.
+                "collapsible": True,
                 "items": [
                     {
                         "title": _("Uživatelé"),
