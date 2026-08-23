@@ -193,8 +193,11 @@ def generate_client_card_document(card, output_path):
     total_month = Decimal("0")
     for cu in card.card_units.select_related("unit__site"):
         area = cu.area_m2
-        year_rent = (area * cu.rate_per_m2) if (area and cu.rate_per_m2) else None
-        month_rent = (year_rent / 12) if year_rent is not None else None
+        # cu.monthly_rent uz sjednanou pevnou castku resi (prebiji sazbu),
+        # takze se z nej odvozuje i rocni najem - jinak by karta u takove
+        # plochy tiskla prazdno. Viz Daniel 2026-08-17.
+        month_rent = cu.monthly_rent
+        year_rent = (month_rent * 12) if month_rent is not None else None
 
         rows.append([
             str(cu.unit) if cu.unit else "—",

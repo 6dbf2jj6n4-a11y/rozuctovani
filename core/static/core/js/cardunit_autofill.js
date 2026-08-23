@@ -69,6 +69,12 @@ soucet vymer/najemneho, ktery tam nedava smysl.
         var area = getRowArea($row);
         var $rate = $row.find('input[id$="-rate_per_m2"]');
         var rate = parseNum($rate.val());
+        // Sjednana pevna castka prebiji vypocet ze sazby - stejne jako
+        // CardUnit.monthly_rent na serveru. Bez tohohle mel radek jen se
+        // sjednanou castkou (a prazdnou sazbou) prazdna data-* atributy,
+        // takze soucet pod tabulkou vysel 0. Viz Daniel 2026-08-17.
+        var $override = $row.find('input[id$="-monthly_rent_override"]');
+        var override = parseNum($override.val());
 
         var $rocni = $row.find(".field-rocni_najem p, .field-rocni_najem");
         var $mesicni = $row.find(".field-mesicni_najem p, .field-mesicni_najem");
@@ -79,9 +85,17 @@ soucet vymer/najemneho, ktery tam nedava smysl.
             $row.removeAttr("data-area");
         }
 
-        if (area !== null && rate !== null) {
-            var rocniVal = area * rate;
-            var mesicniVal = rocniVal / 12;
+        var rocniVal = null;
+        var mesicniVal = null;
+        if (override !== null) {
+            mesicniVal = override;
+            rocniVal = override * 12;
+        } else if (area !== null && rate !== null) {
+            rocniVal = area * rate;
+            mesicniVal = rocniVal / 12;
+        }
+
+        if (rocniVal !== null) {
             if ($rocni.length) {
                 $rocni.first().html(formatKcCell(rocniVal));
             }
@@ -184,7 +198,7 @@ soucet vymer/najemneho, ktery tam nedava smysl.
     // Zivy prepocet pri editaci vymery nebo ceny
     $(document).on(
         "input change",
-        'input[id$="-area_m2_override"], input[id$="-rate_per_m2"]',
+        'input[id$="-area_m2_override"], input[id$="-rate_per_m2"], input[id$="-monthly_rent_override"]',
         function () {
             var $input = $(this);
             var $row = $input.closest("tr");
