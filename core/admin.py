@@ -20,6 +20,7 @@ from .models import (
     Client, ClientCard, Contract, Site, Unit, CardUnit, Floorplan,
     Meter, MeterReading, Period, InflationRate, SupplyPoint, InvoiceClassColor,
     ServicePoolItem, AllocationKey, PriceList, CostEntry, BillingLine, UnitService,
+    CardOccupant,
     normalizovat_telefon,
 )
 
@@ -387,6 +388,17 @@ def sekce_klicu():
         )
         for trida in InvoiceClassColor.se_sekci()
     ]
+
+
+class CardOccupantInline(TabularInline):
+    """Spolubydlici u Karty - viz docstring modelu CardOccupant.
+    Nejcasteji u bytu, kde jsou najemci dva lide s ruznymi prijmenimi."""
+    model = CardOccupant
+    extra = 0
+    fields = ("name", "note")
+    verbose_name = "Spolubydlící"
+    verbose_name_plural = "Spolubydlící"
+    hide_title = True
 
 
 class CardUnitInline(TabularInline):
@@ -1223,7 +1235,7 @@ class ClientCardAdmin(ModelAdmin):
     def get_inlines(self, request, obj=None):
         """Plochy a najemne + sekce Klicu generovane z Trid
         (Nastaveni -> Tridy), ne napevno."""
-        return [CardUnitInline, *sekce_klicu()]
+        return [CardUnitInline, CardOccupantInline, *sekce_klicu()]
 
     @admin.action(description="Vytvořit kopii vybraných karet")
     def kopie_karty(self, request, queryset):

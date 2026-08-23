@@ -1372,6 +1372,42 @@ class InvoiceClassColor(models.Model):
         return self.label or self.invoice_class
 
 
+class CardOccupant(models.Model):
+    """Spolubydlici - dalsi osoba, ktera byt uziva vedle najemce.
+
+    Byt casto uziva vic lidi a kdyz nejsou manzele, maji ruzna prijmeni.
+    Platcem je vzdy JEDEN klient (ten, kdo ma najem a komu se fakturuje) -
+    druhy klient na stejnou plochu by znamenal dve aktivni karty na jednu
+    Plochu, coz aplikace hlasi jako konflikt (report "Plochy s více
+    klienty"). Spolubydlici proto neni samostatny Klient, jen zapsana
+    osoba u Karty.
+
+    Zamerne jen jmeno a poznamka - zadne IČO, adresa ani fakturacni
+    udaje; ty ma najemce. Na rozuctovani zatim nema vliv: vaha "počet
+    osob" se u klicu porad zadava rucne. Az bude potreba, jde pocet
+    osob z tohohle seznamu dopocitat. Viz konverzace s Danielem
+    2026-08-19.
+    """
+
+    card = models.ForeignKey(
+        ClientCard, on_delete=models.CASCADE, related_name="occupants",
+        verbose_name="Karta klienta",
+    )
+    name = models.CharField("Jméno", max_length=200)
+    note = models.CharField(
+        "Poznámka", max_length=200, blank=True,
+        help_text="Např. vztah k nájemci nebo od kdy v bytě bydlí.",
+    )
+
+    class Meta:
+        verbose_name = "Spolubydlící"
+        verbose_name_plural = "Spolubydlící"
+        ordering = ["name"]
+
+    def __str__(self):
+        return self.name
+
+
 class AllocationKey(models.Model):
     class AllocationType(models.TextChoices):
         SUBMETER = "submeter", "Podružné měřidlo (1:1)"
