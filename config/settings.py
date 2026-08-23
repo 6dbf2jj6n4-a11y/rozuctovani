@@ -155,7 +155,7 @@ CSRF_TRUSTED_ORIGINS = [
 # 2027.0), i kdyby se nekdo zapomnel APP_VERSION_YEAR rucne prepsat -
 # dohoda s Danielem 2026-08-15.
 APP_VERSION_YEAR = 2026
-APP_VERSION_SEQUENCE = 168
+APP_VERSION_SEQUENCE = 169
 APP_VERSION = (
     f"{APP_VERSION_YEAR}.{APP_VERSION_SEQUENCE}"
     if date.today().year == APP_VERSION_YEAR
@@ -184,6 +184,7 @@ UNFOLD = {
             {
                 "title": _("Období"),
                 "separator": True,
+                "collapsible": True,
                 "items": [
                     {
                         "title": _("Období"),
@@ -218,9 +219,9 @@ UNFOLD = {
                 # Sbalovatelna sekce (nativni funkce Unfoldu) - menu ma pres
                 # 30 polozek a muselo se rolovat. Sekce, ve ktere je prave
                 # otevrena stranka, se rozbali sama (has_nav_item_active),
-                # takze se uzivatel nikam neproklikava navic. "Období" a
-                # "Klienti" zustavaji trvale otevrene - denni prace.
-                # Viz konverzace s Danielem 2026-08-19.
+                # takze se uzivatel nikam neproklikava navic. Sbaluji se
+                # VSECHNY sekce - Daniel si to tak vyzadal 2026-08-19
+                # (puvodne zustavaly Období a Klienti trvale otevrene).
                 "collapsible": True,
                 "items": [
                     {
@@ -268,6 +269,7 @@ UNFOLD = {
             {
                 "title": _("Klienti"),
                 "separator": True,
+                "collapsible": True,
                 "items": [
                     {
                         "title": _("Klienti"),
@@ -297,9 +299,9 @@ UNFOLD = {
                 # Sbalovatelna sekce (nativni funkce Unfoldu) - menu ma pres
                 # 30 polozek a muselo se rolovat. Sekce, ve ktere je prave
                 # otevrena stranka, se rozbali sama (has_nav_item_active),
-                # takze se uzivatel nikam neproklikava navic. "Období" a
-                # "Klienti" zustavaji trvale otevrene - denni prace.
-                # Viz konverzace s Danielem 2026-08-19.
+                # takze se uzivatel nikam neproklikava navic. Sbaluji se
+                # VSECHNY sekce - Daniel si to tak vyzadal 2026-08-19
+                # (puvodne zustavaly Období a Klienti trvale otevrene).
                 "collapsible": True,
                 "items": [
                     {
@@ -340,9 +342,9 @@ UNFOLD = {
                 # Sbalovatelna sekce (nativni funkce Unfoldu) - menu ma pres
                 # 30 polozek a muselo se rolovat. Sekce, ve ktere je prave
                 # otevrena stranka, se rozbali sama (has_nav_item_active),
-                # takze se uzivatel nikam neproklikava navic. "Období" a
-                # "Klienti" zustavaji trvale otevrene - denni prace.
-                # Viz konverzace s Danielem 2026-08-19.
+                # takze se uzivatel nikam neproklikava navic. Sbaluji se
+                # VSECHNY sekce - Daniel si to tak vyzadal 2026-08-19
+                # (puvodne zustavaly Období a Klienti trvale otevrene).
                 "collapsible": True,
                 "items": [
                     {
@@ -388,9 +390,9 @@ UNFOLD = {
                 # Sbalovatelna sekce (nativni funkce Unfoldu) - menu ma pres
                 # 30 polozek a muselo se rolovat. Sekce, ve ktere je prave
                 # otevrena stranka, se rozbali sama (has_nav_item_active),
-                # takze se uzivatel nikam neproklikava navic. "Období" a
-                # "Klienti" zustavaji trvale otevrene - denni prace.
-                # Viz konverzace s Danielem 2026-08-19.
+                # takze se uzivatel nikam neproklikava navic. Sbaluji se
+                # VSECHNY sekce - Daniel si to tak vyzadal 2026-08-19
+                # (puvodne zustavaly Období a Klienti trvale otevrene).
                 "collapsible": True,
                 "items": [
                     {
