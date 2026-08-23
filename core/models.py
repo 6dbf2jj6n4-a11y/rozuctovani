@@ -318,6 +318,17 @@ class Client(models.Model):
         # importy i skripty), aby drzel jeden tvar - viz normalizovat_telefon.
         self.contact_phone = normalizovat_telefon(self.contact_phone)
 
+        # Zivnostnik nema rejstrikovy soud, oddil ani vlozku - to jsou
+        # udaje z obchodniho rejstriku. Kdyz se klient prepne na fyzickou
+        # osobu ze zivnostenskeho rejstriku, stare hodnoty se zahodi, aby
+        # nezustaly viset v DB (v adminu se pole zaroven schovaji, viz
+        # ClientAdmin.conditional_fields). Viz Daniel 2026-08-19.
+        if (self.entity_type == self.EntityType.NATURAL
+                and self.registry_source == self.RegistrySource.TRADE):
+            self.registry_court = ""
+            self.registry_section = ""
+            self.registry_insert = ""
+
         deactivate_cards = False
         if self.pk and not self.is_active:
             was_active = Client.objects.filter(pk=self.pk, is_active=True).exists()

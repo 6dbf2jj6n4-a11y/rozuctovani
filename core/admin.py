@@ -707,9 +707,17 @@ class ClientAdmin(ModelAdmin):
     readonly_fields = ("ares_button", "insolvency_status")
     # Zastupce/funkce davaji smysl jen u pravnicke osoby (za fyzickou
     # osobu jedna vzdy ona sama) - u fyzicke osoby se skryji.
+    # Zivnostnik (fyzicka osoba + zivnostensky rejstrik) nema soud, oddil
+    # ani vlozku - to jsou udaje z obchodniho rejstriku. Skryvaji se, a pri
+    # ulozeni se i vyprazdni (viz Client.save), aby v DB nezustavaly stare
+    # hodnoty po prepnuti zdroje. Viz konverzace s Danielem 2026-08-19.
+    _BEZ_REJSTRIKU = "!(entity_type == 'fyzicka' && registry_source == 'zivnostensky')"
     conditional_fields = {
         "representative_name": "entity_type != 'fyzicka'",
         "representative_role": "entity_type != 'fyzicka'",
+        "registry_court": _BEZ_REJSTRIKU,
+        "registry_section": _BEZ_REJSTRIKU,
+        "registry_insert": _BEZ_REJSTRIKU,
     }
     inlines = [ClientCardInline, ContractInline]
     actions = ["export_emaily"]
