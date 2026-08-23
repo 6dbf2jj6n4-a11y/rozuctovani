@@ -711,10 +711,19 @@ class ClientAdmin(ModelAdmin):
     # ani vlozku - to jsou udaje z obchodniho rejstriku. Skryvaji se, a pri
     # ulozeni se i vyprazdni (viz Client.save), aby v DB nezustavaly stare
     # hodnoty po prepnuti zdroje. Viz konverzace s Danielem 2026-08-19.
-    _BEZ_REJSTRIKU = "!(entity_type == 'fyzicka' && registry_source == 'zivnostensky')"
+    # Nepodnikatelsky subjekt (soukroma osoba, SVJ, spolek) - z Identifikace
+    # mu zustava jen IČO a Insolvencni rejstrik, zbytek nedava smysl.
+    _PODNIKATEL = "entity_type != 'nepodnikatel'"
+    _BEZ_REJSTRIKU = (
+        "!(entity_type == 'fyzicka' && registry_source == 'zivnostensky')"
+        " && entity_type != 'nepodnikatel'"
+    )
     conditional_fields = {
-        "representative_name": "entity_type != 'fyzicka'",
-        "representative_role": "entity_type != 'fyzicka'",
+        "dic": _PODNIKATEL,
+        "vat_payer": _PODNIKATEL,
+        "registry_source": _PODNIKATEL,
+        "representative_name": "entity_type != 'fyzicka' && entity_type != 'nepodnikatel'",
+        "representative_role": "entity_type != 'fyzicka' && entity_type != 'nepodnikatel'",
         "registry_court": _BEZ_REJSTRIKU,
         "registry_section": _BEZ_REJSTRIKU,
         "registry_insert": _BEZ_REJSTRIKU,

@@ -233,6 +233,11 @@ class Client(models.Model):
     class EntityType(models.TextChoices):
         LEGAL = "pravnicka", "Právnická osoba"
         NATURAL = "fyzicka", "Fyzická osoba"
+        # Nepodnikatel - soukroma osoba, ale i SVJ nebo spolek. Z cele
+        # sekce Identifikace se ho tyka jen IČO (SVJ/spolky ho maji) a
+        # insolvence (osobni bankrot); zbytek se v adminu skryva a pri
+        # ulozeni maze. Viz konverzace s Danielem 2026-08-19.
+        NON_BUSINESS = "nepodnikatel", "Nepodnikatelský subjekt"
 
     entity_type = models.CharField(
         "Typ osoby", max_length=20, blank=True, choices=EntityType.choices,
@@ -328,6 +333,22 @@ class Client(models.Model):
             self.registry_court = ""
             self.registry_section = ""
             self.registry_insert = ""
+
+        # Nepodnikatelsky subjekt (soukroma osoba, SVJ, spolek) - z cele
+        # Identifikace mu zustava jen IČO a insolvence, zbytek se zahodi,
+        # aby v DB nezustaly stare hodnoty po prepnuti typu osoby. Plati
+        # i pro importy a skripty, proto to visi na save(), ne na
+        # formulari (v adminu se pole zaroven skryvaji, viz
+        # ClientAdmin.conditional_fields).
+        if self.entity_type == self.EntityType.NON_BUSINESS:
+            self.dic = ""
+            self.vat_payer = False
+            self.registry_source = ""
+            self.registry_court = ""
+            self.registry_section = ""
+            self.registry_insert = ""
+            self.representative_name = ""
+            self.representative_role = ""
 
         deactivate_cards = False
         if self.pk and not self.is_active:
