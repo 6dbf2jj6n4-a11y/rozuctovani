@@ -158,7 +158,7 @@ def get_item_summary_rows(period, site=None, with_meters=False, sites=None):
     return rows
 
 
-def get_naklad_by_class(periods, site=None):
+def get_naklad_by_class(periods, site=None, sites=None):
     """Rychla agregace Nakladu (Kc) po Tride pro SEZNAM obdobi najednou -
     pro grafy/prehledy, kde staci soucet, ne rozpad po jednotlivych
     polozkach/mericich (na rozdil od get_item_summary_rows, ktera pro
@@ -174,6 +174,12 @@ def get_naklad_by_class(periods, site=None):
     items = list(ServicePoolItem.objects.all())
     if site is not None:
         items = [i for i in items if i.site_id == site.id]
+    # `sites` omezi graf na arealy pronajimatele, se kterym uzivatel prave
+    # pracuje (core/pronajimatele.py) - `site` je vyber uzivatele nad
+    # grafem, tohle je kontext, ktery plati i bez nej.
+    if sites is not None:
+        povolene = set(sites)
+        items = [i for i in items if i.site_id in povolene]
 
     period_ids = [p.id for p in periods]
     cost_entries = {}

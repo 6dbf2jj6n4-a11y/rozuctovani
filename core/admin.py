@@ -132,15 +132,19 @@ class PodlePronajimatele:
         return qs.distinct() if self.potrebuje_distinct else qs
 
     def formfield_for_foreignkey(self, db_field, request, **kwargs):
-        """V poli Areál nabidnout jen arealy zvoleneho pronajimatele.
+        """Nabidnout jen to, co je ve zvolenem kontextu videt.
 
-        Bez tohohle by slo v kontextu DV zalozit treba meridlo na FM -
-        ulozilo by se a hned zmizelo ze seznamu, protoze do zvoleneho
-        kontextu nepatri."""
-        from core.models import Site
+        Plati pro kazde pole, jehoz cilovy model ma taky tenhle mixin -
+        tedy Areal, ale i nadrazene Meridlo, Odberne misto nebo Polozku
+        zasobniku. Bez toho by slo v kontextu DV zalozit meridlo pod
+        meridlo z FM: ulozilo by se a hned zmizelo ze seznamu.
 
-        if db_field.related_model is Site:
-            kwargs["queryset"] = pronajimatele.arealy(request).order_by("name")
+        Kdyz uz queryset nastavil nekdo pred nami (inline s vlastnim
+        omezenim), nesahame na nej."""
+        if "queryset" not in kwargs:
+            spravce = admin.site._registry.get(db_field.related_model)
+            if isinstance(spravce, PodlePronajimatele):
+                kwargs["queryset"] = spravce.get_queryset(request)
         return super().formfield_for_foreignkey(db_field, request, **kwargs)
 
 
@@ -2420,7 +2424,7 @@ class MeterAdmin(PodlePronajimatele, DuplicateModelAdminMixin, ModelAdmin):
         }
         return render(request, "admin/core/meter/report_spotreby.html", context)
 
-    def _unassigned_meters_queryset(self):
+    def _unassigned_meters_queryset(self, request=None):
         """Meridla, ktera nejsou pouzita VUBEC - ani jako hlavni meridlo
         polozky (ServicePoolItem.meter), ani napojene na zadny Klic
         (AllocationKey.meter), ani jako nadrazene meridlo jineho meridla,
@@ -2437,7 +2441,11 @@ class MeterAdmin(PodlePronajimatele, DuplicateModelAdminMixin, ModelAdmin):
         used_as_parent = Meter.objects.exclude(parent_meter__isnull=True).values_list("parent_meter_id", flat=True)
         used_as_unit_service_meter = UnitService.objects.exclude(meter__isnull=True).values_list("meter_id", flat=True)
 
-        return (
+        # "Pouzito" se zjistuje NAPRIC obema pronajimateli zamerne - kdyby
+        # se pouziti hledalo jen v kontextu, vypadalo by cizi pouzite
+        # meridlo jako nepouzite a slo by ho smazat. Az vysledek se omezi
+        # na kontext. Viz Daniel 2026-08-25.
+        qs = (
             Meter.objects.select_related("site")
             .exclude(pk__in=used_as_item_meter)
             .exclude(pk__in=used_as_key_meter)
@@ -2445,6 +2453,9 @@ class MeterAdmin(PodlePronajimatele, DuplicateModelAdminMixin, ModelAdmin):
             .exclude(pk__in=used_as_unit_service_meter)
             .order_by("site__name", "code")
         )
+        if request is not None:
+            qs = pronajimatele.omez(qs, "site", request)
+        return qs
 
     def _formula_protected_meter_ids(self):
         """{meter_id: [nazvy virtualnich meridel, ktera na nej odkazuji ve
@@ -2464,7 +2475,7 @@ class MeterAdmin(PodlePronajimatele, DuplicateModelAdminMixin, ModelAdmin):
         nepouzita meridla (viz report_neprirazena_smazat_view)."""
         from django.shortcuts import render
 
-        unused = list(self._unassigned_meters_queryset())
+        unused = list(self._unassigned_meters_queryset(request))
         protected = self._formula_protected_meter_ids()
         for m in unused:
             m.formula_used_by = protected.get(m.id)
@@ -2495,7 +2506,9 @@ class MeterAdmin(PodlePronajimatele, DuplicateModelAdminMixin, ModelAdmin):
             messages.warning(request, "Nebylo vybráno žádné měřidlo.")
             return redirect("admin:core_meter_report_neprirazena")
 
-        safe_ids = set(self._unassigned_meters_queryset().values_list("pk", flat=True))
+        safe_ids = set(
+            self._unassigned_meters_queryset(request).values_list("pk", flat=True)
+        )
         safe_ids -= set(self._formula_protected_meter_ids().keys())
 
         to_delete = requested_ids & safe_ids
@@ -4005,7 +4018,9 @@ class BillingLineAdmin(PodlePronajimatele, DefaultToCurrentPeriodMixin, ModelAdm
 
         # get_naklad_by_class dela jen par dotazu CELKEM (bez ohledu na pocet
         # obdobi) - viz jeji docstring (drive spadlo na WORKER TIMEOUT).
-        naklad_by_period = get_naklad_by_class(periods, site=site)
+        naklad_by_period = get_naklad_by_class(
+            periods, site=site, sites=pronajimatele.id_arealu(request)
+        )
         raw_totals = [(period, naklad_by_period[period.id]) for period in periods]
 
         max_value = Decimal("0")
