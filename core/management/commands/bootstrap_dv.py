@@ -101,13 +101,19 @@ class Command(BaseCommand):
                 self.stdout.write("   {:4} {:26} karta už existuje".format(prostor, client.name[:26]))
                 continue
 
-            popis = "Karta {} DV".format(client.code or client.name[:10])
+            # Popis karty se nevyplnuje - ClientCard.save() si ho dopocita
+            # podle konvence "Karta {kod} {rok} - {poradi}", stejne jako
+            # maji karty na FM a NJ. Rok v nazvu ma smysl: pro novy rok
+            # se vetsinou dela novy predpis najemneho, a tedy i nova
+            # karta. Viz Daniel 2026-08-24.
+            popis = "Karta {} {} - ?".format(
+                client.code or client.name[:10], PLATNOST_OD.year)
             self.stdout.write(self.style.SUCCESS(
                 "   {:4} {:26} {:>9,.0f} Kč/měs   {}".format(
                     prostor, client.name[:26], najem, popis)))
             if write:
                 card = ClientCard.objects.create(
-                    client=client, unit=unit, description=popis, valid_from=PLATNOST_OD,
+                    client=client, unit=unit, valid_from=PLATNOST_OD,
                 )
                 CardUnit.objects.create(
                     card=card, unit=unit,
