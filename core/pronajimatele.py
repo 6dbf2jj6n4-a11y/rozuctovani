@@ -80,3 +80,39 @@ def id_arealu(request):
     if not hasattr(request, pamet):
         setattr(request, pamet, list(arealy(request).values_list("pk", flat=True)))
     return getattr(request, pamet)
+
+
+def omez(qs, cesta, request):
+    """Omezi queryset na arealy zvoleneho pronajimatele.
+
+    Pro sestavy, ktere si delaji vlastni dotaz misto ModelAdmin.get_queryset
+    (core.admin.PodlePronajimatele) - filtr nad tabulkou by jinak nabizel
+    spravne arealy, ale radky by ukazovaly obe osoby dohromady.
+
+    `cesta` je ORM cesta od modelu k core.Site, stejne jako u mixinu.
+    """
+    return qs.filter(**{"%s__in" % cesta: id_arealu(request)})
+
+
+def klienti(request, qs=None):
+    """Klienti zvoleneho pronajimatele - podle jejich karet.
+
+    Stejne pravidlo jako core.admin.ClientAdmin: klient bez jedine karty
+    jeste nepatri nikam, takze je videt vsude (jinak by cerstve zalozeny
+    klient zmizel driv, nez by se stihla zalozit karta), a sam
+    pronajimatel je videt taky.
+    """
+    from django.db.models import Q
+
+    from core.models import Client
+
+    if qs is None:
+        qs = Client.objects.all()
+    zvoleny = aktualni(request)
+    podminka = (
+        Q(cards__card_units__unit__site__in=id_arealu(request))
+        | Q(cards__card_units__unit__site__isnull=True)
+    )
+    if zvoleny is not None:
+        podminka |= Q(pk=zvoleny.pk)
+    return qs.filter(podminka).distinct()

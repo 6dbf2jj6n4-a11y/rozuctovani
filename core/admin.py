@@ -296,7 +296,10 @@ class UnitServiceInlineBase(TabularInline):
     def formfield_for_foreignkey(self, db_field, request, **kwargs):
         parent = getattr(self, "parent_obj", None)
         if db_field.name == "service_item":
-            qs = ServicePoolItem.objects.filter(invoice_class=self.invoice_class)
+            qs = pronajimatele.omez(
+                ServicePoolItem.objects.filter(invoice_class=self.invoice_class),
+                "site", request,
+            )
             if parent is not None:
                 qs = qs.filter(site=parent.site)
             kwargs["queryset"] = qs
@@ -304,7 +307,9 @@ class UnitServiceInlineBase(TabularInline):
             # Meridlo uz drzi primo kod Tridy, takze staci filtrovat na ni
             # (drive na to byl prevodni slovnik METER_TYPE_FOR_CLASS - po
             # sjednoceni Trid uz to byla identita).
-            qs = Meter.objects.filter(meter_type=self.invoice_class)
+            qs = pronajimatele.omez(
+                Meter.objects.filter(meter_type=self.invoice_class), "site", request
+            )
             if parent is not None:
                 qs = qs.filter(site=parent.site)
             kwargs["queryset"] = qs
@@ -415,8 +420,9 @@ class AllocationKeyInlineBase(TabularInline):
 
     def formfield_for_foreignkey(self, db_field, request, **kwargs):
         if db_field.name == "service_item":
-            kwargs["queryset"] = ServicePoolItem.objects.filter(
-                invoice_class=self.invoice_class
+            kwargs["queryset"] = pronajimatele.omez(
+                ServicePoolItem.objects.filter(invoice_class=self.invoice_class),
+                "site", request,
             )
         formfield = super().formfield_for_foreignkey(db_field, request, **kwargs)
         if db_field.name in ("meter", "unit") and hasattr(formfield.widget, "can_delete_related"):
@@ -931,7 +937,9 @@ class ClientAdmin(PodlePronajimatele, ModelAdmin):
         s kontaktnimi udaji, pro rychly prehled/export."""
         from django.shortcuts import render
 
-        clients = Client.objects.filter(is_active=True).order_by("name")
+        clients = pronajimatele.klienti(
+            request, Client.objects.filter(is_active=True)
+        ).order_by("name")
         context = {
             **self.admin_site.each_context(request),
             "title": "Seznam klientů s kontakty",
@@ -1378,7 +1386,9 @@ class ClientCardAdmin(PodlePronajimatele, ModelAdmin):
         spletl."""
         from django.shortcuts import render
 
-        units = Unit.objects.select_related("site").prefetch_related(
+        units = pronajimatele.omez(Unit.objects, "site", request).select_related(
+            "site"
+        ).prefetch_related(
             "card_units__card__client"
         ).order_by("site__name", "name")
 
@@ -1665,7 +1675,10 @@ class ClientCardAdmin(PodlePronajimatele, ModelAdmin):
         # jen nafukovaly. Pronajimatelu uz muze byt vic (kazdy areal svuj),
         # takze se vylucuji vsichni. Viz Daniel 2026-08-17 a 2026-08-24.
         cards = (
-            ClientCard.objects.filter(is_active=True, client__is_landlord=False)
+            pronajimatele.omez(
+                ClientCard.objects.filter(is_active=True, client__is_landlord=False),
+                "card_units__unit__site", request,
+            )
             .select_related("client")
             .prefetch_related("card_units__unit__site__landlord")
             .order_by("client__name")
@@ -1851,7 +1864,8 @@ class ClientCardAdmin(PodlePronajimatele, ModelAdmin):
             **self.admin_site.each_context(request),
             "title": "Kopírovat kartu na nového klienta",
             "original": original,
-            "clients": Client.objects.filter(is_active=True).order_by("name"),
+            "clients": pronajimatele.klienti(
+                request, Client.objects.filter(is_active=True)).order_by("name"),
             "opts": self.model._meta,
         }
         return render(request, "admin/core/clientcard/kopie_form.html", context)
@@ -1950,7 +1964,8 @@ class MeterAdmin(PodlePronajimatele, DuplicateModelAdminMixin, ModelAdmin):
                 **self.admin_site.each_context(request),
                 "title": "Přiřadit k odběrnému místu",
                 "meters": queryset,
-                "supply_points": SupplyPoint.objects.select_related("site").all(),
+                "supply_points": pronajimatele.omez(
+                SupplyPoint.objects, "site", request).select_related("site"),
                 "action_name": "assign_supply_point",
                 "selected_ids": queryset.values_list("pk", flat=True),
             },
@@ -2042,7 +2057,7 @@ class MeterAdmin(PodlePronajimatele, DuplicateModelAdminMixin, ModelAdmin):
             site_id = request.GET.get("site_id")
             meter_type = request.GET.get("meter_type")
 
-            qs = Meter.objects.all()
+            qs = pronajimatele.omez(Meter.objects, "site", request)
             if site_id:
                 qs = qs.filter(site_id=site_id)
             if meter_type:
@@ -2100,7 +2115,8 @@ class MeterAdmin(PodlePronajimatele, DuplicateModelAdminMixin, ModelAdmin):
         groups = []
         if period is not None:
             meters_qs = (
-                Meter.objects.select_related("site", "parent_meter")
+                pronajimatele.omez(Meter.objects, "site", request)
+                .select_related("site", "parent_meter")
                 .order_by("code")
             )
             if site is not None:
@@ -2216,7 +2232,9 @@ class MeterAdmin(PodlePronajimatele, DuplicateModelAdminMixin, ModelAdmin):
             # vlastnich spotreb realnych clenskych meridel) a rozdil =
             # ztraty/nezmereno. Meridla bez odberneho mista jdou do skupiny
             # "Nezarazena". Viz konverzace s Danielem 2026-08-12.
-            supplies_qs = SupplyPoint.objects.select_related("main_meter", "site")
+            supplies_qs = pronajimatele.omez(
+                SupplyPoint.objects, "site", request
+            ).select_related("main_meter", "site")
             if site is not None:
                 supplies_qs = supplies_qs.filter(site=site)
             supplies = list(supplies_qs)
@@ -2484,8 +2502,11 @@ class MeterAdmin(PodlePronajimatele, DuplicateModelAdminMixin, ModelAdmin):
         skipped = requested_ids - safe_ids
 
         if to_delete:
-            deleted_names = list(Meter.objects.filter(pk__in=to_delete).values_list("name", flat=True))
-            Meter.objects.filter(pk__in=to_delete).delete()
+            # Omezeno na kontext, aby seznam id z formulare nemohl sahnout
+            # na meridla druheho pronajimatele.
+            mazana = pronajimatele.omez(Meter.objects, "site", request).filter(pk__in=to_delete)
+            deleted_names = list(mazana.values_list("name", flat=True))
+            mazana.delete()
             messages.success(request, f"Smazáno {len(to_delete)} měřidel: {', '.join(deleted_names)}.")
         if skipped:
             messages.error(
@@ -2838,7 +2859,8 @@ class PeriodAdmin(ModelAdmin):
             missing_price = []
             stale_price = []
 
-            for item in ServicePoolItem.objects.select_related("site").all():
+            for item in pronajimatele.omez(
+                    ServicePoolItem.objects, "site", request).select_related("site"):
                 item_costs = list(CostEntry.objects.filter(service_item=item, period=period))
                 if not item_costs:
                     if item.default_amount_czk is None:
@@ -2957,7 +2979,7 @@ class PeriodAdmin(ModelAdmin):
         zadny CostEntry vubec."""
         for period in queryset:
             created = []
-            for item in ServicePoolItem.objects.all():
+            for item in pronajimatele.omez(ServicePoolItem.objects, "site", request):
                 if item.default_amount_czk is not None:
                     continue
                 # Uz aspon jednu fakturu ma - dalsi (od jineho dodavatele) si
@@ -3345,7 +3367,7 @@ class ServicePoolItemAdmin(PodlePronajimatele, ModelAdmin):
         site_id = request.GET.get("site_id")
         invoice_class = request.GET.get("invoice_class")
 
-        qs = ServicePoolItem.objects.all()
+        qs = pronajimatele.omez(ServicePoolItem.objects, "site", request)
         if site_id:
             qs = qs.filter(site_id=site_id)
         if invoice_class:
@@ -3516,7 +3538,7 @@ class PriceListAdmin(PodlePronajimatele, DefaultToCurrentPeriodMixin, ModelAdmin
             PriceList.objects.filter(period=period).values_list("service_item_id", flat=True)
         )
         earlier = (
-            PriceList.objects
+            pronajimatele.omez(PriceList.objects, "service_item__site", request)
             .filter(
                 Q(period__year__lt=period.year)
                 | Q(period__year=period.year, period__month__lt=period.month)
@@ -3621,7 +3643,10 @@ class CostEntryAdmin(PodlePronajimatele, DefaultToCurrentPeriodMixin, ModelAdmin
         if period is None:
             return None
 
-        items = ServicePoolItem.objects.exclude(default_amount_czk__isnull=True).select_related("site")
+        items = pronajimatele.omez(
+            ServicePoolItem.objects.exclude(default_amount_czk__isnull=True),
+            "site", request,
+        ).select_related("site")
         site_id = request.GET.get("service_item__site__id__exact")
         if site_id:
             items = items.filter(site_id=site_id)
@@ -3822,7 +3847,10 @@ class BillingLineAdmin(PodlePronajimatele, DefaultToCurrentPeriodMixin, ModelAdm
         used_classes = set()
         for period in periods:
             pausal_lines = list(
-                BillingLine.objects.filter(period=period, is_billed=False)
+                pronajimatele.omez(
+                    BillingLine.objects.filter(period=period, is_billed=False),
+                    "service_item__site", request,
+                )
                 .select_related("client_card__client", "service_item")
             )
             if not pausal_lines:
@@ -4099,10 +4127,16 @@ class BillingLineAdmin(PodlePronajimatele, DefaultToCurrentPeriodMixin, ModelAdm
         periods = Period.objects.all()
         period = periods.filter(pk=period_id).first() if period_id else Period.current()
 
-        items = ServicePoolItem.objects.select_related("site").order_by("site__name", "invoice_class", "name")
+        items = pronajimatele.omez(
+            ServicePoolItem.objects, "site", request
+        ).select_related("site").order_by("site__name", "invoice_class", "name")
         item = items.filter(pk=item_id).first() if item_id else None
 
-        selected_meter = Meter.objects.select_related("site").filter(pk=meter_id).first() if meter_id else None
+        selected_meter = (
+            pronajimatele.omez(Meter.objects, "site", request)
+            .select_related("site").filter(pk=meter_id).first()
+            if meter_id else None
+        )
         meter_choice_items = None
         if selected_meter and item is None:
             matches = find_items_for_meter(selected_meter)
@@ -4121,7 +4155,8 @@ class BillingLineAdmin(PodlePronajimatele, DefaultToCurrentPeriodMixin, ModelAdm
         # pro vypocet podilu - do vyberu nema smysl pridavat merici
         # meridla bez vazby na zadny Klic.
         relevant_meters = (
-            Meter.objects.filter(Q(service_items__isnull=False) | Q(submeter_keys__isnull=False))
+            pronajimatele.omez(Meter.objects, "site", request)
+            .filter(Q(service_items__isnull=False) | Q(submeter_keys__isnull=False))
             .select_related("site").distinct().order_by("site__name", "code")
         )
         meter_groups = {}
@@ -4189,7 +4224,10 @@ class BillingLineAdmin(PodlePronajimatele, DefaultToCurrentPeriodMixin, ModelAdm
 
         if period is not None:
             site = pronajimatele.arealy(request).filter(pk=site_id).first() if site_id else None
-            for row in get_item_summary_rows(period, site=site, with_meters=with_meters):
+            for row in get_item_summary_rows(
+                period, site=site, with_meters=with_meters,
+                sites=pronajimatele.id_arealu(request),
+            ):
                 groups_by_class.setdefault(row["invoice_class_key"], []).append(row)
                 if row["naklad"] is not None:
                     totals["naklad"] += row["naklad"]
@@ -4296,7 +4334,10 @@ class BillingLineAdmin(PodlePronajimatele, DefaultToCurrentPeriodMixin, ModelAdm
 
         if period is not None:
             qs = (
-                BillingLine.objects.filter(period=period)
+                pronajimatele.omez(
+                    BillingLine.objects.filter(period=period),
+                    "service_item__site", request,
+                )
                 .select_related(
                     "client_card__client", "client_card__unit",
                     "service_item", "service_item__meter", "service_item__site",
@@ -4575,7 +4616,8 @@ class FloorplanAdmin(PodlePronajimatele, ModelAdmin):
             "plan": plan,
             "kody": kody,
             "units": units,
-            "klienti": Client.objects.filter(is_active=True).order_by("name"),
+            "klienti": pronajimatele.klienti(
+                request, Client.objects.filter(is_active=True)).order_by("name"),
             "klient": klient,
             "datum": datum,
             "sazba": sazba,

@@ -61,3 +61,57 @@ def pocet_prihlasenych(context):
         uzivatele.add(str(request.user.pk))
 
     return len(uzivatele)
+
+
+@register.simple_tag(takes_context=True)
+def posledni_akce_v_kontextu(context, pocet=10):
+    """Posledni akce uzivatele omezene na zvoleneho pronajimatele.
+
+    Vestavene {% get_admin_log %} ukazuje historii bez ohledu na kontext,
+    takze v kontextu DV svitily karty z FM - a jejich odkaz vedl na
+    stranku, kterou uzivatel ve zvolenem kontextu stejne neotevre.
+
+    Prislusnost se overuje pres get_queryset prislusneho ModelAdminu, tedy
+    stejnym pravidlem jako seznamy (core.admin.PodlePronajimatele) - jeden
+    dotaz na kazdy typ objektu v historii, ne na kazdy radek. Zaznamy
+    o SMAZANI vypadnou: objekt uz neexistuje, takze se nema jak zaradit.
+    """
+    from django.contrib import admin as dj
+    from django.contrib.admin.models import LogEntry
+
+    from core.admin import PodlePronajimatele
+
+    request = context.get("request")
+    if request is None or not request.user.is_authenticated:
+        return []
+
+    # Se zapasem nabereme vic radku, nez kolik jich chceme ukazat - cast
+    # jich filtr zahodi.
+    zaznamy = list(
+        LogEntry.objects.filter(user=request.user)
+        .select_related("content_type")[: pocet * 5]
+    )
+    podle_typu = {}
+    for z in zaznamy:
+        podle_typu.setdefault(z.content_type_id, set()).add(z.object_id)
+
+    povolene = {}
+    for typ_id, ids in podle_typu.items():
+        typ = next(z.content_type for z in zaznamy if z.content_type_id == typ_id)
+        model = typ.model_class()
+        spravce = dj.site._registry.get(model) if model else None
+        if spravce is None:
+            povolene[typ_id] = set()
+        elif isinstance(spravce, PodlePronajimatele):
+            povolene[typ_id] = {
+                str(pk) for pk in spravce.get_queryset(request)
+                .filter(pk__in=[i for i in ids if str(i).isdigit()])
+                .values_list("pk", flat=True)
+            }
+        else:
+            povolene[typ_id] = set(ids)  # sdilene ciselniky (Obdobi, Tridy...)
+
+    return [
+        z for z in zaznamy
+        if not z.is_deletion() and z.object_id in povolene.get(z.content_type_id, set())
+    ][:pocet]

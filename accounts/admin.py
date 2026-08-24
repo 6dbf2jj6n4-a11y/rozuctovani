@@ -69,3 +69,22 @@ class CustomUserAdmin(ModelAdmin, UserAdmin):
             '<img src="{}" alt="" style="width:28px; height:28px; '
             'border-radius:50%; object-fit:cover; display:block;">', url
         )
+
+    def formfield_for_foreignkey(self, db_field, request, **kwargs):
+        """Klient se nabizi jen z kontextu zvoleneho pronajimatele.
+
+        Uzivatelu se zaklada malo, ale formular jinak vypsal uplne vsechny
+        klienty obou pronajimatelu - viz core/pronajimatele.py."""
+        if db_field.name == "client":
+            from core import pronajimatele
+
+            kwargs["queryset"] = pronajimatele.klienti(request).order_by("name")
+        return super().formfield_for_foreignkey(db_field, request, **kwargs)
+
+    def formfield_for_manytomany(self, db_field, request, **kwargs):
+        """Totez pro Arealy, ke kterym ma spravce pristup."""
+        if db_field.name == "sites":
+            from core import pronajimatele
+
+            kwargs["queryset"] = pronajimatele.arealy(request).order_by("name")
+        return super().formfield_for_manytomany(db_field, request, **kwargs)

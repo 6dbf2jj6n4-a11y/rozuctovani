@@ -21,7 +21,7 @@ from core.models import (
 from .engine import ABSOLUTE_AMOUNT_TYPES, _consumption_shares, _meter_provides_consumption
 
 
-def get_item_summary_rows(period, site=None, with_meters=False):
+def get_item_summary_rows(period, site=None, with_meters=False, sites=None):
     """`with_meters=True`: ke kazde merene polozce navic prida
     "meter_breakdown" - seznam radku po JEDNOTLIVYCH meridlech/skupinach
     (viz billing/engine.py _consumption_shares by_meter_out), s jejich
@@ -34,6 +34,11 @@ def get_item_summary_rows(period, site=None, with_meters=False):
     )
     if site is not None:
         items = items.filter(site=site)
+    # `sites` omezi prehled na arealy pronajimatele, se kterym uzivatel
+    # prave pracuje (core/pronajimatele.py) - `site` je vyber uzivatele
+    # nad tabulkou, tohle je kontext, ktery plati i bez nej.
+    if sites is not None:
+        items = items.filter(site__in=sites)
     items = list(items)
 
     # Hromadne predem nactene CostEntry/BillingLine/Cenik/odecty pro
