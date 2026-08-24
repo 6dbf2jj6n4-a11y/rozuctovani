@@ -22,6 +22,15 @@ INKSCAPE_NS = "http://www.inkscape.org/namespaces/inkscape"
 VRSTVA_PRONAJIMANE = "Plochy_rentex"
 VRSTVA_SPOLECNE = "Plochy_spolecne"
 
+# Vrstvy se v Inkscapu pojmenovavaji rucne, takze se snadno prohodi poradi
+# slov nebo velikost pismen ("rentex_plochy" misto "Plochy_rentex"). Radeji
+# prijmeme obe podoby, nez aby se planek tise nevykreslil. Viz Daniel
+# 2026-08-24 (dv_1NP.svg).
+ALIASY_VRSTEV = {
+    VRSTVA_PRONAJIMANE: ("plochy_rentex", "rentex_plochy"),
+    VRSTVA_SPOLECNE: ("plochy_spolecne", "spolecne_plochy"),
+}
+
 # tvary, ktere ve vrstvach ploch davaji smysl
 TVARY = ("rect", "path", "polygon", "circle", "ellipse")
 
@@ -42,14 +51,22 @@ def _bez_ns(tag):
 
 
 def _vrstvy(korenovy_prvek):
-    """Vrati {nazev vrstvy: prvek} pro vrstvy nejvyssi urovne."""
+    """Vrati {nazev vrstvy: prvek} pro vrstvy nejvyssi urovne.
+
+    Vrstva pojmenovana nekterym z ALIASU se zaroven zpristupni pod svym
+    ocekavanym nazvem, takze "rentex_plochy" funguje stejne jako
+    "Plochy_rentex"."""
     out = {}
     for g in korenovy_prvek.findall("{%s}g" % SVG_NS):
         if g.get("{%s}groupmode" % INKSCAPE_NS) != "layer":
             continue
         nazev = g.get("{%s}label" % INKSCAPE_NS)
-        if nazev:
-            out[nazev] = g
+        if not nazev:
+            continue
+        out[nazev] = g
+        for ocekavany, aliasy in ALIASY_VRSTEV.items():
+            if nazev.lower() in aliasy and ocekavany not in out:
+                out[ocekavany] = g
     return out
 
 
