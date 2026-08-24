@@ -232,10 +232,19 @@
         .move-btn:disabled { opacity: 0.25; cursor: default; }
         @media (min-width: 760px) {
             .sidebar { display: block; }
-            /* Tabulka meridel je typicky delsi nez karta formulare - bez
-               sticky na .wrap by po kliku na radek daleko dole zustal
-               formular nahore mimo obrazovku. Viz konverzace s Danielem
-               2026-08-18. */
+        }
+        /* Tabulka meridel je typicky delsi nez karta formulare - bez sticky
+           na .wrap by po kliku na radek daleko dole zustal formular nahore
+           mimo obrazovku. Viz konverzace s Danielem 2026-08-18.
+
+           Podminka na vysku: telefon polozeny na sirku ma sice pres 760 px
+           sirky, ale jen ~375 px vysky. Karta se do nej cela nevejde a
+           sticky ji pribije k hornimu okraji - stranka pak roluje jen
+           tabulkou vpravo a na pole pro zadani odectu se nedostane vubec.
+           Pod 720 px vysky proto sticky vypiname a misto nej po volbe
+           meridla odrolujeme na kartu (odrolujNaKartu nize).
+           Viz Daniel 2026-08-24. */
+        @media (min-width: 760px) and (min-height: 720px) {
             .wrap { position: sticky; top: 20px; }
         }
     </style>
@@ -787,12 +796,25 @@
         if (row && i !== idx) row.className = "filled";
     }
 
+    function odrolujNaKartu() {
+        // Kdyz je .wrap sticky, karta je videt vzdycky a tohle neudela nic.
+        // Na nizke obrazovce (telefon na sirku) sticky neplati, takze po
+        // kliku do tabulky vpravo je potreba se na kartu presunout.
+        var karta = document.getElementById("card");
+        if (!karta) return;
+        var kde = karta.getBoundingClientRect();
+        if (kde.top < 0 || kde.bottom > window.innerHeight) {
+            karta.scrollIntoView({ behavior: "smooth", block: "start" });
+        }
+    }
+
     function switchTo(newIdx) {
         if (newIdx < 0 || newIdx >= meters.length || newIdx === idx) return;
         save();
         var dir = newIdx > idx ? 1 : -1;
         idx = newIdx;
         animateCard(dir);
+        odrolujNaKartu();
     }
 
     function animateCard(dir) {
