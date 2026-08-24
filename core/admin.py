@@ -1536,7 +1536,7 @@ class ClientCardAdmin(ModelAdmin):
         cards = (
             ClientCard.objects.filter(is_active=True, client__is_landlord=False)
             .select_related("client")
-            .prefetch_related("card_units__unit__site")
+            .prefetch_related("card_units__unit__site__landlord")
             .order_by("client__name")
         )
         if site_id:
@@ -1591,10 +1591,21 @@ class ClientCardAdmin(ModelAdmin):
                 plny_mesic,
             )
             k_fakturaci_rocne = (plny_mesic - nefakturovano_plny_mesic) * 12
-            # DPH se pripocita jen platci - neplatci je najem osvobozeny
-            # (§56a), takze u nej se castka vc. DPH rovna castce bez DPH.
-            koef = (1 + sazba_dph) if card.client.vat_payer else Decimal("1")
+            # Najem je podle §56a od DPH osvobozeny; zdanit ho lze jen
+            # tehdy, kdyz jsou platci OBE strany. Nestaci tedy platce
+            # najemce - pronajimatel, ktery sam platcem neni, DPH
+            # naucovat nemuze a nema z ceho. Areal DV je vedeny na
+            # fyzickou osobu neplatce, takze u nej se castka vc. DPH
+            # vzdycky rovna castce bez DPH, i kdyz je najemce platce.
+            # Viz Daniel 2026-08-24.
             sites_of_card = {cu.unit.site for cu in card_units}
+            pronajimatele = {s.landlord for s in sites_of_card if s.landlord_id}
+            zdanit = bool(
+                card.client.vat_payer
+                and pronajimatele
+                and all(p.vat_payer for p in pronajimatele)
+            )
+            koef = (1 + sazba_dph) if zdanit else Decimal("1")
             rows.append({
                 "client": card.client,
                 "card": card,
@@ -1608,7 +1619,7 @@ class ClientCardAdmin(ModelAdmin):
                 "aktivnich_dnu": aktivnich_dnu,
                 "dnu_v_obdobi": period.days_in_period if period else None,
                 "castecne": period is not None and aktivnich_dnu < period.days_in_period,
-                "s_dph": card.client.vat_payer,
+                "s_dph": zdanit,
                 "yearly_rent": plny_mesic * 12,
                 "yearly_rent_s_dph": (k_fakturaci_rocne * koef).quantize(Decimal("0.01")),
             })
