@@ -86,3 +86,49 @@ class NonStaffAdminRedirectMiddleware:
                 from django.contrib.auth.views import redirect_to_login
                 return redirect_to_login(request.get_full_path(), login_url="/accounts/login/")
         return self.get_response(request)
+
+
+class PronajimatelMiddleware:
+    """Do adminu se nedostaneme bez zvoleneho pronajimatele.
+
+    Aplikace vede data vic pronajimatelu v jedne databazi, ale pracuje se
+    vzdycky s jednim - dokud si uzivatel nezvoli, se kterym, nema smysl mu
+    ukazovat seznamy, ktere by michaly obe osoby dohromady. Kdyz je
+    pronajimatel jen jeden, zvoli se sam a uzivatel o tehle vrstve vubec
+    nevi.
+
+    Hlida se jen /admin/ - zadavani odectu (/odecty/) ma vlastni omezeni
+    pres accounts.User.sites a klientske vyuctovani se pronajimatele
+    netyka. Viz core/pronajimatele.py, konverzace s Danielem 2026-08-25.
+    """
+
+    # Adresy, ktere musi projit i bez volby, jinak by vzniklo presmerovaci
+    # kolecko (sama volba) nebo by se uzivatel nemohl odhlasit.
+    VOLNE = ("/admin/pronajimatel/", "/admin/logout/", "/admin/login/", "/admin/jsi18n/")
+
+    def __init__(self, get_response):
+        self.get_response = get_response
+
+    def __call__(self, request):
+        if (
+            request.path.startswith("/admin/")
+            and not request.path.startswith(self.VOLNE)
+            and request.user.is_authenticated
+            and request.user.is_staff
+        ):
+            from django.shortcuts import redirect
+            from django.urls import reverse
+            from django.utils.http import urlencode
+
+            from core import pronajimatele
+
+            if pronajimatele.aktualni(request) is None:
+                dostupni = list(pronajimatele.dostupni())
+                if len(dostupni) == 1:
+                    pronajimatele.nastav(request, dostupni[0])
+                else:
+                    return redirect("{}?{}".format(
+                        reverse("vyber_pronajimatele"),
+                        urlencode({"dal": request.get_full_path()}),
+                    ))
+        return self.get_response(request)

@@ -31,3 +31,49 @@ def class_colors_css(request):
     # je to par radku CSS a jeden trivialni dotaz.
     response["Cache-Control"] = "no-cache"
     return response
+
+
+def vyber_pronajimatele(request):
+    """Stranka s volbou pronajimatele, se kterym uzivatel pracuje.
+
+    Sem posila config.middleware.PronajimatelMiddleware kazdeho, kdo do
+    adminu prijde bez zvoleneho pronajimatele. Viz core/pronajimatele.py.
+    """
+    from django.contrib.admin import site as admin_site
+    from django.shortcuts import redirect, render
+
+    from core import pronajimatele
+
+    dostupni = list(pronajimatele.dostupni())
+    kam = request.GET.get("dal") or "/admin/"
+    # Odkud jsme prisli si drzime v adresa, ne v session - uzivatel muze
+    # mit otevrenych vic zalozek a kazda miri jinam.
+    if request.method == "POST":
+        zvoleny = next(
+            (p for p in dostupni if str(p.pk) == request.POST.get("pronajimatel")), None
+        )
+        if zvoleny is not None:
+            pronajimatele.nastav(request, zvoleny)
+            return redirect(request.POST.get("dal") or "/admin/")
+
+    return render(request, "admin/vyber_pronajimatele.html", {
+        **admin_site.each_context(request),
+        "title": "Se kterým pronajímatelem chcete pracovat?",
+        "dostupni": dostupni,
+        "aktualni": pronajimatele.aktualni(request),
+        "dal": kam,
+    })
+
+
+def prepnout_pronajimatele(request, pk):
+    """Prepnuti z hlavicky menu - vrati uzivatele tam, odkud prisel."""
+    from django.shortcuts import redirect
+
+    from core import pronajimatele
+
+    zvoleny = pronajimatele.dostupni().filter(pk=pk).first()
+    if zvoleny is not None:
+        pronajimatele.nastav(request, zvoleny)
+    # Zpatky na tutez stranku: po prepnuti se ma jen prekreslit obsah.
+    # Referer muze chybet (primo zadana adresa), pak jde uzivatel na uvod.
+    return redirect(request.META.get("HTTP_REFERER") or "/admin/")

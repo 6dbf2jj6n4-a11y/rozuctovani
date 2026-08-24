@@ -43,6 +43,9 @@ MIDDLEWARE = [
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "config.middleware.SlowRequestLoggingMiddleware",
     "config.middleware.NonStaffAdminRedirectMiddleware",
+    # Az za NonStaffAdminRedirect - ten nejdriv odbavi neprihlasene
+    # a nestaff uzivatele, teprve pak ma smysl resit volbu pronajimatele.
+    "config.middleware.PronajimatelMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
@@ -167,7 +170,7 @@ SESSION_SAVE_EVERY_REQUEST = True
 # 2027.0), i kdyby se nekdo zapomnel APP_VERSION_YEAR rucne prepsat -
 # dohoda s Danielem 2026-08-15.
 APP_VERSION_YEAR = 2026
-APP_VERSION_SEQUENCE = 185
+APP_VERSION_SEQUENCE = 186
 APP_VERSION = (
     f"{APP_VERSION_YEAR}.{APP_VERSION_SEQUENCE}"
     if date.today().year == APP_VERSION_YEAR
@@ -179,6 +182,9 @@ UNFOLD = {
     "SITE_HEADER": f"Rente )( {APP_VERSION}",
     "SITE_ICON": "core.admin_branding.site_icon",
     "SITE_SUBHEADER": "core.admin_branding.site_subheader",
+    # Rozbalovatko v hlavicce menu - prepinani pronajimatele,
+    # se kterym se pracuje (core/pronajimatele.py).
+    "SITE_DROPDOWN": "core.admin_branding.pronajimatel_dropdown",
     "STYLES": [
         "core.admin_branding.inline_date_width_fix_css",
         "core.admin_branding.class_colors_css",

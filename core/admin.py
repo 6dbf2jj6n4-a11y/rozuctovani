@@ -14,6 +14,7 @@ except admin.sites.NotRegistered:
 from django import forms
 from unfold.decorators import display
 from unfold.widgets import UnfoldBooleanSwitchWidget
+from . import pronajimatele
 from .admin_mixins import ModelAdmin, TabularInline
 
 from .models import (
@@ -91,6 +92,58 @@ def invoice_class_choice_field(db_field):
     )
 
 
+class PodlePronajimatele:
+    """Omezi seznam na data pronajimatele, se kterym uzivatel prave pracuje.
+
+    Databaze je jedna a data obou pronajimatelu v ni lezi vedle sebe, ale
+    uzivatel vidi vzdycky prave jednoho - viz core/pronajimatele.py.
+
+    `cesta_k_arealu` je ORM cesta od tohohle modelu k core.Site (u Areálu
+    samotneho "pk"). Zaznam, ktery se k zadnemu arealu priradit neda
+    (napr. cerstve zalozeny klient jeste bez karty), se ukazuje VZDYCKY -
+    schovat ho by znamenalo, ze ho Daniel nenajde a nedozvi se proc.
+
+    Sdilene ciselniky (Obdobi, Tridy, Inflace) tenhle mixin nemaji, ty pod
+    pronajimatele nepatri."""
+
+    cesta_k_arealu = "site"
+    zahrnout_neprirazene = True
+    # Cesta pres zpetnou vazbu (napr. karta -> plochy) vraci radek
+    # tolikrat, kolik ma navazanych zaznamu.
+    potrebuje_distinct = False
+
+    def dodatecne_q(self, request):
+        """Co se ma videt navic bez ohledu na areal (viz ClientAdmin)."""
+        return None
+
+    def get_queryset(self, request):
+        from django.db.models import Q
+
+        from core import pronajimatele
+
+        qs = super().get_queryset(request)
+        podminka = Q(**{"%s__in" % self.cesta_k_arealu: pronajimatele.id_arealu(request)})
+        if self.zahrnout_neprirazene:
+            podminka |= Q(**{"%s__isnull" % self.cesta_k_arealu: True})
+        navic = self.dodatecne_q(request)
+        if navic is not None:
+            podminka |= navic
+        qs = qs.filter(podminka)
+        return qs.distinct() if self.potrebuje_distinct else qs
+
+    def formfield_for_foreignkey(self, db_field, request, **kwargs):
+        """V poli Areál nabidnout jen arealy zvoleneho pronajimatele.
+
+        Bez tohohle by slo v kontextu DV zalozit treba meridlo na FM -
+        ulozilo by se a hned zmizelo ze seznamu, protoze do zvoleneho
+        kontextu nepatri."""
+        from core.models import Site
+
+        if db_field.related_model is Site:
+            kwargs["queryset"] = pronajimatele.arealy(request).order_by("name")
+        return super().formfield_for_foreignkey(db_field, request, **kwargs)
+
+
 class DefaultToCurrentPeriodMixin:
     """Pri prvnim otevreni seznamu (bez explicitne zvoleneho Obdobi)
     presmeruje na filtr podle AKTUALNIHO Obdobi (Period.current(), tj.
@@ -160,7 +213,9 @@ class UnitInline(TabularInline):
 
 
 @admin.register(Site)
-class SiteAdmin(ModelAdmin):
+class SiteAdmin(PodlePronajimatele, ModelAdmin):
+    cesta_k_arealu = "pk"
+    zahrnout_neprirazene = False
     list_display = ("name", "address", "landlord", "v_koeficientu_dph", "aktivnich_klientu")
     list_select_related = ("landlord",)
     list_filter = ("landlord",)
@@ -281,7 +336,8 @@ def sekce_sluzeb():
 
 
 @admin.register(Unit)
-class UnitAdmin(DuplicateModelAdminMixin, ModelAdmin):
+class UnitAdmin(PodlePronajimatele, DuplicateModelAdminMixin, ModelAdmin):
+    cesta_k_arealu = "site"
     list_display = ("name", "site", "purpose", "area_m2", "unit_type", "druh_prostoru")
     list_select_related = ("site",)
     list_filter = ("site", "is_residential")
@@ -530,7 +586,7 @@ class SiteFilter(admin.SimpleListFilter):
     parameter_name = "site"
 
     def lookups(self, request, model_admin):
-        return [(s.id, s.name) for s in Site.objects.all()]
+        return [(s.id, s.name) for s in pronajimatele.arealy(request)]
 
     def queryset(self, request, queryset):
         if self.value():
@@ -552,7 +608,7 @@ class ClientCardSiteFilter(admin.SimpleListFilter):
     parameter_name = "site"
 
     def lookups(self, request, model_admin):
-        return [(s.id, s.name) for s in Site.objects.all()]
+        return [(s.id, s.name) for s in pronajimatele.arealy(request)]
 
     def queryset(self, request, queryset):
         if self.value():
@@ -688,7 +744,23 @@ class TelefonField(forms.MultiValueField):
 
 
 @admin.register(Client)
-class ClientAdmin(ModelAdmin):
+class ClientAdmin(PodlePronajimatele, ModelAdmin):
+    # Klient patri pod pronajimatele pres svoje karty. Cerstve zalozeny
+    # klient jeste zadnou kartu nema, takze ho zahrnout_neprirazene nechava
+    # videt vsem - jinak by po ulozeni zmizel driv, nez by se stihla
+    # zalozit karta.
+    cesta_k_arealu = "cards__card_units__unit__site"
+    potrebuje_distinct = True
+
+    def dodatecne_q(self, request):
+        """Pronajimatele je videt vzdycky.
+
+        Sami jsou taky klienti a nektery ma vlastni kartu (CALAMARI SE na
+        NJ), takze by se ve druhem kontextu neukazal - a prave na nej pritom
+        odkazuje pole Pronajimatel u Arealu."""
+        from django.db.models import Q
+
+        return Q(is_landlord=True)
     list_display = (
         "name_display", "code", "ico", "vat_payer", "contact_email", "contact_phone", "is_active",
     )
@@ -923,7 +995,8 @@ class ContractAdminForm(forms.ModelForm):
 
 
 @admin.register(Contract)
-class ContractAdmin(DuplicateModelAdminMixin, ModelAdmin):
+class ContractAdmin(PodlePronajimatele, DuplicateModelAdminMixin, ModelAdmin):
+    cesta_k_arealu = "site"
     form = ContractAdminForm
     list_display = ("client", "number", "valid_from", "valid_to", "deposit_paid", "has_inflation_clause")
     list_select_related = ("client",)
@@ -1201,12 +1274,14 @@ class ClientCardActiveFilter(admin.SimpleListFilter):
 
 
 @admin.register(ClientCard)
-class ClientCardAdmin(ModelAdmin):
+class ClientCardAdmin(PodlePronajimatele, ModelAdmin):
     # Unfoldova funkce warn_unsaved_form (zaplá globálně na ModelAdmin) rozbíjí
     # na této stránce tlačítko "Přidat další" u inline klíčů - vypínáme ji a
     # varování o neuložených změnách řešíme vlastním JS (warn_unsaved.js), který
     # "Přidat" nerozbíjí. Viz konverzace s Danielem.
     warn_unsaved_form = False
+    cesta_k_arealu = "card_units__unit__site"
+    potrebuje_distinct = True
     list_display = ("client", "description", "valid_from", "valid_to", "is_active")
     # Vygeneruje <style> pravidla pro barvy sekci Elektřina/Voda/Teplo/
     # Ostatní podle aktualnich hodnot InvoiceClassColor (Nastavení ->
@@ -1555,7 +1630,7 @@ class ClientCardAdmin(ModelAdmin):
         from django.shortcuts import render
 
         site_id = request.GET.get("site")
-        sites = Site.objects.order_by("name")
+        sites = pronajimatele.arealy(request).order_by("name")
 
         # Prehled je vztazeny k OBDOBI: ukazuje karty, ktere v nem aspon
         # den plati, a najem zkraceny podle poctu aktivnich dni - jinak by
@@ -1810,7 +1885,8 @@ class MeterReadingInline(TabularInline):
 
 
 @admin.register(Meter)
-class MeterAdmin(DuplicateModelAdminMixin, ModelAdmin):
+class MeterAdmin(PodlePronajimatele, DuplicateModelAdminMixin, ModelAdmin):
+    cesta_k_arealu = "site"
     list_display = (
         "code_colored", "name", "site", "meter_type", "parent_meter", "supply_point",
         "reading_mode", "is_virtual", "unit_of_measure", "weight_unit_label",
@@ -2013,7 +2089,7 @@ class MeterAdmin(DuplicateModelAdminMixin, ModelAdmin):
         periods = Period.objects.all()
         period = periods.filter(pk=period_id).first() if period_id else Period.current()
 
-        sites = Site.objects.order_by("name")
+        sites = pronajimatele.arealy(request).order_by("name")
         site = sites.filter(pk=site_id).first() if site_id else None
 
         groups = []
@@ -2674,7 +2750,7 @@ class PeriodAdmin(ModelAdmin):
             site_id = request.POST.get("site") or ""
             site = None
             if site_id:
-                site = Site.objects.filter(pk=site_id).first()
+                site = pronajimatele.arealy(request).filter(pk=site_id).first()
                 if site is None:
                     self.message_user(request, "Neznámý areál.", level=messages.ERROR)
                     return redirect("admin:core_period_changelist")
@@ -2685,7 +2761,7 @@ class PeriodAdmin(ModelAdmin):
             **self.admin_site.each_context(request),
             "title": f"Výpočet rozúčtování – {period}",
             "period": period,
-            "sites": Site.objects.order_by("name"),
+            "sites": pronajimatele.arealy(request).order_by("name"),
             "je_uzavrene": period.status == Period.Status.CLOSED,
             "opts": self.model._meta,
         }
@@ -2693,7 +2769,7 @@ class PeriodAdmin(ModelAdmin):
 
     def get_actions(self, request):
         actions = super().get_actions(request)
-        for site in Site.objects.all():
+        for site in pronajimatele.arealy(request):
             action_name = f"spocitat_rozuctovani_site_{site.pk}"
             actions[action_name] = (
                 self._site_action(site),
@@ -3073,7 +3149,8 @@ class InflationRateAdmin(ModelAdmin):
 
 
 @admin.register(SupplyPoint)
-class SupplyPointAdmin(ModelAdmin):
+class SupplyPointAdmin(PodlePronajimatele, ModelAdmin):
+    cesta_k_arealu = "site"
     list_display = ("name_colored", "code", "site", "meter_type", "main_meter", "legal_loss_pct", "member_count")
     list_select_related = ("site", "main_meter")
     list_filter = ("site", "meter_type")
@@ -3115,7 +3192,8 @@ class SupplyPointAdmin(ModelAdmin):
 
 
 @admin.register(MeterReading)
-class MeterReadingAdmin(DefaultToCurrentPeriodMixin, ModelAdmin):
+class MeterReadingAdmin(PodlePronajimatele, DefaultToCurrentPeriodMixin, ModelAdmin):
+    cesta_k_arealu = "meter__site"
     list_display = ("meter_colored", "period", "reading_date", "value", "reset_from_value")
     list_select_related = ("meter", "period")
     list_filter = ("meter__site", "meter__meter_type", "period", _PeriodDefaultMarkerFilter)
@@ -3168,7 +3246,8 @@ def _efektivni_cena_za_jednotku(cost_entry):
 
 
 @admin.register(ServicePoolItem)
-class ServicePoolItemAdmin(ModelAdmin):
+class ServicePoolItemAdmin(PodlePronajimatele, ModelAdmin):
+    cesta_k_arealu = "site"
     list_display = (
         "name", "site", "invoice_class", "unit", "meter", "jednotka",
         "default_allocation_type", "default_amount_czk_display", "weight_unit_label",
@@ -3274,7 +3353,8 @@ class ServicePoolItemAdmin(ModelAdmin):
 
 
 @admin.register(AllocationKey)
-class AllocationKeyAdmin(ModelAdmin):
+class AllocationKeyAdmin(PodlePronajimatele, ModelAdmin):
+    cesta_k_arealu = "service_item__site"
     list_display = (
         "client_card_display", "service_item", "allocation_type", "value_display",
         "meter", "unit", "deduct_from_pool", "is_billed", "valid_from", "valid_to",
@@ -3323,7 +3403,8 @@ class AllocationKeyAdmin(ModelAdmin):
 
 
 @admin.register(PriceList)
-class PriceListAdmin(DefaultToCurrentPeriodMixin, ModelAdmin):
+class PriceListAdmin(PodlePronajimatele, DefaultToCurrentPeriodMixin, ModelAdmin):
+    cesta_k_arealu = "service_item__site"
     list_display = ("service_item_colored", "period", "price_per_unit_display", "note")
     list_select_related = ("service_item", "service_item__site", "period")
     list_filter = ("period", "service_item__site", _PeriodDefaultMarkerFilter)
@@ -3490,7 +3571,7 @@ class CostEntryVyplnenoFilter(admin.SimpleListFilter):
 
 
 @admin.register(CostEntry)
-class CostEntryAdmin(DefaultToCurrentPeriodMixin, ModelAdmin):
+class CostEntryAdmin(PodlePronajimatele, DefaultToCurrentPeriodMixin, ModelAdmin):
     """list_editable u amount_units/amount_czk - primo v seznamu (po
     filtru na Obdobi) jde zadat cisla u vice polozek najednou a ulozit
     jednim tlacitkem, misto otevirani kazdeho zaznamu zvlast. Kvuli tomu
@@ -3498,6 +3579,8 @@ class CostEntryAdmin(DefaultToCurrentPeriodMixin, ModelAdmin):
     aby zustal jasny "odkazovaci" sloupec pro otevreni celeho formulare
     (napr. kvuli kontrolnim polim). Poznamka se v seznamu nezobrazuje
     (jen ve formulari zaznamu) - viz konverzace s Danielem."""
+    cesta_k_arealu = "service_item__site"
+
     list_display = (
         "trida", "service_item", "supplier", "period", "amount_units", "amount_czk",
         "jednotka", "kc_za_jednotku", "amount_czk_display",
@@ -3639,7 +3722,8 @@ class CostEntryAdmin(DefaultToCurrentPeriodMixin, ModelAdmin):
 
 
 @admin.register(BillingLine)
-class BillingLineAdmin(DefaultToCurrentPeriodMixin, ModelAdmin):
+class BillingLineAdmin(PodlePronajimatele, DefaultToCurrentPeriodMixin, ModelAdmin):
+    cesta_k_arealu = "service_item__site"
     list_display = ("client_card_display", "service_item", "period", "amount_display", "share_display")
     list_select_related = ("client_card", "client_card__client", "service_item", "service_item__site", "period")
     list_filter = ("period", _PeriodDefaultMarkerFilter)
@@ -3855,7 +3939,7 @@ class BillingLineAdmin(DefaultToCurrentPeriodMixin, ModelAdmin):
         except ValueError:
             n = 6
 
-        sites = Site.objects.order_by("name")
+        sites = pronajimatele.arealy(request).order_by("name")
         site_id = request.GET.get("site")
         site = sites.filter(pk=site_id).first() if site_id else None
 
@@ -4090,7 +4174,7 @@ class BillingLineAdmin(DefaultToCurrentPeriodMixin, ModelAdmin):
         if period is None:
             period = Period.current()
 
-        sites = Site.objects.order_by("name")
+        sites = pronajimatele.arealy(request).order_by("name")
 
         class_labels = InvoiceClassColor.label_map()
         groups_by_class = {key: [] for key, _ in InvoiceClassColor.choices()}
@@ -4099,7 +4183,7 @@ class BillingLineAdmin(DefaultToCurrentPeriodMixin, ModelAdmin):
         }
 
         if period is not None:
-            site = Site.objects.filter(pk=site_id).first() if site_id else None
+            site = pronajimatele.arealy(request).filter(pk=site_id).first() if site_id else None
             for row in get_item_summary_rows(period, site=site, with_meters=with_meters):
                 groups_by_class.setdefault(row["invoice_class_key"], []).append(row)
                 if row["naklad"] is not None:
@@ -4200,7 +4284,7 @@ class BillingLineAdmin(DefaultToCurrentPeriodMixin, ModelAdmin):
         if period is None:
             period = Period.current()
 
-        sites = Site.objects.order_by("name")
+        sites = pronajimatele.arealy(request).order_by("name")
 
         groups_by_class = {key: [] for key, _ in InvoiceClassColor.choices()}
         grand_total = Decimal("0")
@@ -4331,9 +4415,11 @@ class BillingLineAdmin(DefaultToCurrentPeriodMixin, ModelAdmin):
 
 
 @admin.register(Floorplan)
-class FloorplanAdmin(ModelAdmin):
+class FloorplanAdmin(PodlePronajimatele, ModelAdmin):
     """Planky (2D pudorysy). Tvary ploch zustavaji ve vykresu, obsazenost
     v Kartach - parovani je jen pres `id` polygonu (viz core/floorplan.py)."""
+    cesta_k_arealu = "site"
+
 
     list_display = ("name", "site", "order", "ploch", "velikost", "is_active", "prohlizec_odkaz")
     list_filter = ("site", "is_active")
@@ -4568,7 +4654,7 @@ class FloorplanAdmin(ModelAdmin):
 
         from core.floorplan import kontrola_parovani
 
-        sites = list(Site.objects.filter(floorplans__is_active=True).distinct())
+        sites = list(pronajimatele.arealy(request).filter(floorplans__is_active=True).distinct())
         vybrany_id = request.GET.get("site")
         vybrany = None
         if vybrany_id:

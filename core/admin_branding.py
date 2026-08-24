@@ -6,9 +6,37 @@ aplikaci."""
 
 
 def site_subheader(request):
-    from core.models import Client
-    landlord = Client.objects.filter(is_landlord=True).first()
-    return landlord.name if landlord else None
+    """Pronajimatel, se kterym uzivatel prave pracuje.
+
+    Drive to byl prvni klient s priznakem "Pronajimatel" - od zavedeni
+    volby (core/pronajimatele.py) ukazuje toho zvoleneho, aby bylo na
+    kazde strance videt, ci data mam pred sebou."""
+    from core import pronajimatele
+
+    pronajimatel = pronajimatele.aktualni(request)
+    return pronajimatel.name if pronajimatel else None
+
+
+def pronajimatel_dropdown(request):
+    """Polozky rozbalovatka v hlavicce menu - prepnuti pronajimatele.
+
+    Prave zvoleny se nenabizi, klikat sam na sebe nema smysl. Kdyz je
+    pronajimatel jen jeden, vraci prazdny seznam a Unfold rozbalovatko
+    vubec nevykresli."""
+    from django.urls import reverse
+
+    from core import pronajimatele
+
+    aktualni = pronajimatele.aktualni(request)
+    return [
+        {
+            "title": p.name,
+            "icon": "swap_horiz",
+            "link": reverse("prepnout_pronajimatele", args=[p.pk]),
+        }
+        for p in pronajimatele.dostupni()
+        if aktualni is None or p.pk != aktualni.pk
+    ]
 
 
 def inline_date_width_fix_css(request):

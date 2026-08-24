@@ -1,0 +1,43 @@
+{% extends "admin/base_site.html" %}
+{% comment %}
+Rozcestnik, na ktery posila config.middleware.PronajimatelMiddleware
+kazdeho, kdo prijde do adminu bez zvoleneho pronajimatele. Zbytek casu
+se prepina rovnou z hlavicky bocniho menu (UNFOLD SITE_DROPDOWN),
+takze tuhle stranku uzivatel vidi typicky jen jednou po prihlaseni.
+Viz core/pronajimatele.py.
+{% endcomment %}
+
+{% block content %}
+<div style="max-width:520px;">
+    <p style="color:#999; font-size:13px; margin-bottom:18px;">
+        Aplikace vede data více pronajímatelů v jedné databázi, ale pracuje se
+        vždy s jedním. Klienti, plochy, karty, měřidla i náklady se pak ukazují
+        jen za něj. Přepnout se dá kdykoli v hlavičce menu vlevo nahoře.
+    </p>
+
+    <form method="post">
+        {% csrf_token %}
+        <input type="hidden" name="dal" value="{{ dal }}">
+        {% for p in dostupni %}
+            <button type="submit" name="pronajimatel" value="{{ p.pk }}"
+                    style="display:block; width:100%; text-align:left; cursor:pointer;
+                           margin-bottom:10px; padding:14px 16px; border-radius:10px;
+                           border:1px solid {% if aktualni and aktualni.pk == p.pk %}#2563eb{% else %}#d1d5db{% endif %};
+                           background:transparent; font-family:inherit; font-size:15px;">
+                <strong>{{ p.name }}</strong>
+                <span style="display:block; font-size:12px; color:#888; margin-top:3px;">
+                    {% if p.vat_payer %}plátce DPH{% else %}neplátce DPH{% endif %}
+                    &middot;
+                    {% for s in p.owned_sites.all %}{{ s.name }}{% if not forloop.last %}, {% endif %}{% empty %}zatím bez areálu{% endfor %}
+                    {% if aktualni and aktualni.pk == p.pk %} &middot; právě zvolený{% endif %}
+                </span>
+            </button>
+        {% empty %}
+            <p style="color:#b91c1c;">
+                Není označen žádný pronajímatel. Nastav příznak „Pronajímatel“
+                aspoň jednomu klientovi, jinak se do administrace nedostaneš.
+            </p>
+        {% endfor %}
+    </form>
+</div>
+{% endblock %}

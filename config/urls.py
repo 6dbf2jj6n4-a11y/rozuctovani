@@ -7,7 +7,11 @@ from django.urls import include, path
 from django.views.static import serve as static_serve
 
 from core.autocomplete import PopiskyAutocompleteView
-from core.views import class_colors_css
+from core.views import (
+    class_colors_css,
+    prepnout_pronajimatele,
+    vyber_pronajimatele,
+)
 
 
 @login_required
@@ -51,6 +55,19 @@ urlpatterns = [
         "admin/autocomplete/",
         admin.site.admin_view(PopiskyAutocompleteView.as_view(admin_site=admin.site)),
         name="autocomplete_popisky",
+    ),
+    # MUSI byt pred admin.site.urls. Volba pronajimatele, se kterym
+    # uzivatel pracuje - viz core/pronajimatele.py. admin_view odmitne
+    # kohokoliv bez is_staff.
+    path(
+        "admin/pronajimatel/",
+        admin.site.admin_view(vyber_pronajimatele),
+        name="vyber_pronajimatele",
+    ),
+    path(
+        "admin/pronajimatel/<int:pk>/",
+        admin.site.admin_view(prepnout_pronajimatele),
+        name="prepnout_pronajimatele",
     ),
     path("admin/", admin.site.urls),
     path("api/", include("billing.api_urls")),
