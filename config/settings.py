@@ -147,6 +147,18 @@ CSRF_TRUSTED_ORIGINS = [
     "https://rentex-eu-production.up.railway.app",
     "https://rozuctovani.calamarise.eu",
 ]
+# Django prepisuje radek session pri KAZDEM pozadavku, ne jen kdyz se
+# session zmeni. Dve veci z toho plynou:
+#   1) django_session.expire_date je vzdycky "cas posledniho pozadavku +
+#      SESSION_COOKIE_AGE", takze se z nej da poznat, kdo je prave ted
+#      aktivni - to pohani cislo v kolecku loga v hlavicce menu
+#      (core.templatetags.core_extras.pocet_prihlasenych),
+#   2) platnost prihlaseni se pri praci sama prodluzuje, takze aktivniho
+#      uzivatele uz aplikace po 14 dnech neodhlasi uprostred prace.
+# Cenou je jeden zapis do databaze navic na pozadavek - pri hrstce
+# uzivatelu zanedbatelne. Dohoda s Danielem 2026-08-24.
+SESSION_SAVE_EVERY_REQUEST = True
+
 # Verze zobrazena v hlavicce adminu - APP_VERSION_SEQUENCE se zvysuje
 # o +1 po kazdem commitu a pushi (dohoda s Danielem 2026-08-09), format
 # RRRR.poradove_cislo, napr. 2026.1 -> 2026.2 -> 2026.3... Rok se BERE
@@ -155,7 +167,7 @@ CSRF_TRUSTED_ORIGINS = [
 # 2027.0), i kdyby se nekdo zapomnel APP_VERSION_YEAR rucne prepsat -
 # dohoda s Danielem 2026-08-15.
 APP_VERSION_YEAR = 2026
-APP_VERSION_SEQUENCE = 173
+APP_VERSION_SEQUENCE = 174
 APP_VERSION = (
     f"{APP_VERSION_YEAR}.{APP_VERSION_SEQUENCE}"
     if date.today().year == APP_VERSION_YEAR

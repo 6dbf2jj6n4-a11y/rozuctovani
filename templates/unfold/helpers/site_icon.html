@@ -1,11 +1,23 @@
-{% load i18n %}
+{% load i18n core_extras %}
 {% comment %}
-Prevzato z unfold/helpers/site_icon.html - jen zvetseny font nazvu
-(text-sm/text-base -> text-base/text-lg), zbytek beze zmeny.
+Prevzato z unfold/helpers/site_icon.html - zvetseny font nazvu
+(text-sm/text-base -> text-base/text-lg) a pod nazev pronajimatele
+(site_subheader, viz core/admin_branding.py) pridan treti radek s
+dnesnim datem. Kvuli tretimu radku musela povyrust hlavicka menu -
+viz unfold/helpers/navigation_header.html. Datum vykresluje server pri
+kazdem nacteni stranky (casova zona Europe/Prague ze settings), zadny
+JavaScript.
+
+V kolecku loga (logo.svg, to ktere se toci) sedi cislo = kolik ruznych
+uzivatelu bylo za posledni ctvrthodinu aktivnich, viz
+core.templatetags.core_extras.pocet_prihlasenych. Cislo je samostatny
+prvek POLOZENY PRES obrazek (tridy rx-logo-* v core/static/core/css/
+sidebar_extras.css), takze se s prstencem netoci.
+Konverzace s Danielem 2026-08-24.
 {% endcomment %}
 
 {% if site_icon %}
-    <div class="shrink-0">
+    <div class="rx-logo-obal shrink-0" title="{% translate 'Uživatelů aktivních za posledních 15 minut' %}">
         <{% if site_dropdown %}span{% else %}a href="{% url "admin:index" %}"{% endif %}>
         {% if site_icon.light and site_icon.dark %}
             <img src="{{ site_icon.dark }}" alt="{% trans 'Home' %}" class="h-[38px] hidden dark:block"/>
@@ -15,6 +27,8 @@ Prevzato z unfold/helpers/site_icon.html - jen zvetseny font nazvu
             <img src="{{ site_icon }}" class="h-[38px]" alt="{% trans 'Home' %}" />
         {% endif %}
     </{% if site_dropdown %}span{% else %}a{% endif %}>
+
+        <span class="rx-logo-pocet">{% pocet_prihlasenych %}</span>
     </div>
 {% else %}
     <{% if site_dropdown %}span{% else %}a href="{% url "admin:index" %}"{% endif %} class="bg-primary-600 flex h-[38px] items-center justify-center rounded-default shrink-0 text-white text-xs w-[38px]">
@@ -32,4 +46,8 @@ Prevzato z unfold/helpers/site_icon.html - jen zvetseny font nazvu
             {{ site_subheader }}
         </div>
     {% endif %}
+
+    <div class="font-normal text-font-subtle-light text-xs dark:text-font-subtle-dark">
+        {% now "l j. n. Y" %}
+    </div>
 </div>

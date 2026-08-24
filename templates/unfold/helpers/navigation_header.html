@@ -1,0 +1,40 @@
+{% load unfold %}
+{% comment %}
+Prevzato z unfold/helpers/navigation_header.html - jedina zmena je
+vyska hlavicky. Unfold ji ma natvrdo h-[65px] (vnitrek h-[54px]), coz
+staci na dva radky (nazev aplikace + pronajimatel). My mame radky tri
+(jeste datum, viz unfold/helpers/site_icon.html), takze pevne vysky
+nahrazeny vlastnimi tridami rx-menu-hlavicka* - ty maji min-height
+puvodni hodnoty a vysku necha rust podle obsahu.
+
+Pozor: vlastni tridy MUSI byt v core/static/core/css/sidebar_extras.css,
+Unfoldovo predkompilovane styles.css nase tridy nezna (viz komentar
+primo v tom CSS). Konverzace s Danielem 2026-08-24.
+{% endcomment %}
+
+<div class="rx-menu-hlavicka border-b border-base-200 flex gap-3 items-center mb-6 dark:border-base-800 px-3 {% element_classes 'navigation_header' %}" {% if site_dropdown %}x-data="{ openDropdown: false }"{% endif %}>
+    <div class="rx-menu-hlavicka-obsah bg-transparent flex font-semibold gap-3 grow min-w-0 -mx-px items-center px-3 {% if site_dropdown %}cursor-pointer rounded-default transition-all hover:bg-base-100 dark:hover:bg-white/[.06]{% endif %}"
+         {% if site_dropdown %}
+             x-on:click="openDropdown = !openDropdown"
+             x-bind:class="{'bg-base-100 dark:bg-white/[.06]': openDropdown, 'bg-transparent': !openDropdown}"
+         {% endif %}
+    >
+        {% if site_logo %}
+            {% include "unfold/helpers/site_logo.html" %}
+        {% elif branding %}
+            {% include "unfold/helpers/site_icon.html" %}
+        {% endif %}
+
+        {% if site_dropdown %}
+            <span class="material-symbols-outlined ml-auto select-none text-font-default-light dark:text-font-default-dark">
+                unfold_more
+            </span>
+        {% endif %}
+    </div>
+
+    <span class="material-symbols-outlined block cursor-pointer h-[18px] xl:hidden! hover:text-base-700 dark:hover:text-base-200" x-on:click="sidebarMobileOpen = !sidebarMobileOpen">
+        close
+    </span>
+
+    {% include "unfold/helpers/site_dropdown.html" %}
+</div>

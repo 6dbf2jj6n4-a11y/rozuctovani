@@ -117,3 +117,50 @@ vesel i kdyz je menu uzke; presahuje pak menu doprava, coz je v poradku
     padding-right: 0.25rem;
     min-width: 0;
 }
+
+/*
+Hlavicka menu (templates/unfold/helpers/navigation_header.html).
+Unfold ma vysku natvrdo (h-[65px] / vnitrek h-[54px]) a pocita se dvema
+radky; my mame tri (nazev aplikace, pronajimatel, datum), takze vyska
+roste podle obsahu a puvodni hodnoty jsou uz jen spodni hranice.
+*/
+.rx-menu-hlavicka {
+    min-height: 65px;
+}
+.rx-menu-hlavicka-obsah {
+    min-height: 54px;
+    padding-top: 6px;
+    padding-bottom: 6px;
+}
+
+/*
+Cislo v kolecku loga (templates/unfold/helpers/site_icon.html) = kolik
+uzivatelu je prave prihlaseno. Lezi PRES obrazek, ne v nem: logo.svg
+ma vlastni CSS animaci (prstenec se toci dokola) a cislo se tocit nema.
+Vnitrni prumer prstence je pri vysce 38 px kolem 19 px, na dve cifry to
+staci akorat - proto to male pismo bez odsazeni.
+*/
+.rx-logo-obal {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+.rx-logo-pocet {
+    position: absolute;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    font-weight: 600;
+    line-height: 1;
+    letter-spacing: -0.02em;
+    color: var(--color-base-700);
+    pointer-events: none;
+}
+.dark .rx-logo-pocet {
+    color: var(--color-base-200);
+}
