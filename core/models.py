@@ -267,6 +267,26 @@ def normalizovat_identifikator(hodnota):
 normalizovat_ico = normalizovat_identifikator
 
 
+def normalizovat_psc(hodnota):
+    """Sjednoti zapis PSC na "620 00" - tri cislice, mezera, dve.
+
+    Databaze mela oba tvary vedle sebe: rucne zapsana PSC s mezerou,
+    ta z ARES bez ni (ares_client vraci holych pet cislic). Mezera je
+    tady naopak SOUCASTI uredniho zapisu, na rozdil od ICO a DIC - viz
+    normalizovat_identifikator. Daniel 2026-08-25.
+
+    Prepisuje se jen to, co po odstraneni mezer da presne pet cislic
+    (ceska i slovenska PSC). Cokoliv jineho - zahranicni PSC s pismeny
+    nebo jinou delkou - zustava presne tak, jak to nekdo zapsal."""
+    if not hodnota:
+        return ""
+    text = hodnota.strip()
+    cislice = re.sub(r"\s+", "", text)
+    if len(cislice) != 5 or not cislice.isdigit():
+        return text
+    return "{} {}".format(cislice[:3], cislice[3:])
+
+
 class Client(models.Model):
     """Klient (najemce) - firma nebo osoba."""
 
@@ -386,6 +406,10 @@ class Client(models.Model):
         # i posilat do ARES. Viz normalizovat_identifikator.
         self.ico = normalizovat_identifikator(self.ico)
         self.dic = normalizovat_identifikator(self.dic)
+
+        # PSC naopak mezeru MA - je soucasti uredniho zapisu.
+        # Viz normalizovat_psc.
+        self.zip_code = normalizovat_psc(self.zip_code)
 
         # Zivnostnik nema rejstrikovy soud, oddil ani vlozku - to jsou
         # udaje z obchodniho rejstriku. Kdyz se klient prepne na fyzickou
