@@ -1327,6 +1327,45 @@ class ClientCardAdmin(ModelAdmin):
         }
         return render(request, "admin/core/clientcard/report_plochy_konflikt.html", context)
 
+    @staticmethod
+    def _plocha_se_dani(card_unit, klient):
+        """Da se najem za tuhle Plochu zdanit?
+
+        Najem je podle §56a od DPH osvobozeny a zdanit ho lze jen tehdy,
+        kdyz jsou platci OBE strany - pronajimatel, ktery sam platcem
+        neni, DPH naucovat nemuze a nema z ceho (areal DV je vedeny na
+        fyzickou osobu neplatce). U stavby pro bydleni to neplati vubec:
+        byt se podle §56a odst. 3 zdanit neda ani platci.
+
+        Rozhoduje se za plochu, ne za kartu - karta muze mit plochy ve
+        dvou arealech s ruznymi pronajimateli, nebo byt i nebytovy prostor
+        zaroven. Viz Daniel 2026-08-24 (klient POKUS)."""
+        unit = card_unit.unit
+        pronajimatel = unit.site.landlord if unit.site.landlord_id else None
+        return bool(
+            klient.vat_payer
+            and pronajimatel and pronajimatel.vat_payer
+            and not unit.is_residential
+        )
+
+    def _zdanitelny_podil(self, card_units, klient):
+        """Jaka cast najmu za dane Plochy se dani (0 az 1).
+
+        Pouziva se pomer, ne soucet: castka k fakturaci uz je zkracena
+        podle dnu platnosti karty a snizena o nefakturovanou cast, takze
+        se k jednotlivym plocham primo priradit neda."""
+        zaklad = sum(
+            (cu.monthly_rent or Decimal("0") for cu in card_units), Decimal("0")
+        )
+        if not zaklad:
+            return Decimal("0")
+        zdanitelny = sum(
+            (cu.monthly_rent or Decimal("0") for cu in card_units
+             if self._plocha_se_dani(cu, klient)),
+            Decimal("0"),
+        )
+        return zdanitelny / zaklad
+
     def _koeficient_dph_za_rok(self, period, site_ids):
         """Koeficient DPH (§76 ZDPH) za KALENDARNI ROK, ne za jeden mesic.
 
@@ -1358,8 +1397,10 @@ class ClientCardAdmin(ModelAdmin):
         pronajimatele arealu (Site.landlord.vat_payer).
 
         Filtruje se podle arealu KARTY (plochy na karte), ne klienta -
-        karta patri vzdy do jednoho arealu, takze klient s kartami ve
-        dvou arealech prispeje jen tou, ktera do vyberu spada."""
+        a pocita se jen z ploch, ktere do vyberu spadaji. Karta by mela
+        drzet plochy jednoho arealu, ale kdyz je rozkrocena pres vic,
+        nesmi do koeficientu propadnout najem z arealu, ktery vybrany
+        neni. Viz Daniel 2026-08-24."""
         from decimal import ROUND_CEILING
 
         rok = period.year
@@ -1375,25 +1416,32 @@ class ClientCardAdmin(ModelAdmin):
                 card_units__unit__site_id__in=site_ids,
             )
             .select_related("client")
-            .prefetch_related("card_units")
+            .prefetch_related("card_units__unit__site__landlord")
             .distinct()
         )
+        vybrane = set(site_ids)
 
         mesice = []
         celkem_s_dph = celkem_bez_dph = celkem_nefakt = Decimal("0")
         for p in obdobi_roku:
             m_s_dph = m_bez_dph = m_nefakt = Decimal("0")
             for card in karty:
-                najem = card.rent_for_period(p)
+                plochy = [
+                    cu for cu in card.card_units.all() if cu.unit.site_id in vybrane
+                ]
+                if not plochy:
+                    continue
+                najem = card.rent_for_period(p, plochy)
                 if not najem:
                     continue  # karta v tomhle obdobi neplatila
-                nefakt = min(card.rent_not_invoiced_for_period(p), najem)
+                nefakt = min(card.rent_not_invoiced_for_period(p, plochy), najem)
                 k_fakturaci = najem - nefakt
                 m_nefakt += nefakt
-                if card.client.vat_payer:
-                    m_s_dph += k_fakturaci
-                else:
-                    m_bez_dph += k_fakturaci
+                # Zdanitelna cast se urcuje za plochu (byt zdanit nelze
+                # ani platci) - stejne jako v tabulce nad koeficientem.
+                podil = self._zdanitelny_podil(plochy, card.client)
+                m_s_dph += k_fakturaci * podil
+                m_bez_dph += k_fakturaci * (1 - podil)
             mesice.append({
                 "period": p,
                 "s_dph": m_s_dph,
@@ -1557,6 +1605,14 @@ class ClientCardAdmin(ModelAdmin):
         ) / Decimal("100")
         for card in cards:
             card_units = list(card.card_units.all())
+            # Filtr nad tabulkou vybira karty, ktere do arealu ZASAHUJI -
+            # u karty rozkrocene pres dva arealy se ale musi zuzit i to, co
+            # se z ni pocita, jinak filtr na DV ukaze i najem z ploch na FM.
+            # Viz Daniel 2026-08-24 (klient POKUS).
+            if site_id:
+                card_units = [
+                    cu for cu in card_units if str(cu.unit.site_id) == str(site_id)
+                ]
             if not card_units:
                 continue
             aktivnich_dnu = None
@@ -1566,7 +1622,7 @@ class ClientCardAdmin(ModelAdmin):
                     continue  # karta v tomhle obdobi vubec neplati
             total_area = sum((cu.area_m2 or Decimal("0")) for cu in card_units)
             if period is not None:
-                total_monthly = card.rent_for_period(period)
+                total_monthly = card.rent_for_period(period, card_units)
             else:
                 raw_monthly = sum((cu.monthly_rent or Decimal("0") for cu in card_units), Decimal("0"))
                 total_monthly = raw_monthly.quantize(Decimal("1"), rounding=ROUND_CEILING)
@@ -1579,7 +1635,7 @@ class ClientCardAdmin(ModelAdmin):
             # nefakturuje se (viz CardUnit.rent_not_invoiced, scita se
             # pres ClientCard.rent_not_invoiced_for_period).
             if period is not None:
-                nefakturovano = card.rent_not_invoiced_for_period(period)
+                nefakturovano = card.rent_not_invoiced_for_period(period, card_units)
             else:
                 nefakturovano = sum(
                     (cu.rent_not_invoiced or Decimal("0") for cu in card_units),
@@ -1594,42 +1650,7 @@ class ClientCardAdmin(ModelAdmin):
                 plny_mesic,
             )
             k_fakturaci_rocne = (plny_mesic - nefakturovano_plny_mesic) * 12
-            # Najem je podle §56a od DPH osvobozeny a zdanit ho lze jen
-            # tehdy, kdyz jsou platci OBE strany - pronajimatel, ktery sam
-            # platcem neni, DPH naucovat nemuze a nema z ceho (areal DV je
-            # vedeny na fyzickou osobu neplatce). U stavby pro bydleni to
-            # neplati vubec: byt se podle §56a odst. 3 zdanit neda ani
-            # platci.
-            #
-            # Rozhoduje se proto za KAZDOU PLOCHU zvlast, ne za celou
-            # kartu. Karta muze mit plochy ve dvou arealech s ruznymi
-            # pronajimateli, nebo byt i nebytovy prostor zaroven - pak se
-            # cast najmu dani a cast ne. Drive se bral jeden priznak na
-            # celou kartu, takze takova karta vysla cela spatne: bud se
-            # zdanilo i to, co se zdanit nesmi, nebo naopak nic.
-            # Viz Daniel 2026-08-24 (klient POKUS).
-            def _zdanitelna(cu):
-                unit = cu.unit
-                pronajimatel = unit.site.landlord if unit.site.landlord_id else None
-                return bool(
-                    card.client.vat_payer
-                    and pronajimatel and pronajimatel.vat_payer
-                    and not unit.is_residential
-                )
-
-            zaklad_ploch = sum(
-                (cu.monthly_rent or Decimal("0") for cu in card_units), Decimal("0")
-            )
-            zdanitelny_zaklad = sum(
-                (cu.monthly_rent or Decimal("0") for cu in card_units if _zdanitelna(cu)),
-                Decimal("0"),
-            )
-            # Pomerem, ne souctem: castka k fakturaci uz je zkracena podle
-            # dnu platnosti karty a snizena o nefakturovanou cast, takze se
-            # k jednotlivym plocham primo neda priradit.
-            podil_s_dph = (
-                zdanitelny_zaklad / zaklad_ploch if zaklad_ploch else Decimal("0")
-            )
+            podil_s_dph = self._zdanitelny_podil(card_units, card.client)
             zdanit = podil_s_dph > 0
             koef = 1 + sazba_dph * podil_s_dph
             rows.append({

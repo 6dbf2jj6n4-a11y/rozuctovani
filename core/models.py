@@ -605,8 +605,12 @@ class ClientCard(models.Model):
                 return cu.unit.site
         return None
 
-    def rent_for_period(self, period):
+    def rent_for_period(self, period, units=None):
         """Najem karty za dane obdobi, zkraceny podle poctu aktivnich dni.
+
+        `units` omezi vypocet jen na vyjmenovane Plochy karty (CardUnit) -
+        pouziva se, kdyz je sestava vyfiltrovana na jeden areal a karta
+        zasahuje do vic arealu. Bez nej se scitaji vsechny plochy karty.
 
         Soucet CardUnit.monthly_rent (plocha x sazba / 12) vynasobeny
         pomerem aktivnich dni karty k delce obdobi - kdyz platnost zacne
@@ -621,7 +625,8 @@ class ClientCard(models.Model):
         from decimal import ROUND_CEILING
 
         raw = sum(
-            (cu.monthly_rent or Decimal("0") for cu in self.card_units.all()),
+            (cu.monthly_rent or Decimal("0")
+             for cu in (self.card_units.all() if units is None else units)),
             Decimal("0"),
         )
         if not raw:
@@ -635,10 +640,12 @@ class ClientCard(models.Model):
             raw = raw * Decimal(active_days) / Decimal(dnu)
         return raw.quantize(Decimal("1"), rounding=ROUND_CEILING)
 
-    def rent_not_invoiced_for_period(self, period):
+    def rent_not_invoiced_for_period(self, period, units=None):
         """Nefakturovana cast najmu za obdobi, krácená stejne jako
         rent_for_period - je to soucast najmu, takze u karty platne jen
         cast mesice se krati se zbytkem.
+
+        `units` omezi vypocet na vyjmenovane Plochy - viz rent_for_period.
 
         Scita se z jednotlivych Ploch karty (CardUnit.rent_not_invoiced) -
         najemne neni Trida a nema Klice, takze i tahle odchylka patri
@@ -647,7 +654,8 @@ class ClientCard(models.Model):
         from decimal import ROUND_CEILING
 
         raw = sum(
-            (cu.rent_not_invoiced or Decimal("0") for cu in self.card_units.all()),
+            (cu.rent_not_invoiced or Decimal("0")
+             for cu in (self.card_units.all() if units is None else units)),
             Decimal("0"),
         )
         if not raw:
