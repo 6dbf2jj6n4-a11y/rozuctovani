@@ -181,7 +181,13 @@
                             {% for s in row.sites %}{{ s.name }}{% if not forloop.last %}, {% endif %}{% endfor %}
                         </td>
                         <td style="padding:6px 8px;">
-                            {% if row.s_dph %}
+                            {% if row.dph_castecne %}
+                                {# karta ma plochy u dvou pronajimatelu, nebo byt i nebytovy prostor zaroven #}
+                                <span style="font-size:11px; padding:2px 7px; border-radius:4px; background:#dbeafe; color:#1e40af;"
+                                      title="Daní se jen část nájmu - byt se podle §56a odst. 3 zdanit nedá a pronajímatel-neplátce DPH neúčtuje.">
+                                    část s DPH ({{ row.podil_s_dph }} %)
+                                </span>
+                            {% elif row.s_dph %}
                                 <span style="font-size:11px; padding:2px 7px; border-radius:4px; background:#dcfce7; color:#15803d;">s DPH</span>
                             {% else %}
                                 <span style="font-size:11px; padding:2px 7px; border-radius:4px; background:#fef3c7; color:#92400e;">bez DPH</span>
@@ -203,7 +209,8 @@
                         </td>
                         <td style="padding:6px 8px; text-align:right;">
                             {{ row.k_fakturaci_s_dph|floatformat:2 }} Kč
-                            {% if not row.s_dph %}<br><span style="font-size:11px; color:#888;">osvobozeno</span>{% endif %}
+                            {% if not row.s_dph %}<br><span style="font-size:11px; color:#888;">osvobozeno</span>
+                            {% elif row.dph_castecne %}<br><span style="font-size:11px; color:#888;">část osvobozena</span>{% endif %}
                         </td>
                         <td style="padding:6px 8px; text-align:right; font-weight:600;">{{ row.yearly_rent|floatformat:2 }} Kč</td>
                         <td style="padding:6px 8px; text-align:right; font-weight:600;">{{ row.yearly_rent_s_dph|floatformat:2 }} Kč</td>
