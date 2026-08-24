@@ -1,0 +1,29 @@
+/*
+Oddeleni sekci formulare v TMAVEM motivu.
+
+Unfold dava nadpisum sekci (fieldset i inline) pozadi "dark:bg-white/[.02]",
+tedy bilou na 2 % krytí. Na tmavem podkladu to prakticky neni videt -
+"Základní údaje", "Čísla objednávek" i sekce Klicu splyvaly s pozadim a
+nebylo poznat, kde jedna sekce konci a druha zacina. Daniel na to
+upozornil 2026-08-19.
+
+Resi se jen tmavy motiv; ve svetlem je bg-base-100 (seda na bilem)
+citelna dost. Prekryv bilou (ne konkretni barva) je zamerny - u sekci
+Klicu ma fieldset vlastni barvu Tridy a prekryv ji jen zesvetli, takze
+barevne odliseni zustava.
+
+Cili se na h2 uvnitr fieldsetu, coz pokryva oboji - bezne sekce
+formulare i nadpisy inlinu (ty maji navic id konciciho "-heading",
+podle ktereho je barvi templates/admin/core/clientcard/
+invoiceclasscolor_style.html).
+*/
+html.dark #content fieldset.module > h2,
+html.dark #content fieldset.module > details > summary > h2 {
+    background-color: rgba(255, 255, 255, 0.07);
+    /* Obrys ZAMERNE pres box-shadow, ne border: tohle pravidlo ma kvuli
+       #content vyssi specificitu nez barevny pruh vlevo u sekci Trid
+       (templates/admin/core/clientcard/invoiceclasscolor_style.html),
+       takze jakykoliv zapis border/border-color/border-width by ten pruh
+       prebil a zrusil. Vnitrni stin se s okrajem nepere. */
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.10);
+}

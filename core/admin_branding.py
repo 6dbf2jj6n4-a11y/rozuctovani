@@ -55,3 +55,8 @@ def planky_css(request):
 def odkazy_css(request):
     from django.templatetags.static import static
     return static("core/css/odkazy.css")
+
+
+def sekce_css(request):
+    from django.templatetags.static import static
+    return static("core/css/sekce.css")
