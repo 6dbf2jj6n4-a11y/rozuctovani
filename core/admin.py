@@ -618,10 +618,13 @@ class TelefonWidget(forms.MultiWidget):
         super().__init__(
             [
                 UnfoldAdminSelectWidget(choices=TELEFON_PREDVOLBY),
-                # Napoveda ukazuje TVAR, ne cislo: driv tu bylo
-                # "123 456 789", coz v prazdnem poli vypadalo jako
-                # skutecne vyplnene cislo. Daniel 2026-08-24.
-                UnfoldAdminTextInputWidget(attrs={"placeholder": "XXX XXX XXX"}),
+                # Zadny placeholder: klient bez telefonu ma mit pole
+                # uplne prazdne. Driv tu bylo "123 456 789", coz vypadalo
+                # jako skutecne vyplnene cislo; nahrada "XXX XXX XXX" mela
+                # ukazovat jen tvar, ale prazdne pole to porad nebylo.
+                # Tvar cisla hlida normalizovat_telefon pri ulozeni,
+                # napovidat ho v poli netreba. Daniel 2026-08-24.
+                UnfoldAdminTextInputWidget(),
             ],
             attrs,
         )
