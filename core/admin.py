@@ -618,7 +618,10 @@ class TelefonWidget(forms.MultiWidget):
         super().__init__(
             [
                 UnfoldAdminSelectWidget(choices=TELEFON_PREDVOLBY),
-                UnfoldAdminTextInputWidget(attrs={"placeholder": "123 456 789"}),
+                # Napoveda ukazuje TVAR, ne cislo: driv tu bylo
+                # "123 456 789", coz v prazdnem poli vypadalo jako
+                # skutecne vyplnene cislo. Daniel 2026-08-24.
+                UnfoldAdminTextInputWidget(attrs={"placeholder": "XXX XXX XXX"}),
             ],
             attrs,
         )

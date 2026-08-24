@@ -190,6 +190,11 @@ class Unit(models.Model):
 def normalizovat_telefon(hodnota):
     """Sjednoti zapis telefonu na "+420 123 456 789".
 
+    Samotne cislo je VZDYCKY ve trojicich (XXX XXX XXX); predvolba se
+    pise jen tam, kde ji nekdo napsal nebo kde je zeme jista. Prazdna
+    hodnota (a samotna predvolba bez cisla) je prazdny retezec - klient
+    bez telefonu ma mit pole prazdne. Daniel 2026-08-24.
+
     Zvlada bezne tvary, ktere clovek napise: 123456789, +420123456789,
     420123456789, 00420123456789, s mezerami i pomlckami. Napsanou
     predvolbu (420 i 421) vzdy respektuje - nikdy ji neprepisuje.
@@ -198,14 +203,19 @@ def normalizovat_telefon(hodnota):
     mimo 420/421), vraci NEZMENENE - lepsi nechat, jak to nekdo zapsal,
     nez to prepsat na nesmysl. Viz konverzace s Danielem 2026-08-19."""
     if not hodnota:
-        return hodnota
+        return ""
     text = hodnota.strip()
     cislice = re.sub(r"\D", "", text)
     if not cislice:
-        return text
+        return ""
 
     if text.startswith("00"):
         cislice = cislice[2:]
+
+    # Samotna predvolba bez cisla neni telefon - klient, ktery telefon
+    # nema, ma mit pole PRAZDNE, ne "+420 ". Daniel 2026-08-24.
+    if cislice in ("420", "421"):
+        return ""
 
     if len(cislice) == 12 and cislice[:3] in ("420", "421"):
         # predvolba je napsana - respektuje se, nic se nehada
@@ -213,15 +223,21 @@ def normalizovat_telefon(hodnota):
     elif len(cislice) == 9 and cislice[0] in "67":
         # Cislo BEZ predvolby doplnujeme jen tam, kde je zeme jista:
         # 6xx/7xx jsou ceske mobily. Slovenske mobily zacinaji 9 a pevne
-        # linky obou zemi 2-5, tam by slo o hadani 50 na 50 - takova
-        # cisla proto nechavame presne tak, jak je nekdo napsal.
+        # linky obou zemi 2-5, tam by slo o hadani 50 na 50.
         # Viz konverzace s Danielem 2026-08-19.
         predvolba, zbytek = "420", cislice
+    elif len(cislice) == 9:
+        # Devitimistne cislo, u ktereho se zeme hadat neda (pevna linka
+        # nebo slovensky mobil). Predvolbu NEDOPLNUJEME - to by bylo
+        # hadani 50 na 50 - ale do trojic ho rozdelit muzeme, cislo je
+        # vzdycky ve tvaru XXX XXX XXX. Daniel 2026-08-24.
+        predvolba, zbytek = "", cislice
     else:
         return text
 
     trojice = [zbytek[i:i + 3] for i in range(0, 9, 3)]
-    return "+{} {}".format(predvolba, " ".join(trojice))
+    cislo = " ".join(trojice)
+    return "+{} {}".format(predvolba, cislo) if predvolba else cislo
 
 
 class Client(models.Model):
@@ -306,8 +322,12 @@ class Client(models.Model):
     bank_code = models.CharField("Kód banky", max_length=10, blank=True)
 
     contact_email = models.EmailField("E-mail", blank=True)
+    # Zadna vychozi hodnota: driv tu bylo default="+420 ", takze klient
+    # bez telefonu mel v poli viset osamocenou predvolbu. Predvolbu
+    # nabizi az combo ve formulari (core.admin.TelefonWidget), do
+    # databaze se uklada jen skutecne cislo. Daniel 2026-08-24.
     contact_phone = models.CharField(
-        "Telefon", max_length=50, blank=True, default="+420 ",
+        "Telefon", max_length=50, blank=True,
         help_text="Číslo stačí napsat bez mezer, uloží se ve tvaru +420 123 456 789.",
     )
 

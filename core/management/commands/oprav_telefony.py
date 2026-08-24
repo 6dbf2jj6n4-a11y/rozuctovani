@@ -23,8 +23,9 @@ from django.core.management.base import BaseCommand
 from core.models import Client, normalizovat_telefon
 
 
-# Cilovy tvar, na ktery normalizovat_telefon prevadi: "+420 123 456 789".
-CILOVY_TVAR = re.compile(r"^\+\d{3}( \d{3}){3}$")
+# Cilovy tvar, na ktery normalizovat_telefon prevadi: "+420 123 456 789",
+# u cisel bez rozpoznatelne predvolby "123 456 789" (trojice jsou vzdy).
+CILOVY_TVAR = re.compile(r"^(\+\d{3} )?\d{3} \d{3} \d{3}$")
 
 
 def normalize_phone(raw):
@@ -54,7 +55,10 @@ class Command(BaseCommand):
         ok_count = 0
         skipped = []
 
-        for client in Client.objects.exclude(contact_phone="").exclude(contact_phone="+420 "):
+        # "+420 " se driv preskakovalo; dneska ho normalizovat_telefon
+        # umi vycistit na prazdno (klient bez telefonu ma mit pole
+        # prazdne), takze se do prohlidky pousti taky. Daniel 2026-08-24.
+        for client in Client.objects.exclude(contact_phone=""):
             new_phone, skip_reason = normalize_phone(client.contact_phone)
             if skip_reason:
                 skipped.append((client, skip_reason))
