@@ -753,14 +753,19 @@ class ClientAdmin(PodlePronajimatele, ModelAdmin):
     potrebuje_distinct = True
 
     def dodatecne_q(self, request):
-        """Pronajimatele je videt vzdycky.
+        """Zvoleneho pronajimatele je videt, i kdyz nema kartu.
 
-        Sami jsou taky klienti a nektery ma vlastni kartu (CALAMARI SE na
-        NJ), takze by se ve druhem kontextu neukazal - a prave na nej pritom
-        odkazuje pole Pronajimatel u Arealu."""
+        Je to taky klient a ma smysl mu opravit fakturacni udaje. Ostatni
+        pronajimatele se ale nenabizeji - v kontextu DV neni co delat
+        s CALAMARI SE, a pres tohle chodi i naseptavac u pole Pronajimatel
+        u Arealu, takze by slo omylem priradit areal cizi osobe.
+        Viz Daniel 2026-08-25."""
         from django.db.models import Q
 
-        return Q(is_landlord=True)
+        from core import pronajimatele
+
+        zvoleny = pronajimatele.aktualni(request)
+        return Q(pk=zvoleny.pk) if zvoleny else None
     list_display = (
         "name_display", "code", "ico", "vat_payer", "contact_email", "contact_phone", "is_active",
     )
