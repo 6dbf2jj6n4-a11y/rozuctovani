@@ -240,6 +240,28 @@ def normalizovat_telefon(hodnota):
     return "+{} {}".format(predvolba, cislo) if predvolba else cislo
 
 
+def normalizovat_ico(hodnota):
+    """Sjednoti zapis ICO na holé cislice bez mezer.
+
+    Nektera ICO prisla rozdelena po trojicich ("285 64 961"). Krome toho,
+    ze v seznamu klientu vypadala nesourode, se takove ICO nedalo poslat
+    do ARES a neshodlo se pri kontrole duplicity - core.admin.ico_lookup
+    hleda na PRESNOU shodu, takze stejna firma zapsana obema zpusoby
+    prosla jako dva ruzni klienti.
+
+    Mezery se odstranuji jen tam, kde je hodnota jinak POUZE z cislic;
+    zahranicni registracni cislo s pismeny nebo lomitkem se necha presne
+    tak, jak ho nekdo zapsal. Chybejici uvodni nuly se tu ZAMERNE
+    nedoplnuji: kratke ICO znamena, ze i navazane udaje z ARES patri
+    nekomu jinemu, a to resi az prikaz oprav_kratka_ica, ktery je
+    zaroven znovu nacte. Daniel 2026-08-24."""
+    if not hodnota:
+        return ""
+    text = hodnota.strip()
+    bez_mezer = re.sub(r"\s+", "", text)
+    return bez_mezer if bez_mezer.isdigit() else text
+
+
 class Client(models.Model):
     """Klient (najemce) - firma nebo osoba."""
 
@@ -354,6 +376,10 @@ class Client(models.Model):
         # Telefon se sjednoti pri KAZDEM ulozeni (admin, seznam klientu,
         # importy i skripty), aby drzel jeden tvar - viz normalizovat_telefon.
         self.contact_phone = normalizovat_telefon(self.contact_phone)
+
+        # ICO stejne tak - bez mezer, at se da porovnavat i posilat do
+        # ARES. Viz normalizovat_ico.
+        self.ico = normalizovat_ico(self.ico)
 
         # Zivnostnik nema rejstrikovy soud, oddil ani vlozku - to jsou
         # udaje z obchodniho rejstriku. Kdyz se klient prepne na fyzickou
