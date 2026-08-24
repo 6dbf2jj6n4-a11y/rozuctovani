@@ -161,10 +161,19 @@ class UnitInline(TabularInline):
 
 @admin.register(Site)
 class SiteAdmin(ModelAdmin):
-    list_display = ("name", "address", "aktivnich_klientu", "in_vat_coefficient")
-    list_editable = ("in_vat_coefficient",)
+    list_display = ("name", "address", "landlord", "v_koeficientu_dph", "aktivnich_klientu")
+    list_select_related = ("landlord",)
+    list_filter = ("landlord",)
     search_fields = ("name",)
+    autocomplete_fields = ("landlord",)
     inlines = [UnitInline]
+
+    @display(description="V koeficientu DPH", boolean=True)
+    def v_koeficientu_dph(self, obj):
+        """Odvozeno z platcovstvi pronajimatele - u neplatce (fyzicka osoba)
+        koeficient nedava smysl. Drive to drzel rucni priznak
+        Site.in_vat_coefficient. Viz Daniel 2026-08-24."""
+        return bool(obj.landlord_id and obj.landlord.vat_payer)
 
     def get_queryset(self, request):
         """Pocet RUZNYCH klientu, kteri maji v arealu aspon jednu aktivni
@@ -1338,8 +1347,9 @@ class ClientCardAdmin(ModelAdmin):
         Koeficient se pocita za JEDNU osobu, ne za jeden areal - proto ma
         vlastni vyber arealu (`site_ids`), nezavisly na filtru nad
         tabulkou. Danielova firma pronajima FM a NJ, kdezto DV je vedene
-        na fyzickou osobu, takze do koeficientu firmy nepatri; vychozi
-        zaskrtnuti drzi priznak Site.in_vat_coefficient.
+        na fyzickou osobu (neplatce DPH), takze do koeficientu firmy
+        nepatri; vychozi zaskrtnuti se odvozuje z platcovstvi DPH
+        pronajimatele arealu (Site.landlord.vat_payer).
 
         Filtruje se podle arealu KARTY (plochy na karte), ne klienta -
         karta patri vzdy do jednoho arealu, takze klient s kartami ve
@@ -1503,17 +1513,23 @@ class ClientCardAdmin(ModelAdmin):
 
         # Vyber arealu pro KOEFICIENT - vlastni, nezavisly na filtru nad
         # tabulkou (koeficient je za jednu osobu, ne za jeden areal).
-        # Bez parametru v URL se bere prednastaveni ze Site.in_vat_coefficient.
+        # Bez parametru v URL se predvyplni arealy, jejichz PRONAJIMATEL je
+        # platce DPH - u neplatce (Daniel jako fyzicka osoba u DV) koeficient
+        # nedava smysl. Drive to drzel rucni priznak Site.in_vat_coefficient,
+        # ktery presne kopiroval, komu areal patri. Viz Daniel 2026-08-24.
         if "koef_site" in request.GET:
             zadane = request.GET.getlist("koef_site")
             koef_site_ids = [
                 s.pk for s in sites if str(s.pk) in zadane
             ]
         else:
-            koef_site_ids = [s.pk for s in sites if s.in_vat_coefficient]
+            koef_site_ids = [
+                s.pk for s in sites if s.landlord_id and s.landlord.vat_payer
+            ]
 
-        # Pronajimatel (Client.is_landlord) sam sobe najem neplati - jeho
-        # vlastni karty by prehled jen nafukovaly. Viz Daniel 2026-08-17.
+        # Pronajimatel sam sobe najem neplati - jeho vlastni karty by prehled
+        # jen nafukovaly. Pronajimatelu uz muze byt vic (kazdy areal svuj),
+        # takze se vylucuji vsichni. Viz Daniel 2026-08-17 a 2026-08-24.
         cards = (
             ClientCard.objects.filter(is_active=True, client__is_landlord=False)
             .select_related("client")

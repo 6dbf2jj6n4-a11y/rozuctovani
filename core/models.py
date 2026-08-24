@@ -36,6 +36,17 @@ class Site(models.Model):
             "každý další řádek je jeden pozemek/budova z výčtu."
         ),
     )
+    landlord = models.ForeignKey(
+        "Client", null=True, blank=True, on_delete=models.PROTECT,
+        related_name="owned_sites", verbose_name="Pronajímatel",
+        limit_choices_to={"is_landlord": True},
+        help_text=(
+            "Subjekt, který tenhle areál pronajímá - vystupuje jako "
+            "pronajímatel ve smlouvách, na kartách i ve fakturačních "
+            "podkladech. Podle něj se taky pozná, jestli se areál počítá do "
+            "koeficientu DPH (počítá se jen u plátce DPH)."
+        ),
+    )
     in_vat_coefficient = models.BooleanField(
         "Vstupuje do koeficientu DPH", default=True,
         help_text=(
@@ -219,7 +230,15 @@ class Client(models.Model):
     code = models.CharField("Kód", max_length=20, unique=True, blank=True)
     name = models.CharField("Název / jméno", max_length=200)
     is_active = models.BooleanField("Aktivní", default=True)
-    is_landlord = models.BooleanField("Pronajímatel", default=False)
+    is_landlord = models.BooleanField(
+        "Pronajímatel", default=False,
+        help_text=(
+            "Klient, který sám pronajímá - vystupuje jako pronajímatel ve "
+            "smlouvách a na kartách. Pronajímatelů může být víc (jiný "
+            "subjekt pro jiný areál); který patří ke kterému areálu, se "
+            "nastavuje u Areálu polem „Pronajímatel“."
+        ),
+    )
 
     street = models.CharField("Ulice", max_length=200, blank=True)
     street_number = models.CharField("Číslo", max_length=20, blank=True)
@@ -300,13 +319,6 @@ class Client(models.Model):
     def __str__(self):
         return self.name
 
-    def clean(self):
-        super().clean()
-        if self.is_landlord and Client.objects.filter(is_landlord=True).exclude(pk=self.pk).exists():
-            raise ValidationError(
-                "Pronajímatel může být v aplikaci nastaven jen jeden - odškrtni "
-                "tento příznak u druhého klienta, který ho má aktuálně nastavený."
-            )
 
     def save(self, *args, **kwargs):
         """Kdyz se klient prepne na neaktivniho, deaktivuji se i vsechny jeho
@@ -357,8 +369,6 @@ class Client(models.Model):
         super().save(*args, **kwargs)
         if deactivate_cards:
             self.cards.filter(is_active=True).update(is_active=False)
-        if self.is_landlord:
-            Client.objects.exclude(pk=self.pk).filter(is_landlord=True).update(is_landlord=False)
 
 
 class Contract(models.Model):
@@ -522,6 +532,26 @@ class ClientCard(models.Model):
         if end < start:
             return 0
         return (end - start).days + 1
+
+    @property
+    def landlord(self):
+        """Pronajimatel teto karty - podle arealu jejich ploch.
+
+        Karta by mela drzet plochy jednoho arealu; kdyby jich mela vic,
+        vezme se prvni s vyplnenym pronajimatelem. Viz Site.landlord."""
+        for cu in self.card_units.select_related("unit__site__landlord"):
+            if cu.unit and cu.unit.site and cu.unit.site.landlord_id:
+                return cu.unit.site.landlord
+        return None
+
+    @property
+    def site(self):
+        """Areal karty (podle prvni plochy) - kvuli dokladum, ktere potrebuji
+        vedet, ke kteremu arealu karta patri."""
+        for cu in self.card_units.select_related("unit__site"):
+            if cu.unit and cu.unit.site:
+                return cu.unit.site
+        return None
 
     def rent_for_period(self, period):
         """Najem karty za dane obdobi, zkraceny podle poctu aktivnich dni.

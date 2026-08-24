@@ -277,7 +277,8 @@ def generate_client_card_document(card, output_path):
     sig_rows = [
         [Paragraph("Pronajímatel", _STYLE_SIG_LABEL), Paragraph("Nájemce", _STYLE_SIG_LABEL)],
         [Paragraph("_" * 35, _STYLE_SIG_LINE), Paragraph("_" * 35, _STYLE_SIG_LINE)],
-        [Paragraph(get_landlord().representative_name, _STYLE_SIG_NAME), Paragraph(str(card.client), _STYLE_SIG_NAME)],
+        [Paragraph(get_landlord(card.site).representative_name, _STYLE_SIG_NAME),
+         Paragraph(str(card.client), _STYLE_SIG_NAME)],
     ]
     sig_table = Table(sig_rows, colWidths=[85 * mm, 85 * mm], hAlign="LEFT")
     sig_table.setStyle(TableStyle([

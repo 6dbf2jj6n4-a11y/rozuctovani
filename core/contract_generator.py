@@ -94,21 +94,32 @@ def format_months(n):
     return f"{n} měsíců"
 
 
-def get_landlord():
-    """Vrati Klienta oznaceneho jako Pronajimatel (Client.is_landlord=True).
+def get_landlord(site=None):
+    """Vrati Klienta, ktery vystupuje jako Pronajimatel.
 
-    Aplikace pocita s tim, ze takovy Klient je v databazi prave jeden -
-    vynucuje se to na urovni admin formulare (Client.clean(), viz core/models.py),
-    ne na urovni databaze, takze tato funkce prípadnou duplicitu neresí a
-    jednoduse vezme prvniho nalezeneho."""
+    Pronajimatel je vlastnosti AREALU (Site.landlord) - Daniel pronajima
+    DV jako fyzicka osoba, kdezto FM a NJ pronajima CALAMARI SE. Kdyz je
+    areal znamy, vrati se jeho pronajimatel; bez arealu (nebo kdyz ho
+    areal jeste nema vyplneneho) se sahne po jedinem oznacenem klientovi,
+    aby starsi mista fungovala dal. Viz konverzace s Danielem 2026-08-24.
+    """
     from core.models import Client
-    landlord = Client.objects.filter(is_landlord=True).first()
-    if landlord is None:
+
+    if site is not None and getattr(site, "landlord_id", None):
+        return site.landlord
+
+    landlords = list(Client.objects.filter(is_landlord=True).order_by("pk")[:2])
+    if not landlords:
         raise ValueError(
             "V databazi neni zadny Klient oznaceny jako Pronajimatel - "
             "oznac prislusneho Klienta prepinacem 'Pronajímatel' v adminu."
         )
-    return landlord
+    if len(landlords) > 1 and site is not None:
+        raise ValueError(
+            f"Areál {site} nemá vyplněného Pronajímatele a v aplikaci jich je "
+            f"víc - doplň ho u areálu v adminu (Areály/Objekty → Pronajímatel)."
+        )
+    return landlords[0]
 
 
 def _format_address(obj):
@@ -123,7 +134,7 @@ def contract_to_template_data(contract):
     (a jejiho navazaneho Client) - sdileno mezi hromadnou akci v seznamu
     Smluv a tlacitkem generovani na detailu jedne Smlouvy."""
     client = contract.client
-    landlord = get_landlord()
+    landlord = get_landlord(contract.site)
 
     return {
         "site_name": str(contract.site) if contract.site else "",
