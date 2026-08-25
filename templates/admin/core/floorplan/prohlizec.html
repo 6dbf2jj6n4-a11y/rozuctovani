@@ -1,4 +1,12 @@
 {% extends "admin/base_site.html" %}
+{% comment %}
+Filtr l10n/unlocalize je tu kvuli roku: settings maji
+USE_THOUSAND_SEPARATOR = True, takze cislo 2026 se v ceskem locale
+vykresli jako "2 026" a v comboboxu obdobi z toho bylo "7/2 026".
+Stejny duvod jako v report_najemne.html a inflationrate/chart.html.
+Daniel 2026-08-25.
+{% endcomment %}
+{% load l10n %}
 
 {% block content %}
 <div class="rx-planek-stranka">
@@ -10,7 +18,7 @@
                 <option value="">— podle data —</option>
                 {% for o in obdobi %}
                     <option value="{{ o.pk }}" {% if vybrane_obdobi and o.pk == vybrane_obdobi.pk %}selected{% endif %}>
-                        {{ o.month }}/{{ o.year }}{% if o.is_current %} (aktuální){% endif %}
+                        {{ o.month }}/{{ o.year|unlocalize }}{% if o.is_current %} (aktuální){% endif %}
                     </option>
                 {% endfor %}
             </select>
@@ -18,8 +26,18 @@
 
         <div>
             <label for="datum">nebo k datu</label>
-            <input type="date" id="datum" name="datum" value="{{ k_datu|date:'Y-m-d' }}"
-                   onchange="document.getElementById('obdobi').value='';">
+            {# Vlastni ikona kalendare misto nativni - viz .rx-pole-datum
+               v core/static/core/css/report_filters.css. #}
+            <span class="rx-pole-datum">
+                <input type="date" id="datum" name="datum" value="{{ k_datu|date:'Y-m-d' }}"
+                       onchange="document.getElementById('obdobi').value='';">
+                <button type="button" class="rx-pole-datum-ikona" tabindex="-1"
+                        aria-label="Otevřít kalendář"
+                        onclick="var p = document.getElementById('datum');
+                                 if (p.showPicker) { p.showPicker(); } else { p.focus(); }">
+                    <span class="material-symbols-outlined">calendar_month</span>
+                </button>
+            </span>
         </div>
 
         <div>

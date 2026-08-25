@@ -30,3 +30,62 @@ html.dark .rx-filters {
     margin-bottom: 6px;
     opacity: 0.75;
 }
+
+/* Pole s datem v panelu filtrů.
+
+   Nebylo na něm poznat, že se dá rozkliknout kalendář: prohlížeč sice
+   nativní ikonu má, jenže <input type="date"> tady nemá nastavené
+   color-scheme, takže ji v tmavém režimu kreslí tmavou na tmavém, a
+   Safari ji u data nekreslí vůbec. Místo spoléhání na prohlížeč je tu
+   proto ikona vlastní (Material Symbols, stejná sada jako v menu) a
+   nativní se schová - aby tam nebyly dvě. Kliknutí volá showPicker();
+   kde ho prohlížeč nezná, aspoň skočí do pole.
+   Daniel 2026-08-25. */
+.rx-pole-datum {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+}
+
+.rx-pole-datum input[type="date"] {
+    font: inherit;
+    color: inherit;
+    padding: 7px 34px 7px 10px;
+    border: 1px solid #d1d5db;
+    border-radius: 6px;
+    background: #fff;
+    color-scheme: light;
+}
+
+html.dark .rx-pole-datum input[type="date"] {
+    border-color: #4b5563;
+    background: rgba(255, 255, 255, 0.05);
+    /* Bez tohohle vykresli prohlizec vnitrek pole (cislice i vyskakovaci
+       kalendar) ve svetlem motivu. */
+    color-scheme: dark;
+}
+
+.rx-pole-datum input[type="date"]::-webkit-calendar-picker-indicator {
+    display: none;
+}
+
+.rx-pole-datum-ikona {
+    position: absolute;
+    right: 2px;
+    display: flex;
+    align-items: center;
+    padding: 4px;
+    border: 0;
+    background: none;
+    cursor: pointer;
+    color: inherit;
+    opacity: 0.65;
+}
+
+.rx-pole-datum-ikona:hover {
+    opacity: 1;
+}
+
+.rx-pole-datum-ikona .material-symbols-outlined {
+    font-size: 20px;
+}
