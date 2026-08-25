@@ -135,28 +135,65 @@ Daniel 2026-08-25.
     const tooltip = document.getElementById('rx-tooltip');
     if (!plocha || !tooltip) { return; }
 
-    // Zvyrazneni funguje obema smery - plánek i tabulka vedle nej.
-    function zvyrazni(kod, zapnout) {
-        plocha.querySelectorAll('.rx-plocha[data-kod]').forEach(function (el) {
-            if (el.dataset.kod === kod) { el.classList.toggle('rx-zvyrazneno', zapnout); }
-        });
-        document.querySelectorAll('.rx-radek').forEach(function (tr) {
-            if (tr.dataset.kod === kod) { tr.classList.toggle('rx-zvyrazneno', zapnout); }
+    // Rejstriky se staveji JEDNOU dopredu. Vykres "komplet 1.NP" ma pres
+    // 11 MB, tedy desitky tisic uzlu v DOM; puvodne se nad celym plankem
+    // volalo querySelectorAll pri KAZDEM prejeti mysi a pri kazdem kliku,
+    // takze vyber plochy znatelne vazl. Daniel 2026-08-25.
+    const tvaryPodleKodu = new Map();
+    plocha.querySelectorAll('.rx-plocha[data-kod]').forEach(function (el) {
+        const kod = el.dataset.kod;
+        if (!tvaryPodleKodu.has(kod)) { tvaryPodleKodu.set(kod, []); }
+        tvaryPodleKodu.get(kod).push(el);
+    });
+    const radkyPodleKodu = new Map();
+    document.querySelectorAll('.rx-radek').forEach(function (tr) {
+        radkyPodleKodu.set(tr.dataset.kod, tr);
+    });
+
+    function prepniTridu(kod, trida, zapnout) {
+        (tvaryPodleKodu.get(kod) || []).forEach(function (el) {
+            el.classList.toggle(trida, zapnout);
         });
     }
 
+    // Zvyrazneni funguje obema smery - plánek i tabulka vedle nej.
+    function zvyrazni(kod, zapnout) {
+        prepniTridu(kod, 'rx-zvyrazneno', zapnout);
+        const radek = radkyPodleKodu.get(kod);
+        if (radek) { radek.classList.toggle('rx-zvyrazneno', zapnout); }
+    }
+
+    // Poloha plánku se drží stranou: getBoundingClientRect si vynucuje
+    // prepocet rozvrzeni, a volat ho na kazdy pohyb mysi je nad takhle
+    // velkym vykresem to nejdrazsi, co jde udelat.
+    let ramecPlochy = plocha.getBoundingClientRect();
+    function obnovRamec() { ramecPlochy = plocha.getBoundingClientRect(); }
+    window.addEventListener('scroll', obnovRamec, { passive: true });
+    window.addEventListener('resize', obnovRamec);
+
+    // Tooltip se prekresluje nejvys jednou za snimek, ne na kazdou
+    // jednotlivou udalost mysi.
+    let cekaSnimek = false;
+    let posledniPohyb = null;
     plocha.addEventListener('mousemove', function (e) {
-        const tvar = e.target.closest('.rx-plocha[data-kod]');
-        if (!tvar) {
-            tooltip.hidden = true;
-            return;
-        }
-        const popis = tvar.dataset.popis || 'Nepřiřazeno';
-        tooltip.innerHTML = '<strong>' + tvar.dataset.kod + '</strong><br>' + popis;
-        tooltip.hidden = false;
-        const ramec = plocha.getBoundingClientRect();
-        tooltip.style.left = (e.clientX - ramec.left + 14) + 'px';
-        tooltip.style.top = (e.clientY - ramec.top + 14) + 'px';
+        posledniPohyb = e;
+        if (cekaSnimek) { return; }
+        cekaSnimek = true;
+        requestAnimationFrame(function () {
+            cekaSnimek = false;
+            const udalost = posledniPohyb;
+            if (!udalost) { return; }
+            const tvar = udalost.target.closest('.rx-plocha[data-kod]');
+            if (!tvar) {
+                tooltip.hidden = true;
+                return;
+            }
+            const popis = tvar.dataset.popis || 'Nepřiřazeno';
+            tooltip.innerHTML = '<strong>' + tvar.dataset.kod + '</strong><br>' + popis;
+            tooltip.hidden = false;
+            tooltip.style.left = (udalost.clientX - ramecPlochy.left + 14) + 'px';
+            tooltip.style.top = (udalost.clientY - ramecPlochy.top + 14) + 'px';
+        });
     });
     plocha.addEventListener('mouseleave', function () { tooltip.hidden = true; });
 
@@ -205,8 +242,7 @@ Daniel 2026-08-25.
         }
         const kod = tvar.dataset.kod;
         if (vybrane.has(kod)) { vybrane.delete(kod); } else { vybrane.set(kod, true); }
-        plocha.querySelectorAll('.rx-plocha[data-kod="' + kod + '"]')
-            .forEach(function (el) { el.classList.toggle('rx-vybrano', vybrane.has(kod)); });
+        prepniTridu(kod, 'rx-vybrano', vybrane.has(kod));
         prekresliVyber();
     });
 
@@ -220,10 +256,8 @@ Daniel 2026-08-25.
     const zrusit = document.getElementById('rx-vyber-zrusit');
     if (zrusit) {
         zrusit.addEventListener('click', function () {
+            vybrane.forEach(function (_, kod) { prepniTridu(kod, 'rx-vybrano', false); });
             vybrane.clear();
-            plocha.querySelectorAll('.rx-vybrano').forEach(function (el) {
-                el.classList.remove('rx-vybrano');
-            });
             prekresliVyber();
         });
     }

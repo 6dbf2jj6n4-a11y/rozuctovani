@@ -286,7 +286,12 @@ def oznac_plochy(svg_text, stavy):
 #: na kolik desetinnych mist se krati souradnice cest
 DESETINNA_MISTA = 1
 
-_VZOR_CESTA = re.compile(r'(<path\b[^>]*?)\sd="([^"]*)"', re.S)
+# Znacka muze mit predponu jmenneho prostoru (`<svg:path>`) - tak je
+# ulozeny planek, ktery do databaze nezapsalo nahrani souboru, ale prevod
+# vykresu. Bez `(?:[\w-]+:)?` se na takovy planek zmensovani vubec
+# nechytlo a hlasilo nulovou usporu, i kdyz mel souradnice na pet
+# desetinnych mist. Daniel 2026-08-25.
+_VZOR_CESTA = re.compile(r'(<(?:[\w-]+:)?path\b[^>]*?)\sd="([^"]*)"', re.S)
 _VZOR_CISLO = re.compile(r"-?\d+\.\d+")
 
 
@@ -337,6 +342,88 @@ def _body_cesty(tag):
     return pts
 
 
+def _lze_slucovat(prvek):
+    """Jde cestu slucovat s jinou? Jen kdyz se NEVYPLNUJE.
+
+    Slouceni znamena, ze z nekolika cest vznikne jedna o vice podcestach.
+    U pouhych obrysu (fill:none) je vysledek na pixel stejny. U vyplnenych
+    tvaru ale zacne pravidlo vyplne (nonzero/evenodd) platit pres vsechny
+    podcesty dohromady, takze by se diry a prekryvy vykreslily jinak -
+    ty se proto neslucuji. Daniel 2026-08-25.
+    """
+    if not prvek.get("d"):
+        return False
+    styl = (prvek.get("style") or "").replace(" ", "")
+    return "fill:none" in styl or prvek.get("fill") == "none"
+
+
+def _podpis_cesty(prvek):
+    """Vse krome geometrie a jmena - dve cesty se stejnym podpisem se
+    kresli uplne stejne, takze je lze spojit."""
+    return tuple(sorted((k, v) for k, v in prvek.attrib.items() if k not in ("d", "id")))
+
+
+def slouc_cesty(koren):
+    """Spoji sousedni stejne vypadajici cesty do jedne. Vraci pocet
+    usetrenych prvku.
+
+    Podklad z CADu je jedna cara = jeden <path>; u velkych vykresu jich
+    jsou desetitisice a prohlizec s takovym stromem znatelne vazne (planek
+    "komplet 1.NP" mel pres 16 tisic uzlu). Kresba pritom vypada uplne
+    stejne, kdyz se z nich udela jedna cesta o mnoha podcestach.
+
+    Spojuji se jen cesty, ktere jdou ve vykresu HNED ZA SEBOU - jinak by
+    se zmenilo poradi kresleni a neco by se mohlo prekryt jinak. Vrstvy
+    ploch se vynechavaji cele: jejich tvary maji `id`, na kterem stoji
+    parovani s Prostory. Daniel 2026-08-25.
+    """
+    vrstvy_ploch = _vrstvy(koren)
+    zakazane = set()
+    for nazev in (VRSTVA_PRONAJIMANE, VRSTVA_SPOLECNE):
+        vrstva = vrstvy_ploch.get(nazev)
+        if vrstva is not None:
+            zakazane.update(id(p) for p in vrstva.iter())
+
+    usporeno = 0
+    for rodic in list(koren.iter()):
+        if id(rodic) in zakazane:
+            continue
+        deti = list(rodic)
+        if len(deti) < 2:
+            continue
+        vysledek = []
+        i = 0
+        while i < len(deti):
+            prvek = deti[i]
+            if _bez_ns(prvek.tag) != "path" or not _lze_slucovat(prvek):
+                vysledek.append(prvek)
+                i += 1
+                continue
+            podpis = _podpis_cesty(prvek)
+            kusy = [prvek.get("d")]
+            j = i + 1
+            while j < len(deti):
+                dalsi = deti[j]
+                if (_bez_ns(dalsi.tag) != "path" or not _lze_slucovat(dalsi)
+                        or _podpis_cesty(dalsi) != podpis):
+                    break
+                kusy.append(dalsi.get("d"))
+                j += 1
+            if len(kusy) > 1:
+                prvek.set("d", " ".join(kusy))
+                # Jmeno slouceneho celku uz nic neznamena a jen zabira misto.
+                prvek.attrib.pop("id", None)
+                usporeno += len(kusy) - 1
+            vysledek.append(prvek)
+            i = j
+        if len(vysledek) != len(deti):
+            for dite in deti:
+                rodic.remove(dite)
+            for dite in vysledek:
+                rodic.append(dite)
+    return usporeno
+
+
 def zmensi(svg_text, mist=DESETINNA_MISTA, rezerva=2.0):
     """Vyhodi z vykresu balast po exportu z CADu a zkrati souradnice.
 
@@ -345,7 +432,10 @@ def zmensi(svg_text, mist=DESETINNA_MISTA, rezerva=2.0):
     1. **Smazou se tvary uplne mimo vykres** - ram listu A3, znacky pro
        skladani a registracni znacky mimo list. V oriznutem pohledu je
        nevidis, jen nafukuji soubor a rozhazuji vyber pres Ctrl+A.
-    2. **Zkrati se souradnice cest.** CAD pise pet desetinnych mist,
+    2. **Sloucí se sousedni stejne vypadajici cary** do jedne cesty
+       o vice podcestach - viz slouc_cesty. Kresba vypada stejne, ale
+       prohlizec ma misto desetitisicu prvku radove stovky.
+    3. **Zkrati se souradnice cest.** CAD pise pet desetinnych mist,
        pritom jedna jednotka odpovida na vytistene A4 asi 0,064 mm - paté
        desetinne misto je tedy sest desetimiliontin milimetru. Na jedno
        desetinne misto vyjde krok 0,006 mm, porad o rad jemneji, nez
@@ -355,13 +445,18 @@ def zmensi(svg_text, mist=DESETINNA_MISTA, rezerva=2.0):
     Tvary ploch (rect/polygon ve vrstvach Plochy_*) se nedotýka, aby se
     nemohlo stat, ze se rozejdou s `id`.
     """
+    # Vychozi velikost se bere hned na zacatku, aby hlaseny rozdil
+    # zahrnoval i mazani mimo vykres a slouceni cest, ne jen zkraceni
+    # souradnic.
+    puvodni = len(svg_text)
+
     vb = re.search(r'viewBox="([^"]*)"', svg_text)
     smazano = 0
     if vb:
         x0, y0, w, h = [float(v) for v in vb.group(1).split()]
         x1, y1 = x0 + w, y0 + h
         ke_smazani = []
-        for m in re.finditer(r"<path\b[^>]*?/>", svg_text, re.S):
+        for m in re.finditer(r"<(?:[\w-]+:)?path\b[^>]*?/>", svg_text, re.S):
             pts = _body_cesty(m.group(0))
             if pts and all(
                 px < x0 - rezerva or px > x1 + rezerva or py < y0 - rezerva or py > y1 + rezerva
@@ -372,7 +467,22 @@ def zmensi(svg_text, mist=DESETINNA_MISTA, rezerva=2.0):
             svg_text = svg_text[:zacatek] + svg_text[konec:]
         smazano = len(ke_smazani)
 
-    puvodni = len(svg_text)
+    # Slouceni sousednich cest. Dela se AZ PO mazani mimo vykres (to
+    # potrebuje kazdou caru zvlast) a JESTE PRED zkracovanim souradnic
+    # (to pak bezi nad mnohem mensim textem).
+    slouceno = 0
+    try:
+        for predpona, adresa in re.findall(r'xmlns:([\w-]+)="([^"]+)"', svg_text[:4000]):
+            ET.register_namespace(predpona, adresa)
+        ET.register_namespace("", SVG_NS)
+        koren = ET.fromstring(svg_text)
+        slouceno = slouc_cesty(koren)
+        if slouceno:
+            svg_text = ET.tostring(koren, encoding="unicode")
+    except ET.ParseError:
+        # Rozbity vykres radeji nechame byt - zkraceni souradnic nize
+        # funguje i tak, pracuje jen s textem.
+        slouceno = 0
 
     def _cislo(m):
         out = "%.*f" % (mist, round(float(m.group(0)), mist))
@@ -380,14 +490,16 @@ def zmensi(svg_text, mist=DESETINNA_MISTA, rezerva=2.0):
             out = out.rstrip("0").rstrip(".")
         return "0" if out in ("", "-", "-0") else out
 
-    # POZOR: jen atribut `d` u <path>. Sirsi vzor by sedl i na konec
-    # `id="AB_3.10"` a udelal by z nej `AB_3.1`.
+    # POZOR: jen atribut `d` u <path> (i s predponou jmenneho prostoru).
+    # Sirsi vzor by sedl i na konec `id="AB_3.10"` a udelal by z nej
+    # `AB_3.1`.
     novy = _VZOR_CESTA.sub(
         lambda m: '%s d="%s"' % (m.group(1), _VZOR_CISLO.sub(_cislo, m.group(2))), svg_text
     )
 
     return novy, {
         "smazano": smazano,
+        "slouceno": slouceno,
         "pred": puvodni,
         "po": len(novy),
         "usporeno": puvodni - len(novy),
