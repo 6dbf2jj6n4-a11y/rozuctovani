@@ -230,15 +230,21 @@
     fill-opacity: .62;
 }
 
-/* kód klienta vypsaný do plochy - pod číslem místnosti z podkladu */
+/* kód klienta vypsaný do plochy - pod číslem místnosti z podkladu.
+
+   Barva byla tmavě modrá #1e3a8a, jenže obsazené plochy jsou vyplněné
+   modrou #2563eb - modrá na modré a popisek nebyl skoro vidět. Téměř
+   černá drží kontrast na VŠECH výplních (modré, oranžové, šedé i
+   červené) a nekonkuruje barevnému kódování stavů. Bílý lem kolem
+   písma je proto o něco silnější. Daniel 2026-08-25. */
 .rx-kod-klienta {
-    fill: #1e3a8a;
+    fill: #111827;
     font-family: Inter, system-ui, sans-serif;
     font-weight: 700;
     text-anchor: middle;
     paint-order: stroke;
     stroke: #fff;
-    stroke-width: 2.5;
+    stroke-width: 3;
     stroke-linejoin: round;
     pointer-events: none;   /* ať nepřekáží klikání a najíždění na plochu */
 }
@@ -316,13 +322,15 @@
 
 /* kdo plochu převezme až po zvoleném datu */
 .rx-kod-budouci {
-    fill: #b45309;
+    /* Zůstává hnědooranžový, aby šel od současného nájemce rozeznat na
+       první pohled; tmavší odstín a silnější lem kvůli čitelnosti. */
+    fill: #92400e;
     font-family: Inter, system-ui, sans-serif;
     font-weight: 700;
     text-anchor: middle;
     paint-order: stroke;
     stroke: #fff;
-    stroke-width: 2.5;
+    stroke-width: 3;
     stroke-linejoin: round;
     pointer-events: none;
 }

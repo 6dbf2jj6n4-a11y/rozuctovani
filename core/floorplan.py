@@ -144,13 +144,47 @@ def _stred_tvaru(prvek):
     return None
 
 
-def _popisek(prvek, text, trida, radek=1):
+def _rozsah_velikosti(koren):
+    """Meze velikosti popisku V JEDNOTKACH KRESBY podle meritka vykresu.
+
+    Planky nemaji spolecne meritko: NJ vykres je siroky ~865 jednotek,
+    DV ~1564. Oba se pritom na strance vykresluji na stejnou sirku, takze
+    pevne meze v jednotkach kresby vysly na NJ citelne a na DV skoro
+    dvakrat drobneji - presne to Daniel 2026-08-25 hlasil. Meze se proto
+    odvozuji od sirky vykresu, aby popisek vysel na obrazovce vzdycky
+    stejne velky.
+
+    Koeficienty jsou nastavene tak, aby NJ planky zustaly PRESNE jak jsou
+    (9 az 16 jednotek pri sirce 865) - tam uz je vysledek schvaleny.
+    """
+    sirka = None
+    ramec = (koren.get("viewBox") or "").split()
+    if len(ramec) == 4:
+        try:
+            sirka = float(ramec[2])
+        except ValueError:
+            sirka = None
+    if not sirka:
+        # Nektere vykresy maji jen width (klidne i s jednotkou, "230mm").
+        try:
+            sirka = float(re.sub(r"[^\d.]", "", koren.get("width") or "") or 0)
+        except ValueError:
+            sirka = None
+    if not sirka:
+        sirka = 865.0        # nouzove: rozmer NJ planku
+    return sirka * 0.0104, sirka * 0.0185
+
+
+def _popisek(prvek, text, trida, meze, radek=1):
     """Vytvoří <text> pod středem tvaru. `radek` posouvá pod sebe."""
     stred = _stred_tvaru(prvek)
     if not stred:
         return None
     x, y, vyska = stred
-    velikost = max(7.0, min(13.0, vyska / 6))
+    # Delitel zvetsen (bylo vyska/6) a meze uz nejsou pevne, ale podle
+    # meritka vykresu - viz _rozsah_velikosti. Daniel 2026-08-25.
+    dolni, horni = meze
+    velikost = max(dolni, min(horni, vyska / 5))
     popisek = ET.Element("{%s}text" % SVG_NS)
     popisek.set("x", "%.1f" % x)
     # pod číslo místnosti z podkladu, ne přes něj
@@ -177,6 +211,7 @@ def oznac_plochy(svg_text, stavy):
 
     vrstva = vrstvy.get(VRSTVA_PRONAJIMANE)
     if vrstva is not None:
+        meze = _rozsah_velikosti(koren)
         popisky = []
         for prvek in vrstva:
             if _bez_ns(prvek.tag) not in TVARY or not prvek.get("id"):
@@ -193,12 +228,12 @@ def oznac_plochy(svg_text, stavy):
 
             kod = udaje.get("kod_klienta")
             if kod:
-                popisek = _popisek(prvek, kod, "rx-kod-klienta")
+                popisek = _popisek(prvek, kod, "rx-kod-klienta", meze)
                 if popisek is not None:
                     popisky.append(popisek)
             budouci_kod = udaje.get("budouci_kod")
             if budouci_kod:
-                popisek = _popisek(prvek, "→ " + budouci_kod, "rx-kod-budouci", radek=2)
+                popisek = _popisek(prvek, "→ " + budouci_kod, "rx-kod-budouci", meze, radek=2)
                 if popisek is not None:
                     popisky.append(popisek)
         # až po tvarech, aby se popisky kreslily navrch
