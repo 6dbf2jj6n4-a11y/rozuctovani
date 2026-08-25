@@ -106,9 +106,12 @@
                                 <td style="padding:1px 8px 1px 40px; text-align:right;">z toho měřená společná (E_SPOL)</td>
                                 <td style="padding:1px 8px; text-align:right;">{{ block.spolecne|floatformat:3 }} {{ group.unit }}</td>
                             </tr>
-                            {# Ztrata mereni - se svym skutecnym znamenkem. Zaporna =
-                               namerili jsme vic nez dodavatel fakturoval, typicky
-                               posunem odectu; jde ve prospech klientu. #}
+                            {% comment %}
+                            Ztrata mereni - se svym skutecnym znamenkem.
+                            Zaporna = namerili jsme vic nez dodavatel
+                            fakturoval, typicky posunem odectu; jde ve
+                            prospech klientu.
+                            {% endcomment %}
                             <tr style="font-size:12px;{% if block.skutecne < 0 %} color:#3a3;{% else %} color:#888;{% endif %}">
                                 <td style="padding:1px 8px 8px 40px; text-align:right;">
                                     z toho ztráta měření <span style="opacity:.75;">(rozdíl vůči dodavateli)</span>

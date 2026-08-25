@@ -26,8 +26,15 @@ Daniel 2026-08-25.
 
         <div>
             <label for="datum">nebo k datu</label>
-            {# Vlastni ikona kalendare misto nativni - viz .rx-pole-datum
-               v core/static/core/css/report_filters.css. #}
+            {% comment %}
+            Vlastni ikona kalendare misto nativni - viz .rx-pole-datum
+            v core/static/core/css/report_filters.css.
+
+            Pozor na zapis komentare: krizikova zavorka je JEDNORADKOVA,
+            pres vic radku ji Django neparsuje a cely text vypise na
+            stranku. Vicradkovy komentar patri do znacky comment.
+            Stalo se 2026-08-25.
+            {% endcomment %}
             <span class="rx-pole-datum">
                 <input type="date" id="datum" name="datum" value="{{ k_datu|date:'Y-m-d' }}"
                        onchange="document.getElementById('obdobi').value='';">
