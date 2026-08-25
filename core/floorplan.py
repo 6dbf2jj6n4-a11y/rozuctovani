@@ -114,6 +114,23 @@ def _nahrad_stav_stylu(prvek):
         prvek.attrib.pop(atribut, None)
 
 
+def _matice(prvek):
+    """Transformace tvaru jako sestice (a, b, c, d, e, f).
+
+    Tvar muze mit vlastni `transform` - napr. plany prevedene z PDF maji
+    na kazde ceste matici, ktera prevraci osu y. Bez ni vyjde stred
+    zrcadlove a popisek skonci mimo vykres. Viz Daniel 2026-08-25
+    (podklad_NJ_haly_2NP)."""
+    shoda = re.search(r"matrix\(([^)]*)\)", prvek.get("transform") or "")
+    if not shoda:
+        return (1.0, 0.0, 0.0, 1.0, 0.0, 0.0)
+    try:
+        cisla = [float(v) for v in re.split(r"[,\s]+", shoda.group(1).strip())]
+        return tuple(cisla) if len(cisla) == 6 else (1.0, 0.0, 0.0, 1.0, 0.0, 0.0)
+    except ValueError:
+        return (1.0, 0.0, 0.0, 1.0, 0.0, 0.0)
+
+
 def _stred_tvaru(prvek):
     """Přibližný střed tvaru v souřadnicích výkresu, nebo None.
 
@@ -123,16 +140,20 @@ def _stred_tvaru(prvek):
     druh = _bez_ns(prvek.tag)
     if druh == "rect":
         try:
-            return (
-                float(prvek.get("x", 0)) + float(prvek.get("width", 0)) / 2,
-                float(prvek.get("y", 0)) + float(prvek.get("height", 0)) / 2,
-                float(prvek.get("height", 0)),
-            )
+            a, b, c, d, e, f = _matice(prvek)
+            x = float(prvek.get("x", 0)) + float(prvek.get("width", 0)) / 2
+            y = float(prvek.get("y", 0)) + float(prvek.get("height", 0)) / 2
+            vyska = abs(float(prvek.get("height", 0)) * d)
+            sirka = abs(float(prvek.get("width", 0)) * a)
+            return (a * x + c * y + e, b * x + d * y + f, vyska, sirka)
         except (TypeError, ValueError):
             return None
     if druh in ("path", "polygon"):
         souradnice = prvek.get("d") or prvek.get("points") or ""
-        body = _body_cesty('<path d="%s"/>' % souradnice) if druh == "path" else []
+        # transformace se predava dal, jinak by se stred pocital
+        # v netransformovane soustave
+        tag = '<path d="%s" transform="%s"/>' % (souradnice, prvek.get("transform") or "")
+        body = _body_cesty(tag) if druh == "path" else []
         if druh == "polygon":
             cisla = [float(v) for v in re.findall(r"-?\d+\.?\d*", souradnice)]
             body = list(zip(cisla[0::2], cisla[1::2]))
@@ -140,7 +161,8 @@ def _stred_tvaru(prvek):
             return None
         xs = [b[0] for b in body]
         ys = [b[1] for b in body]
-        return (sum(xs) / len(xs), sum(ys) / len(ys), max(ys) - min(ys))
+        return (sum(xs) / len(xs), sum(ys) / len(ys),
+                max(ys) - min(ys), max(xs) - min(xs))
     return None
 
 
@@ -180,11 +202,16 @@ def _popisek(prvek, text, trida, meze, radek=1):
     stred = _stred_tvaru(prvek)
     if not stred:
         return None
-    x, y, vyska = stred
+    x, y, vyska, sirka = stred
     # Delitel zvetsen (bylo vyska/6) a meze uz nejsou pevne, ale podle
     # meritka vykresu - viz _rozsah_velikosti. Daniel 2026-08-25.
     dolni, horni = meze
     velikost = max(dolni, min(horni, vyska / 5))
+    # Delsi nazev klienta se do uzke plochy nevejde a pretece pres
+    # sousedni - zuzime ho podle sirky tvaru. 0,6 je priblizna sirka
+    # znaku vuci vysce pisma u bezpatkoveho fontu.
+    if sirka and text:
+        velikost = max(dolni, min(velikost, sirka / (len(text) * 0.6)))
     popisek = ET.Element("{%s}text" % SVG_NS)
     popisek.set("x", "%.1f" % x)
     # pod číslo místnosti z podkladu, ne přes něj
