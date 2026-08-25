@@ -15,7 +15,7 @@ Daniel 2026-08-25.
         <div>
             <label for="obdobi">Stav za období</label>
             <select name="obdobi" id="obdobi" onchange="this.form.submit()">
-                <option value="">— podle data —</option>
+                <option value="">— nevybráno —</option>
                 {% for o in obdobi %}
                     <option value="{{ o.pk }}" {% if vybrane_obdobi and o.pk == vybrane_obdobi.pk %}selected{% endif %}>
                         {{ o.month }}/{{ o.year|unlocalize }}{% if o.is_current %} (aktuální){% endif %}

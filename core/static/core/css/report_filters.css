@@ -89,3 +89,62 @@ html.dark .rx-pole-datum input[type="date"] {
 .rx-pole-datum-ikona .material-symbols-outlined {
     font-size: 20px;
 }
+
+/* Všechny ovládací prvky v panelu stejně vysoké.
+
+   Panel zarovnává obsah na spodní okraj (align-items: flex-end). Dokud
+   měl každý prvek svou přirozenou výšku - malý select, vyšší pole
+   s datem, drobné rx-btn-sm, prostý text u přepínače pater - seděl
+   popisek nad každým z nich jinde a řádek vypadal rozházeně (Daniel
+   2026-08-25). 36 px je nad přirozenou výškou všech z nich, takže je
+   srovná do jedné linky, aniž by některý zmenšila. */
+.rx-filters {
+    /* Jedna výška pro všechny prvky v panelu - ať se nedá rozjet tím,
+       že se někde upraví jen jedno pravidlo. */
+    --rx-vyska-prvku: 36px;
+}
+
+.rx-filters select,
+.rx-filters input[type="text"],
+.rx-filters input[type="number"],
+.rx-filters input[type="date"],
+.rx-filters .rx-btn,
+.rx-filters .rx-prepinac,
+.rx-filters .rx-planek-prepinac {
+    box-sizing: border-box;
+    min-height: var(--rx-vyska-prvku);
+}
+
+/* Pole s datem vykresluje prohlížeč vlastní vnitřní strukturou, která
+   vyjde o pixel vyšší než minimum - proto výška napevno, ne minimum. */
+.rx-filters input[type="date"] {
+    height: var(--rx-vyska-prvku);
+}
+
+/* Prvky, které nejsou nativní pole, si musí obsah vycentrovat samy -
+   jinak by jim vynucená výška přibyla jen dole. */
+.rx-filters .rx-btn,
+.rx-filters .rx-prepinac,
+.rx-filters .rx-planek-prepinac {
+    align-items: center;
+}
+
+/* Přepínač se zaškrtávátkem je taky <label>, takže na něj sedla obě
+   pravidla pro popisky výše: display:block (rozbil vlastní inline-flex,
+   text pak neseděl vedle zaškrtávátka na střed) a margin-bottom:6px
+   (spodní okraj určený pro popisek NAD prvkem). Kvůli tomu druhému byl
+   celý sloupec o 6 px výš než zbytek řádku. Obojí se sem musí přepsat
+   silnějším selektorem. Daniel 2026-08-25. */
+.rx-filters .rx-prepinac {
+    display: inline-flex;
+    margin-bottom: 0;
+}
+
+/* Obal pole s datem je inline prvek, takže sedí na účaří a pod ním
+   zbýval prostor pro dotažnice - popisek nad ním pak seděl o pixel
+   jinde než ostatní. Řeší se posazením na horní okraj řádku;
+   line-height: 0 by se sem NEHODIL, prokládání se dědí do samotného
+   pole a text data se v něm srazí. */
+.rx-pole-datum {
+    vertical-align: top;
+}
