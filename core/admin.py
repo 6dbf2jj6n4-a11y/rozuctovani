@@ -4519,6 +4519,29 @@ class FloorplanAdmin(PodlePronajimatele, ModelAdmin):
     def velikost(self, obj):
         return "%.2f MB" % (len(obj.svg_text or "") / 1024 / 1024)
 
+    def _plan_pronajimatele(self, request, plan_id):
+        """Planek zvoleneho pronajimatele, nebo None.
+
+        Planek se otevira primo z URL (prohlizec/<id>/), takze po
+        prepnuti pronajimatele v hlavicce menu zustala stranka viset na
+        planku, ktery uz pod zvoleneho pronajimatele nepatri - videl tedy
+        cizi budovu vcetne jmen najemcu v prehledu vedle vykresu. Areal
+        pronajimatele urcuje Site.landlord, takze staci stejny filtr jako
+        v PodlePronajimatele.get_queryset. Daniel 2026-08-25.
+        """
+        return (pronajimatele.omez(Floorplan.objects, "site", request)
+                .filter(pk=plan_id).first())
+
+    def _presmeruj_cizi_planek(self, request):
+        from django.shortcuts import redirect
+
+        self.message_user(
+            request,
+            "Plánek patří jinému pronajímateli – otevřel jsem seznam plánků.",
+            level=messages.INFO,
+        )
+        return redirect("admin:core_floorplan_changelist")
+
     @admin.action(description="Zmenšit výkres (vyčistit balast a zkrátit souřadnice)")
     def zmensit_vykres(self, request, queryset):
         """Vyhodi zbytky po exportu z CADu a zkrati souradnice na jedno
@@ -4607,13 +4630,15 @@ class FloorplanAdmin(PodlePronajimatele, ModelAdmin):
         potvrzení se to zapíše. Zápis je v jedné transakci."""
         from datetime import date
 
-        from django.shortcuts import get_object_or_404, redirect, render
+        from django.shortcuts import redirect, render
 
         from core.floorplan_prevod import (
             REZIM_NAVAZAT, REZIM_NOVA, REZIM_PRIDAT, karta_klienta_k_datu, priprav, proved,
         )
 
-        plan = get_object_or_404(Floorplan, pk=plan_id)
+        plan = self._plan_pronajimatele(request, plan_id)
+        if plan is None:
+            return self._presmeruj_cizi_planek(request)
         kody = [k for k in request.POST.getlist("plochy") or
                 request.GET.get("plochy", "").split(",") if k]
         units = list(Unit.objects.filter(site=plan.site, name__in=kody))
@@ -4679,12 +4704,14 @@ class FloorplanAdmin(PodlePronajimatele, ModelAdmin):
         ani je barvit CSS."""
         from datetime import date
 
-        from django.shortcuts import get_object_or_404, render
+        from django.shortcuts import render
         from django.utils.safestring import mark_safe
 
         from core.floorplan import oznac_plochy, stavy_ploch
 
-        plan = get_object_or_404(Floorplan, pk=plan_id)
+        plan = self._plan_pronajimatele(request, plan_id)
+        if plan is None:
+            return self._presmeruj_cizi_planek(request)
 
         # Období má přednost před datem: Daniel s ním pracuje běžněji než
         # s kalendářem a stav plánku se mění hlavně mezi měsíci.
