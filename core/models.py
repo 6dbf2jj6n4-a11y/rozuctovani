@@ -84,12 +84,19 @@ class Floorplan(models.Model):
         "Název", max_length=200,
         help_text="Např. „Administrativní budova – 2.NP“.",
     )
+    # blank=True: vykres, ze ktereho se doopravdy kresli, sedi v `svg_text`
+    # (viz read_svg). Planky nahrane prikazem nahrat_planky maji jen ten -
+    # soubory maji i desitky MB a nahravat je jeste na R2 nema smysl. Dokud
+    # bylo pole povinne, chtel po nich formular soubor pri KAZDEM ulozeni,
+    # takze nesly ani prejmenovat. Ze plansek nezustane bez vykresu, hlida
+    # clean() nize. Daniel 2026-08-25.
     svg = models.FileField(
-        "Výkres (SVG)", upload_to="planky/", storage=R2MediaStorage(),
+        "Výkres (SVG)", upload_to="planky/", storage=R2MediaStorage(), blank=True,
         help_text=(
             "Plain/Inkscape SVG s vrstvami „podklad“, „Plochy_rentex“ a "
             "„Plochy_spolecne“. Každý tvar ve vrstvě Plochy_rentex musí mít "
-            "id shodné s názvem Pronajímaného prostoru (mezera → podtržítko)."
+            "id shodné s názvem Pronajímaného prostoru (mezera → podtržítko). "
+            "Když už je výkres v databázi, soubor znovu nahrávat netřeba."
         ),
     )
     svg_text = models.TextField(
@@ -115,6 +122,16 @@ class Floorplan(models.Model):
 
     def __str__(self):
         return f"{self.site} – {self.name}"
+
+    def clean(self):
+        """Planek se bez vykresu vykreslit neda - jenze soubor je potreba
+        jen tehdy, kdyz uz jeho obsah nemame v databazi."""
+        from django.core.exceptions import ValidationError
+
+        if not self.svg and not self.svg_text:
+            raise ValidationError(
+                {"svg": "Nahraj výkres SVG – bez něj plánek není co kreslit."}
+            )
 
     def save(self, *args, **kwargs):
         """Po nahrani noveho souboru si jeho obsah zkopiruje do `svg_text`.
