@@ -90,8 +90,14 @@ def omez(qs, cesta, request):
     spravne arealy, ale radky by ukazovaly obe osoby dohromady.
 
     `cesta` je ORM cesta od modelu k core.Site, stejne jako u mixinu.
+
+    Vysledek je VZDYCKY distinct: kdyz cesta vede pres zpetnou vazbu
+    (karta -> plochy), vrati filtr radek tolikrat, kolik ma zaznam
+    navazanych ploch - v Prehledu najemneho se tak kazdy klient objevil
+    nekolikrat. U cest pres primy cizi klic distinct nic nemeni.
+    Viz Daniel 2026-08-25.
     """
-    return qs.filter(**{"%s__in" % cesta: id_arealu(request)})
+    return qs.filter(**{"%s__in" % cesta: id_arealu(request)}).distinct()
 
 
 def klienti(request, qs=None):
