@@ -384,8 +384,11 @@ class UnitAdmin(PodlePronajimatele, DuplicateModelAdminMixin, ModelAdmin):
         from django.http import JsonResponse
 
         def area_lookup(request, unit_id):
+            # self.get_queryset drzi kontext pronajimatele (viz
+            # PodlePronajimatele) - bez nej vracel doplnovac vymeru
+            # prostoru i z cizich arealu. Daniel 2026-08-25.
             area = (
-                Unit.objects.filter(pk=unit_id)
+                self.get_queryset(request).filter(pk=unit_id)
                 .values_list("area_m2", flat=True)
                 .first()
             )
@@ -1216,10 +1219,17 @@ class ContractAdmin(PodlePronajimatele, DuplicateModelAdminMixin, ModelAdmin):
         from io import BytesIO
         from django.core.files.base import ContentFile
         from django.http import HttpResponse
-        from django.shortcuts import get_object_or_404, redirect
+        from django.shortcuts import redirect
         from core.contract_generator import contract_to_template_data, fill_contract_template
 
-        contract = get_object_or_404(Contract, pk=contract_id)
+        # Objekt z URL musi projit stejnym filtrem jako seznam, jinak si
+        # sel po prepnuti pronajimatele stahnout cizi smlouvu i s udaji
+        # klienta. Daniel 2026-08-25.
+        contract = self.get_queryset(request).filter(pk=contract_id).first()
+        if contract is None:
+            self.message_user(request, "Smlouva patří jinému pronajímateli.",
+                              level=messages.ERROR)
+            return redirect("admin:core_contract_changelist")
         if not contract.site_id:
             self.message_user(
                 request,
@@ -1843,10 +1853,13 @@ class ClientCardAdmin(PodlePronajimatele, ModelAdmin):
         from io import BytesIO
         from django.core.files.base import ContentFile
         from django.http import HttpResponse
-        from django.shortcuts import get_object_or_404
+        from django.shortcuts import redirect
         from core.client_card_generator import generate_client_card_document
 
-        card = get_object_or_404(ClientCard, pk=card_id)
+        # Kontext pronajimatele - viz komentar u kopie_view.
+        card = self.get_queryset(request).filter(pk=card_id).first()
+        if card is None:
+            return self._presmeruj_cizi_kartu(request)
         buf = BytesIO()
         generate_client_card_document(card, buf)
         filename = f"karta_najemce_{card.client.code or card.client.pk}_{card.pk}.pdf"
@@ -1869,10 +1882,23 @@ class ClientCardAdmin(PodlePronajimatele, ModelAdmin):
         )
     generate_card_button.short_description = ""
 
+    def _presmeruj_cizi_kartu(self, request):
+        from django.shortcuts import redirect
+
+        self.message_user(request, "Karta patří jinému pronajímateli.",
+                          level=messages.ERROR)
+        return redirect("admin:core_clientcard_changelist")
+
     def kopie_view(self, request, card_id):
         """Obycejna kopie - stejny klient, okamzite, bez potvrzeni."""
         from django.shortcuts import redirect
-        original = ClientCard.objects.get(pk=card_id)
+        # Karta se bere pres self.get_queryset, tedy stejnym filtrem jako
+        # seznam (PodlePronajimatele). Driv slo prostym ID v adrese
+        # zkopirovat kartu cizniho pronajimatele - a tohle ZAPISUJE.
+        # Daniel 2026-08-25.
+        original = self.get_queryset(request).filter(pk=card_id).first()
+        if original is None:
+            return self._presmeruj_cizi_kartu(request)
         new_card = original.create_exact_copy()
         self.message_user(request, "Kopie karty byla vytvořena.")
         return redirect(f"/admin/core/clientcard/{new_card.pk}/change/")
@@ -1880,7 +1906,9 @@ class ClientCardAdmin(PodlePronajimatele, ModelAdmin):
     def kopie_klient_view(self, request, card_id):
         """Kopie na jineho klienta - napr. kdyz si prostor pronajme novy najemce."""
         from django.shortcuts import redirect, render
-        original = ClientCard.objects.get(pk=card_id)
+        original = self.get_queryset(request).filter(pk=card_id).first()
+        if original is None:
+            return self._presmeruj_cizi_kartu(request)
 
         if request.method == "POST":
             new_client = Client.objects.filter(pk=request.POST.get("new_client")).first()
@@ -3377,8 +3405,9 @@ class ServicePoolItemAdmin(PodlePronajimatele, ModelAdmin):
         from django.http import JsonResponse
 
         def class_lookup(request, item_id):
+            # Kontext pronajimatele - viz komentar u area_lookup.
             data = (
-                ServicePoolItem.objects.filter(pk=item_id)
+                self.get_queryset(request).filter(pk=item_id)
                 .values("invoice_class", "default_allocation_type")
                 .first()
             )
@@ -3518,7 +3547,10 @@ class PriceListAdmin(PodlePronajimatele, DefaultToCurrentPeriodMixin, ModelAdmin
         if request.method != "POST":
             return redirect(redirect_to)
 
-        source = PriceList.objects.filter(pk=pricelist_id).select_related("service_item").first()
+        # Kontext pronajimatele - bez nej slo prostym ID v adrese prevzit
+        # cenu z ceniku cizniho pronajimatele. Daniel 2026-08-25.
+        source = (self.get_queryset(request)
+                  .filter(pk=pricelist_id).select_related("service_item").first())
         period = Period.objects.filter(pk=period_id).first()
         if source is None or period is None:
             self.message_user(request, "Zdrojová cena nebo období už neexistuje.", messages.ERROR)
@@ -4314,10 +4346,19 @@ class BillingLineAdmin(PodlePronajimatele, DefaultToCurrentPeriodMixin, ModelAdm
     def detail_client_view(self, request, client_id):
         """Podrobny detail po jednotlivych Klicich pro jednoho klienta (viz
         billing/key_detail.py) - otevira se kliknutim na klienta v detail_view."""
-        from django.shortcuts import get_object_or_404, render
+        from django.shortcuts import redirect, render
         from billing.key_detail import get_key_rows_for_client
 
-        client = get_object_or_404(Client, pk=client_id)
+        # Klienti maji vlastni pravidlo (klient bez karty je videt vsude,
+        # pronajimatel taky) - proto pronajimatele.klienti, ne get_queryset
+        # tohohle adminu, ktery vraci Polozky. Bez toho sel po prepnuti
+        # pronajimatele otevrit rozpad vyuctovani ciziho klienta.
+        # Daniel 2026-08-25.
+        client = pronajimatele.klienti(request).filter(pk=client_id).first()
+        if client is None:
+            self.message_user(request, "Klient patří jinému pronajímateli.",
+                              level=messages.ERROR)
+            return redirect("admin:core_billingline_detail")
         period_id = request.GET.get("period")
         period = Period.objects.filter(pk=period_id).first() if period_id else Period.current()
 
@@ -4529,8 +4570,7 @@ class FloorplanAdmin(PodlePronajimatele, ModelAdmin):
         pronajimatele urcuje Site.landlord, takze staci stejny filtr jako
         v PodlePronajimatele.get_queryset. Daniel 2026-08-25.
         """
-        return (pronajimatele.omez(Floorplan.objects, "site", request)
-                .filter(pk=plan_id).first())
+        return self.get_queryset(request).filter(pk=plan_id).first()
 
     def _presmeruj_cizi_planek(self, request):
         from django.shortcuts import redirect
