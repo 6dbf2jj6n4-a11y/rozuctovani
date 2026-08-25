@@ -476,7 +476,34 @@ class CardOccupantInline(TabularInline):
     hide_title = True
 
 
+class CardUnitInlineFormSet(forms.BaseInlineFormSet):
+    """Karta se nesmi ulozit bez jedine Plochy.
+
+    Model to hlida taky (ClientCard.clean), ale az u ulozene karty - pri
+    zakladani Plochy jeste neexistuji, protoze vznikaji az po Karte.
+    Tenhle formset zachyti obe situace: novou kartu, kde uzivatel zadnou
+    plochu nevyplnil, i editaci, ve ktere smazal posledni.
+    Viz Daniel 2026-08-25."""
+
+    def clean(self):
+        super().clean()
+        if any(self.errors):
+            return  # necha promluvit konkretnejsi chyby jednotlivych radku
+        zbyva = sum(
+            1 for f in self.forms
+            if getattr(f, "cleaned_data", None)
+            and not f.cleaned_data.get("DELETE")
+            and f.cleaned_data.get("unit")
+        )
+        if not zbyva:
+            raise forms.ValidationError(
+                "Karta musí mít aspoň jednu Plochu - vyber ji v sekci "
+                "„Plochy a nájemné“."
+            )
+
+
 class CardUnitInline(TabularInline):
+    formset = CardUnitInlineFormSet
     model = CardUnit
     extra = 0
     fields = (

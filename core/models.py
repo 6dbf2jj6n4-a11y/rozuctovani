@@ -573,6 +573,17 @@ class ClientCard(models.Model):
     def clean(self):
         if self.valid_to and self.valid_to < self.valid_from:
             raise ValidationError("Datum 'platnost do' nesmí být dříve než 'platnost od'.")
+        # Karta bez jedine Plochy je nesmysl - nema se z ceho pocitat najem
+        # ani na co navazat Klice, a v sestavach se tise preskakuje, takze
+        # si ji nikdo nevsimne. Kontroluje se jen u ulozene karty: pri
+        # zakladani Plochy jeste neexistuji (vznikaji az po Karte, ktera je
+        # jejich cizim klicem) - tam to hlida formular v adminu, viz
+        # core.admin.CardUnitInlineFormSet. Viz Daniel 2026-08-25.
+        if self.pk and not self.card_units.exists():
+            raise ValidationError(
+                "Karta musí mít aspoň jednu Plochu - přidej ji v sekci "
+                "„Plochy a nájemné“."
+            )
         if self.is_active:
             conflict = self.active_card_conflict()
             if conflict:
