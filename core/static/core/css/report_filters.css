@@ -121,6 +121,40 @@ html.dark .rx-pole-datum input[type="date"] {
     height: var(--rx-vyska-prvku);
 }
 
+/* Rozbalovací pole: vypnutý nativní vzhled a vlastní šipka.
+
+   Safari na macOS u nativního <select> nastavenou výšku IGNORUJE, takže
+   pole zůstalo nízké a celý jeho sloupec sedl níž než zbytek řádku.
+   Chrome výšku respektuje - proto to v jednom prohlížeči vypadalo
+   správně a ve druhém ne (Daniel 2026-08-25). Vynutit výšku jde jedině
+   vypnutím nativního vzhledu, s ním ale zmizí i šipka, proto se kreslí
+   z vloženého SVG.
+
+   Pravé odsazení musí být !important: část šablon má na selectu inline
+   style="padding:8px" a inline zápis by naše pravidlo přebil - text
+   delší volby by pak lezl pod šipku. */
+.rx-filters select {
+    appearance: none;
+    -webkit-appearance: none;
+    font: inherit;
+    color: inherit;
+    padding: 6px 10px;
+    padding-right: 30px !important;
+    border: 1px solid #d1d5db;
+    border-radius: 6px;
+    background-color: #fff;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M2.5 4.5 6 8 9.5 4.5' fill='none' stroke='%23374151' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 10px center;
+    background-size: 12px 12px;
+}
+
+html.dark .rx-filters select {
+    border-color: #4b5563;
+    background-color: rgba(255, 255, 255, 0.05);
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M2.5 4.5 6 8 9.5 4.5' fill='none' stroke='%23d1d5db' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+}
+
 /* Prvky, které nejsou nativní pole, si musí obsah vycentrovat samy -
    jinak by jim vynucená výška přibyla jen dole. */
 .rx-filters .rx-btn,
