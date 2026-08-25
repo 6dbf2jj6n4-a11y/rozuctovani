@@ -112,10 +112,16 @@ class Command(BaseCommand):
                                     (VRSTVA_SPOLECNE, spolecne)):
             if not prvky:
                 continue
-            vrstva = ET.SubElement(koren, SVG + "g", {
-                "id": "vrstva-" + nazev_vrstvy.lower(),
-                INK + "groupmode": "layer", INK + "label": nazev_vrstvy,
-            })
+            # pri opakovanem spusteni se pouzije uz existujici vrstva,
+            # jinak by jich v souboru pribyvalo nekolik stejnojmennych
+            vrstva = next(
+                (g for g in koren.findall(SVG + "g")
+                 if g.get(INK + "label") == nazev_vrstvy), None)
+            if vrstva is None:
+                vrstva = ET.SubElement(koren, SVG + "g", {
+                    "id": "vrstva-" + nazev_vrstvy.lower(),
+                    INK + "groupmode": "layer", INK + "label": nazev_vrstvy,
+                })
             for prvek, _ in prvky:
                 rodic[prvek].remove(prvek)
                 vrstva.append(prvek)
