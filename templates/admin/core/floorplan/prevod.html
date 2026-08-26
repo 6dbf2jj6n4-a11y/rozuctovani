@@ -81,6 +81,15 @@
             {% endfor %}
 
             {% if not prevod.potize %}
+            {% for b in prevod.budouci %}
+                <p class="rx-odstavec">
+                    Z karty <strong>{{ b.card }}</strong> ({{ b.card.client }}) se plocha
+                    jen odebere – karta začíná {{ b.card.valid_from|date:'j. n. Y' }}, tedy
+                    až po převodu, takže není co uzavírat. Odchází
+                    {% for u in b.plochy %}{{ u.name }}{% if not forloop.last %}, {% endif %}{% endfor %},
+                    zbyde na ní {{ b.zbyde_ploch }} ploch.
+                </p>
+            {% endfor %}
             {% for z in prevod.zdroje %}
                 {% if z.rovnou %}
                     <p class="rx-odstavec">

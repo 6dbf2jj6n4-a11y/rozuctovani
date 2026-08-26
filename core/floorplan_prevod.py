@@ -78,6 +78,8 @@ class Prevod:
         self.poznamky = []      # co se přeskočí - převod může proběhnout dál
         self.potize = []        # blokující - převod nemá co dělat
         self.uz_drzi = []       # [(Karta, [Unit])] - plochy, které nájemce už má
+        self.budouci = []       # [{card, plochy, zbyde_ploch}] - Karty, které
+                                # začínají AŽ PO datu převodu a plochu mají taky
 
     @property
     def klice_z_ploch(self):
@@ -145,20 +147,45 @@ def priprav(units, klient, datum, sazba=None, cil_karta=None, rezim=REZIM_NOVA):
         if unit.id not in drzene:
             prevod.bez_karty.append(unit)
 
+    # Karty, které začínají AŽ PO datu převodu a převáděnou plochu mají taky.
+    # Do dotazu výše se nevejdou (filtruje na platnost k datu), a přesně kvůli
+    # tomu zůstávala plocha viset na budoucí Kartě původního držitele -
+    # Daniel 2026-08-26, kancelář AB 3.14. Nezavírají se: ještě nezačaly,
+    # takže se z nich plocha prostě odebere.
+    budouci_radky = (
+        CardUnit.objects.select_related("card", "card__client", "unit")
+        .filter(unit__in=units, card__is_active=True, card__valid_from__gt=datum)
+        .exclude(card__client_id=klient.id)
+        .order_by("card__valid_from")
+    )
+    budouci_podle_karty = {}
+    for cu in budouci_radky:
+        budouci_podle_karty.setdefault(cu.card, []).append(cu)
+
+    for card, cus in budouci_podle_karty.items():
+        zbyde = card.card_units.count() - len(cus)
+        if zbyde <= 0:
+            # Karta bez jediné Plochy je podle ClientCard.clean neplatná,
+            # takže ji radši nechám být a řeknu proč - ať se s ní rozhodne
+            # člověk (zrušit? nechat na jiné ploše?).
+            prevod.poznamky.append(
+                "Karta %s (%s, od %s) má převáděné plochy jako JEDINÉ – "
+                "neodebírám je, karta by zůstala prázdná. Vyřeš ji ručně."
+                % (card, card.client, card.valid_from.strftime("%-d. %-m. %Y"))
+            )
+            continue
+        prevod.budouci.append({
+            "card": card,
+            "plochy": [cu.unit for cu in cus],
+            "zbyde_ploch": zbyde,
+        })
+
     for card, cus in podle_karty.items():
         if card.client_id == klient.id:
             # plochu, kterou nájemce sám drží, nelze převádět - skončila by
             # na dvou jeho Kartách naráz
             prevod.uz_drzi.append((card, [cu.unit for cu in cus]))
             continue
-        if card.valid_from and card.valid_from > datum:
-            prevod.poznamky.append(
-                "Karta %s začíná %s, tedy až po zvoleném datu – přeskakuje se, "
-                "jinak by se uzavřela dřív, než začne."
-                % (card, card.valid_from.strftime("%-d. %-m. %Y"))
-            )
-            continue
-
         # Karta začínající přesně v den převodu se nezavírá - ještě za žádné
         # období neúčtovala, takže se plochy prostě odeberou rovnou z ní.
         # Jinak by valid_to vyšlo o den dřív než valid_from.
@@ -268,6 +295,19 @@ def proved(prevod):
         # 2) uzavřít původní Kartu
         card.valid_to = prevod.den_uzavreni
         card.save(update_fields=["valid_to"])
+
+    # 2b) Karty, které teprve začnou - plocha se z nich jen odebere
+    for budouci in prevod.budouci:
+        card = budouci["card"]
+        puvodni_soucet = _soucet_m2(card)
+        CardUnit.objects.filter(
+            card=card, unit__in=[u.id for u in budouci["plochy"]]
+        ).delete()
+        zbyva = _soucet_m2(card)
+        for klic in card.allocation_keys.all():
+            if _je_plosny(klic, puvodni_soucet):
+                klic.value = zbyva
+                klic.save(update_fields=["value"])
 
     # 3) Karta nájemce - podle zvoleného režimu
     if prevod.rezim == REZIM_PRIDAT:
