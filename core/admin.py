@@ -1378,8 +1378,18 @@ class ClientCardAdmin(PodlePronajimatele, ModelAdmin):
 
     def get_inlines(self, request, obj=None):
         """Plochy a najemne + sekce Klicu generovane z Trid
-        (Nastaveni -> Tridy), ne napevno."""
-        return [CardUnitInline, CardOccupantInline, *sekce_klicu()]
+        (Nastaveni -> Tridy), ne napevno.
+
+        Spolubydlici se ukazuji JEN u karet, ktere maji aspon jeden
+        bytovy prostor (Unit.is_residential) - u kancelari a skladu ta
+        sekce nedava smysl. Priznak je spolehlivy, pouziva se uz pro DPH
+        podle §56a. U nove karty (obj=None) jeste zadne Plochy nejsou,
+        takze se sekce objevi az po pridani bytu a ulozeni. Viz
+        konverzace s Danielem 2026-08-19."""
+        inlines = [CardUnitInline]
+        if obj is not None and obj.card_units.filter(unit__is_residential=True).exists():
+            inlines.append(CardOccupantInline)
+        return [*inlines, *sekce_klicu()]
 
     @admin.action(description="Vytvořit kopii vybraných karet")
     def kopie_karty(self, request, queryset):
