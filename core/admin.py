@@ -1363,7 +1363,10 @@ class ClientCardAdmin(PodlePronajimatele, ModelAdmin):
             "fields": (("po_number_rent", "po_number_services"),)
         }),
         ("Karta nájemce (Příloha č. 1)", {
-            "fields": ("signed_on", "generate_card_button", "document")
+            # Datum podpisu a miniatura Karty na jednom radku - v jedne
+            # n-tici je admin sazi vedle sebe, kazde zvlast pod sebe.
+            # Daniel 2026-08-26.
+            "fields": (("signed_on", "generate_card_button"), "document")
         }),
     )
     readonly_fields = ("generate_card_button",)
@@ -1920,6 +1923,10 @@ class ClientCardAdmin(PodlePronajimatele, ModelAdmin):
         # Tlacitko i miniatura vykresluje JEDNO pole, aby sedely vedle sebe -
         # dve samostatna readonly pole si admin sazi pod sebe.
         #
+        # Zmensit musi byt SAMOSTATNE tlacitko: ve zvetsene podobe si
+        # kliknuti bere prohlizec PDF (aby slo Kartou rolovat), takze na
+        # obal uz se nedostane a zpatky by to neslo.
+        #
         # Miniatura je normalne velky ramecek zmenseny pres CSS transform,
         # ne uzky <iframe>: prohlizec by v uzkem ramu nakreslil svou listu
         # a z Karty by nebylo videt nic. Nacita se rovnou pri otevreni
@@ -1932,12 +1939,15 @@ class ClientCardAdmin(PodlePronajimatele, ModelAdmin):
             '<div class="rx-karta-nahled" title="Klikni pro zvětšení" '
             'onclick="rxZvetsiKartu(this)">'
             '<iframe src="{}" title="Náhled Karty nájemce" loading="lazy"></iframe>'
+            '<button type="button" class="rx-btn rx-btn-sm rx-karta-zmensit" '
+            'onclick="event.stopPropagation();'
+            'rxZvetsiKartu(this.closest(\'.rx-karta-nahled\'))">Zmenšit</button>'
             '</div>'
             '</div>'
             '<script>function rxZvetsiKartu(o){{'
             'o.classList.toggle("rx-zvetseno");'
             'o.title=o.classList.contains("rx-zvetseno")'
-            '?"Klikni pro zmenšení":"Klikni pro zvětšení";}}</script>',
+            '?"":"Klikni pro zvětšení";}}</script>',
             url, url_nahled,
         )
     generate_card_button.short_description = ""
