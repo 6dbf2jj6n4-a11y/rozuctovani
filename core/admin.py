@@ -4599,8 +4599,7 @@ class FloorplanAdmin(PodlePronajimatele, ModelAdmin):
                 continue
 
             novy, prehled = zmensi(text)
-            if (prehled["usporeno"] <= 0 and not prehled["smazano"]
-                    and not prehled.get("slouceno")):
+            if prehled["usporeno"] <= 0 and not prehled["smazano"]:
                 self.message_user(request, f"{plan.name}: už je zmenšený, nic k úpravě.")
                 continue
 
@@ -4609,9 +4608,9 @@ class FloorplanAdmin(PodlePronajimatele, ModelAdmin):
             plan.svg_text = novy
             celkem += prehled["usporeno"]
             self.message_user(request, (
-                "{}: smazáno {} tvarů mimo výkres, sloučeno {} čar, "
-                "{:.2f} → {:.2f} MB (úspora {:.0f} %)".format(
-                    plan.name, prehled["smazano"], prehled.get("slouceno", 0),
+                "{}: smazáno {} tvarů mimo výkres, {:.2f} → {:.2f} MB "
+                "(úspora {:.0f} %)".format(
+                    plan.name, prehled["smazano"],
                     prehled["pred"] / 1024 / 1024, prehled["po"] / 1024 / 1024,
                     100 - 100.0 * prehled["po"] / prehled["pred"],
                 )
