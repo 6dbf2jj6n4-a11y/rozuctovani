@@ -34,16 +34,23 @@ vyplni celou sirku bunky sama od sebe, a text-align:right na spanu uvnitr
 uz ma do ceho se zarovnat.
 */
 .field-rocni_najem > div,
-.field-mesicni_najem > div,
-.field-vymera_zasobnik > div {
+.field-mesicni_najem > div {
     display: contents;
 }
 .field-rocni_najem .readonly,
-.field-mesicni_najem .readonly,
-.field-vymera_zasobnik .readonly {
+.field-mesicni_najem .readonly {
     display: block;
     width: 100%;
 }
+
+/*
+Vymera ze zasobniku se sem drive pocitala taky, jenze ta se NEZAROVNAVA
+doprava - je to holy text, ne castka v "bubline". Vyrazenim obalu
+(display: contents) prisla o jeho "items-center", takze jako jediny
+sloupec v radku sedela nahore, zatimco ostatni pole byla na stred.
+Obal ji proto zustava; sirku ani zarovnani u ni resit netreba.
+Daniel 2026-08-26 (screenshot sekce Plochy a najemne).
+*/
 
 /*
 Vypnuti nativnich sipek nahoru/dolu (spinner) u ciselnych poli Vymera
