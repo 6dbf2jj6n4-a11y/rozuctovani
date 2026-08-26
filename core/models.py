@@ -15,10 +15,18 @@ from core.storage import R2MediaStorage
 
 # Typy rozpoctu - sdileno mezi ServicePoolItem (vychozi typ) a AllocationKey
 # (skutecny typ pouzity na konkretni karte klienta).
+#
+# "submeter" se drive jmenoval "Podružné měřidlo (1:1)", coz svadelo:
+# vypadalo to, ze meridlo ma klient sam pro sebe. Kdyz ho ale sdili vic
+# karet, engine deli jeho spotrebu mezi ne podle Hodnoty - tedy uplne
+# stejne jako "Podle váhy", jen se nejdriv z celku vyrizne skutecna
+# spotreba toho meridla. Dvojice nazvu to ted rika primo. Ulozena hodnota
+# ("submeter"/"weighted_count") se NEMENI, jde jen o popisky.
+# Daniel 2026-08-26.
 ALLOCATION_TYPE_CHOICES = [
-    ("submeter", "Podružné měřidlo (1:1)"),
+    ("submeter", "Podle váhy na měřidle"),
     ("fixed_amount", "Pevná částka"),
-    ("weighted_count", "Podle váhy"),
+    ("weighted_count", "Podle váhy bez měřidla"),
     ("area_price", "Dle výměry (m²)"),
 ]
 
@@ -941,7 +949,7 @@ class Meter(models.Model):
         help_text="Pouze pro virtuální měřidla, např. E_A1+E_AB1 (kódy jiných měřidel).",
     )
     weight_unit_label = models.CharField(
-        "Co je váhou (u klíčů 'Podle váhy' na tomto měřidle)", max_length=100, blank=True,
+        "Co je váhou (u klíčů „Podle váhy na měřidle“)", max_length=100, blank=True,
         help_text=(
             "Krátký popis, co hodnota Klíče typu 'Podle váhy' napojeného na "
             "toto měřidlo znamená - např. 'm2', 'počet osob', 'počet "
@@ -1357,7 +1365,7 @@ class ServicePoolItem(models.Model):
         ),
     )
     weight_unit_label = models.CharField(
-        "Co je váhou (u klíčů 'Podle váhy' bez vlastního měřidla)", max_length=100, blank=True,
+        "Co je váhou (u klíčů „Podle váhy bez měřidla“)", max_length=100, blank=True,
         help_text=(
             "Krátký popis, co hodnota Klíče typu 'Podle váhy' na téhle "
             "položce znamená - např. 'm2', 'počet osob'. Použije se jen "
@@ -1552,9 +1560,9 @@ class CardOccupant(models.Model):
 
 class AllocationKey(models.Model):
     class AllocationType(models.TextChoices):
-        SUBMETER = "submeter", "Podružné měřidlo (1:1)"
+        SUBMETER = "submeter", "Podle váhy na měřidle"
         FIXED_AMOUNT = "fixed_amount", "Pevná částka"
-        WEIGHTED_COUNT = "weighted_count", "Podle váhy"
+        WEIGHTED_COUNT = "weighted_count", "Podle váhy bez měřidla"
         AREA_PRICE = "area_price", "Dle výměry (m²)"
 
     client_card = models.ForeignKey(
@@ -1563,16 +1571,26 @@ class AllocationKey(models.Model):
     service_item = models.ForeignKey(
         ServicePoolItem, on_delete=models.CASCADE, related_name="allocation_keys", verbose_name="Položka zásobníku"
     )
-    allocation_type = models.CharField("Typ rozpočtu", max_length=20, choices=AllocationType.choices)
+    allocation_type = models.CharField(
+        "Typ rozpočtu", max_length=20, choices=AllocationType.choices,
+        help_text=(
+            "„Podle váhy na měřidle“ nejdřív vyřízne z položky skutečnou "
+            "spotřebu zvoleného měřidla a teprve tu rozdělí – mezi karty, "
+            "které měřidlo sdílejí, poměrem podle Hodnoty (m², osoby, kusy). "
+            "Když je na měřidle karta sama, dostane celou jeho spotřebu. "
+            "„Podle váhy bez měřidla“ dělí náklad položky rovnou podle "
+            "Hodnoty, bez ohledu na to, kolik se kde skutečně naměřilo."
+        ),
+    )
     value = models.DecimalField(
         "Hodnota", max_digits=12, decimal_places=4, null=True, blank=True,
         help_text=(
             "Význam závisí na typu: u 'Pevná částka' jde o hotovou Kč částku/měsíc, "
             "u 'Dle výměry (m2)' jde o výměru v m2 (cena/m2/rok se bere z Ceníku "
-            "položky pro dané období), u 'Podružné měřidlo' se použije jen pokud "
+            "položky pro dané období), u „Podle váhy na měřidle“ se použije jen pokud "
             "stejné měřidlo sdílí více karet - pak jde o váhu pro rozdělení jeho "
             "spotřeby mezi ně (u jedné karty na měřidlo se nepoužije, dostane celou "
-            "spotřebu). U 'Podle váhy' jde o libovolné relativní číslo vyjadřující "
+            "spotřebu). U „Podle váhy bez měřidla“ jde o libovolné relativní číslo vyjadřující "
             "podíl na společném nákladu (m2, počet osob, počet kusů, radiátorů "
             "apod. - jednotka záleží na tom, jak položka danou spotřebu/náklad "
             "rozpočítává) - systém ho vždy normalizuje tak, aby součet všech karet "
