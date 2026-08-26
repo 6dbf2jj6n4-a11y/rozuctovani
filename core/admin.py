@@ -423,8 +423,22 @@ class AllocationKeyInlineBase(TabularInline):
         return _formset_se_stabilnim_prefixem(formset, self.invoice_class)
 
     def get_queryset(self, request):
+        # Radi se podle Polozky zasobniku a v ramci ni podle Podruzneho
+        # meridla - u karet s vic klici v jedne sekci se v nich jinak
+        # spatne hleda. Klic BEZ meridla jde v ramci polozky prvni.
+        #
+        # nulls_first se pise vyslovne schvalne: Postgres radi prazdne
+        # hodnoty pri vzestupnem razeni na KONEC, sqlite na zacatek -
+        # bez toho by se poradi lisilo mezi testem a produkci.
+        #
+        # POZOR: uplne stejne telo metody ma UnitServiceInlineBase vyse,
+        # tam ale meridlo nepatri. Daniel 2026-08-26.
+        from django.db.models import F
+
         return super().get_queryset(request).filter(
             service_item__invoice_class=self.invoice_class
+        ).order_by(
+            "service_item__name", F("meter__code").asc(nulls_first=True), "pk"
         )
 
     def formfield_for_foreignkey(self, db_field, request, **kwargs):
