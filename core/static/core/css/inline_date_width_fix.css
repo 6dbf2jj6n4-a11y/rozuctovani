@@ -84,3 +84,13 @@ prekazely.
 .field-vat_rate input[type="number"] {
     -moz-appearance: textfield;
 }
+
+/*
+Sloupec Podíl v sekcích Klíčů (Karta klienta). Hodnota se nesmí lámat
+mezi číslo a procento - sloupec je úzký a "100,0 %" se do něj jinak
+nevejde na jeden řádek, takže procento spadne pod číslo a řádek naroste.
+Daniel 2026-08-26.
+*/
+.field-podil {
+    white-space: nowrap;
+}
