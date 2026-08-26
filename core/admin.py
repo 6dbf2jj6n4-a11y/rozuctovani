@@ -411,8 +411,85 @@ class AllocationKeyInlineBase(TabularInline):
     model = AllocationKey
     extra = 0
     collapsible = True
-    fields = ("service_item", "allocation_type", "value", "unit_price", "meter", "unit", "deduct_from_pool", "is_billed")
+    fields = ("service_item", "allocation_type", "value", "podil", "unit_price", "meter", "unit", "deduct_from_pool", "is_billed")
+    readonly_fields = ("podil",)
     autocomplete_fields = ("service_item", "meter", "unit")
+
+    @display(description="Podíl")
+    def podil(self, obj):
+        """Kolik z dane skupiny pripada na tenhle klic - tedy to, co se
+        jinak da zjistit az ze sestavy Podil vah.
+
+        Skupina je bud jedno MERIDLO (klice typu "Podle vahy na meridle"
+        se stejnym meridlem), nebo u klicu bez meridla vsechny vazene
+        klice te polozky. Cislo je podil UVNITR skupiny, ne podil na cene
+        polozky - u meridla se totiz nejdriv vyrizne jeho namerena
+        spotreba a teprve ta se timhle pomerem deli.
+
+        Pocita se stejnym vzorcem jako engine (_weighted_shares): vaha
+        krat pomer aktivnich dnu karty v aktualnim obdobi. Schvalne se
+        NEPOUZIVA billing.weight_shares.get_weight_share_data - ta je
+        presna i pro podil na cene, ale u karty s devíti polozkami trva
+        pres pul minuty, coz do formulare nejde. Daniel 2026-08-26.
+        """
+        from decimal import Decimal
+
+        from django.utils.html import format_html
+
+        from core.models import Period
+
+        if obj is None or not obj.pk or obj.allocation_type in ("fixed_amount", "area_price"):
+            return "—"
+        # Period.current() je dotaz do databaze - bez zapamatovani by se
+        # volal na kazdy klic zvlast a pri latenci Railway to u karty
+        # s dvaceti klici delalo pres sekundu.
+        if not hasattr(self, "_pamet_obdobi"):
+            self._pamet_obdobi = Period.current()
+        obdobi = self._pamet_obdobi
+        if obdobi is None:
+            return "—"
+
+        sourozenci = self._sourozenci(obj, obdobi)
+        vahy = {}
+        zacatek, konec = obdobi.date_range()
+        dnu = Decimal(obdobi.days_in_period)
+        for klic in sourozenci:
+            aktivni = klic.client_card.active_days_in_period(zacatek, konec)
+            if aktivni <= 0:
+                continue
+            vahy[klic.pk] = (klic.value or Decimal("0")) * (Decimal(aktivni) / dnu)
+        celkem = sum(vahy.values())
+        muj = vahy.get(obj.pk)
+        if not celkem or muj is None:
+            return "—"
+
+        procenta = muj / celkem * 100
+        kde = ("z měřidla %s" % obj.meter.code) if obj.meter_id else "ze skupiny bez měřidla"
+        return format_html(
+            '<span title="{} · {} karet ve skupině">{} %</span>',
+            kde, len(vahy), ("%.1f" % procenta).replace(".", ","),
+        )
+
+    def _sourozenci(self, obj, obdobi):
+        """Klice ve stejne skupine (stejna polozka + stejne meridlo).
+
+        Nacita se po CELE POLOZCE najednou a rozdeli se v pameti podle
+        meridla. Puvodne to byl dotaz na kazde meridlo zvlast, coz u karty
+        s dvaceti klici delalo pres deset dotazu a pri latenci Railway
+        pridavalo pres sekundu. Daniel 2026-08-26."""
+        pamet = getattr(self, "_pamet_sourozencu", None)
+        if pamet is None:
+            pamet = self._pamet_sourozencu = {}
+        if obj.service_item_id not in pamet:
+            podle_meridla = {}
+            qs = AllocationKey.objects.select_related("client_card").filter(
+                service_item_id=obj.service_item_id,
+            ).exclude(allocation_type__in=("fixed_amount", "area_price"))
+            for klic in qs:
+                if klic.is_valid_for_period(obdobi):
+                    podle_meridla.setdefault(klic.meter_id, []).append(klic)
+            pamet[obj.service_item_id] = podle_meridla
+        return pamet[obj.service_item_id].get(obj.meter_id, [])
 
     class Media:
         css = {"all": ("core/css/select_width_fix.css",)}
