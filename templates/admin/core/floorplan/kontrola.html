@@ -4,7 +4,7 @@
 <div class="rx-planek-stranka">
 
     <p class="rx-planek-napoveda">
-        Porovnává tvary ve vrstvě <code class="rx-kod">Plochy_rentex</code> proti Pronajímaným prostorům
+        Porovnává tvary ve vrstvě <code class="rx-kod">Plochy_rentex</code> proti Předmětům nájmu
         v databázi. Spojka je <code class="rx-kod">id</code> polygonu, kde podtržítko zastupuje mezeru
         (<code class="rx-kod">AB_3.03</code> = <code class="rx-kod">AB 3.03</code>). Obojí musí sedět znak po znaku.
     </p>
@@ -42,7 +42,7 @@
             </p>
             {% if radek.bez_prostoru %}
                 <p class="rx-planek-chyba">
-                    Ve výkresu jsou plochy, které nemají Pronajímaný prostor v databázi:
+                    Ve výkresu jsou plochy, které nemají Předmět nájmu v databázi:
                 </p>
                 <ul class="rx-planek-vypis">
                     {% for kod in radek.bez_prostoru %}<li>{{ kod }}</li>{% endfor %}
@@ -55,7 +55,7 @@
         <h2 class="rx-nadpis">Prostory bez plánku</h2>
         {% if vysledek.bez_planku %}
             <p class="rx-planek-napoveda">
-                Tyhle Pronajímané prostory areálu {{ vybrany.name }} nejsou na žádném plánku.
+                Tyhle Předměty nájmu areálu {{ vybrany.name }} nejsou na žádném plánku.
                 Dokud nejsou všechna patra obkreslená, je to čekaný stav.
             </p>
             <ul class="rx-planek-vypis">

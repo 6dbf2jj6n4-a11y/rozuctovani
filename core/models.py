@@ -103,7 +103,7 @@ class Floorplan(models.Model):
         help_text=(
             "Plain/Inkscape SVG s vrstvami „podklad“, „Plochy_rentex“ a "
             "„Plochy_spolecne“. Každý tvar ve vrstvě Plochy_rentex musí mít "
-            "id shodné s názvem Pronajímaného prostoru (mezera → podtržítko). "
+            "id shodné s názvem Předmětu nájmu (mezera → podtržítko). "
             "Když už je výkres v databázi, soubor znovu nahrávat netřeba."
         ),
     )
@@ -204,8 +204,8 @@ class Unit(models.Model):
     )
 
     class Meta:
-        verbose_name = "Pronajímaný prostor"
-        verbose_name_plural = "Pronajímané prostory"
+        verbose_name = "Předmět nájmu"
+        verbose_name_plural = "Předměty nájmu"
         ordering = ["site", "name"]
 
     def __str__(self):

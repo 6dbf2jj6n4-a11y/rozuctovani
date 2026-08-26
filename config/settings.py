@@ -170,7 +170,7 @@ SESSION_SAVE_EVERY_REQUEST = True
 # 2027.0), i kdyby se nekdo zapomnel APP_VERSION_YEAR rucne prepsat -
 # dohoda s Danielem 2026-08-15.
 APP_VERSION_YEAR = 2026
-APP_VERSION_SEQUENCE = 224
+APP_VERSION_SEQUENCE = 225
 APP_VERSION = (
     f"{APP_VERSION_YEAR}.{APP_VERSION_SEQUENCE}"
     if date.today().year == APP_VERSION_YEAR
@@ -249,7 +249,7 @@ UNFOLD = {
                         "link": reverse_lazy("admin:core_site_changelist"),
                     },
                     {
-                        "title": _("Pronajímané prostory"),
+                        "title": _("Předměty nájmu"),
                         "icon": "meeting_room",
                         "link": reverse_lazy("admin:core_unit_changelist"),
                     },
