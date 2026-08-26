@@ -44,13 +44,24 @@ uz ma do ceho se zarovnat.
 }
 
 /*
-Vymera ze zasobniku se sem drive pocitala taky, jenze ta se NEZAROVNAVA
-doprava - je to holy text, ne castka v "bubline". Vyrazenim obalu
-(display: contents) prisla o jeho "items-center", takze jako jediny
-sloupec v radku sedela nahore, zatimco ostatni pole byla na stred.
-Obal ji proto zustava; sirku ani zarovnani u ni resit netreba.
-Daniel 2026-08-26 (screenshot sekce Plochy a najemne).
+Vymera ze zasobniku se sem drive pocitala taky, jenze ta zadny obal
+NEMA - Unfold ji vypisuje jako holy text primo do <td> (overeno na
+skutecnem HTML ze stranky, Daniel 2026-08-26):
+
+  <td class="... align-top ... lg:table-cell" data-label="Výměra (zásobník)">15.00 m²</td>
+
+Unfold davá bunkam "align-top". U sloupcu, jejichz obsah je pole nebo
+"bublina" vysoka 38 px, to nevadi - vyplni bunku a vypadaji vystredene.
+Holy text se ale posadi k hornimu okraji a v radku sedi o 9 px vys nez
+zbytek. Proto teto bunce vnutime svisly stred.
+
+!important je nutne: nase styly se nacitaji PRED unfold/css/styles.css,
+takze pravidlo se stejnou specificitou (trida .align-top) by nase
+prebilo.
 */
+.field-vymera_zasobnik {
+    vertical-align: middle !important;
+}
 
 /*
 Vypnuti nativnich sipek nahoru/dolu (spinner) u ciselnych poli Vymera
