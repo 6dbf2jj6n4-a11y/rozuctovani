@@ -19,6 +19,8 @@ from reportlab.platypus import (
     PageBreak, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle,
 )
 
+from django.db.models import F
+
 from core.contract_generator import format_date_cz, get_landlord
 from core.models import AllocationKey, InvoiceClassColor, ServicePoolItem
 from core.pdf_fonts import FONT_CARD_BOLD as FONT_BOLD
@@ -227,10 +229,20 @@ def generate_client_card_document(card, output_path):
 
     # --- Klíče - jedna souvislá tabulka, třídy oddělené silnější linkou ---
     elements.append(Paragraph("Klíče rozúčtování služeb", _STYLE_H2))
+    # Stejne razeni jako sekce Klicu v adminu (core.admin
+    # AllocationKeyInlineBase.get_queryset): v ramci Polozky zasobniku
+    # jeste podle Podruzneho meridla, klic bez meridla prvni - at Karta
+    # v PDF sedi s tim, co je videt ve formulari. Daniel 2026-08-26.
+    #
+    # nulls_first se pise vyslovne: Postgres radi prazdne hodnoty pri
+    # vzestupnem razeni na KONEC, sqlite na zacatek.
     keys = list(
         card.allocation_keys
         .select_related("service_item", "meter")
-        .order_by("service_item__invoice_class", "service_item__name")
+        .order_by(
+            "service_item__invoice_class", "service_item__name",
+            F("meter__code").asc(nulls_first=True), "pk",
+        )
     )
     # Poradi i nazvy Trid se berou z DB (Nastaveni -> Tridy) az za behu -
     # na urovni modulu by to byl dotaz uz pri importu (pada pri migrate).
