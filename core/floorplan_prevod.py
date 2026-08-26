@@ -143,6 +143,26 @@ def priprav(units, klient, datum, sazba=None, cil_karta=None, rezim=REZIM_NOVA):
         podle_karty.setdefault(cu.card, []).append(cu)
         drzene.add(cu.unit_id)
 
+    # Karta, ktera zacina az PO datu prevodu, se do vyberu vyse nevejde -
+    # a to i kdyz je najemcova a plochu uz drzi. Bez tehle kontroly by
+    # prevod tise zalozil dalsi jeho Kartu s toutez plochou a od zacatku
+    # te pozdejsi by obe platily naraz. Viz Daniel 2026-08-26.
+    pozdejsi = (
+        CardUnit.objects.select_related("card", "unit")
+        .filter(unit__in=units, card__is_active=True, card__client=klient,
+                card__valid_from__gt=datum)
+        .order_by("card__valid_from")
+    )
+    for cu in pozdejsi:
+        prevod.potize.append(
+            "%s už plochu %s drží na Kartě %s, která začíná %s – tedy až po "
+            "zvoleném datu. Převodem by plocha skončila na dvou jeho Kartách "
+            "naráz. Zvol datum od %s dál, nebo plochu přidej přímo na té Kartě."
+            % (klient, cu.unit.name, cu.card.description,
+               cu.card.valid_from.strftime("%-d. %-m. %Y"),
+               cu.card.valid_from.strftime("%-d. %-m. %Y"))
+        )
+
     for unit in units:
         if unit.id not in drzene:
             prevod.bez_karty.append(unit)
