@@ -1793,6 +1793,13 @@ class ClientCardAdmin(PodlePronajimatele, ModelAdmin):
             ),
         }
 
+    @staticmethod
+    def _adresa_s_razenim(request, kod):
+        """Soucasna adresa s prepsanym parametrem razeni."""
+        parametry = request.GET.copy()
+        parametry["razeni"] = kod
+        return parametry.urlencode()
+
     def report_najemne_view(self, request):
         """Report (Reporty v menu): prehled najemneho po aktivnich Kartach -
         vyuziva jiz existujici CardUnit.monthly_rent (plocha x sazba/12).
@@ -1979,15 +1986,31 @@ class ClientCardAdmin(PodlePronajimatele, ModelAdmin):
             "selected_period": period,
             "rows": rows,
             "razeni": razeni,
-            # Jestli si arealy do koeficientu zvolil uzivatel sam. Panel
-            # filtru je pak musi nest s sebou (skryta pole), jinak by
-            # prepnuti radit-podle vratilo koeficient na vychozi vyber.
+            # Jestli si arealy do koeficientu zvolil uzivatel sam. Formular
+            # koeficientu je pak musi nest s sebou, jinak by prepnuti
+            # koeficientu vratilo razeni na vychozi.
             "koef_zvoleno": "koef_site" in request.GET,
-            "moznosti_razeni": (
-                ("klient", "Klient (A–Z)"),
-                ("najem", "Nájemné (od nejvyššího)"),
-                ("vymera", "Výměra (od největší)"),
-            ),
+            # Prepinac razeni jsou ODKAZY, ne formular - kazdy si nese
+            # celou soucasnou adresu s prepsanym "razeni", takze prepnuti
+            # nemuze shodit Obdobi, Areal ani vybrane arealy do
+            # koeficientu. request.GET.copy() zachova i vicehodnotovy
+            # koef_site. Daniel 2026-08-26.
+            "volby_razeni": [
+                {
+                    "kod": kod,
+                    "popis": popis,
+                    # Kotva na tabulku: po prepnuti se stranka nacte
+                    # znovu a bez ni by uzivatel skoncil nahore a musel
+                    # k tabulce zase sjizdet. Daniel 2026-08-26.
+                    "url": "?%s#tabulka" % self._adresa_s_razenim(request, kod),
+                    "aktivni": kod == razeni,
+                }
+                for kod, popis in (
+                    ("klient", "Klient (A–Z)"),
+                    ("najem", "Nájemné (od nejvyššího)"),
+                    ("vymera", "Výměra (od největší)"),
+                )
+            ],
             "total_monthly": total_monthly,
             "total_yearly": total_monthly * 12,
             "total_monthly_s_dph": sum((r["k_fakturaci_s_dph"] for r in rows), Decimal("0")),

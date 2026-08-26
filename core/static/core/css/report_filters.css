@@ -182,3 +182,22 @@ html.dark .rx-filters select {
 .rx-pole-datum {
     vertical-align: top;
 }
+
+/* Přepínač řazení nad tabulkou sestavy (Přehled nájemného). Volby jsou
+   tlačítka vedle sebe, aktivní má plnou barvu - jde o odkazy, ne
+   formulář, takže si každý nese celou současnou adresu.
+   Daniel 2026-08-26. */
+.rx-razeni {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    margin: 0 0 10px;
+}
+
+.rx-razeni-popisek {
+    font-size: 12px;
+    font-weight: 600;
+    opacity: 0.75;
+    margin-right: 2px;
+}

@@ -167,26 +167,20 @@
             </div>
         {% endif %}
         {% comment %}
-        Přepínač řazení sedí přímo nad tabulkou, ne v panelu filtrů nahoře -
-        Daniel 2026-08-26. Je to samostatný formulář, takže si musí nést
-        i ostatní volby (Období, Areál, areály do koeficientu), jinak by
-        je přepnutí řazení shodilo na výchozí.
+        Přepínač řazení sedí přímo nad tabulkou, ne v panelu filtrů nahoře
+        (Daniel 2026-08-26), a volby jsou vedle sebe, ne v rozbalovátku.
+        Jsou to odkazy - každý si nese celou současnou adresu s přepsaným
+        "razeni", takže přepnutí neshodí Období, Areál ani vybrané areály
+        do koeficientu. Sestavuje je pohled, viz volby_razeni.
         {% endcomment %}
-        <form method="get" style="display:flex; align-items:center; gap:8px; margin:0 0 8px;">
-            {% if selected_period %}<input type="hidden" name="period" value="{{ selected_period.pk }}">{% endif %}
-            {% if selected_site_id %}<input type="hidden" name="site" value="{{ selected_site_id }}">{% endif %}
-            {% if koef_zvoleno %}
-                {% for s in koef_sites %}
-                    {% if s.vybrany %}<input type="hidden" name="koef_site" value="{{ s.site.pk }}">{% endif %}
-                {% endfor %}
-            {% endif %}
-            <label for="id_razeni" style="font-size:12px; font-weight:600; opacity:.75;">Řadit podle</label>
-            <select name="razeni" id="id_razeni" onchange="this.form.submit()" style="padding:6px 8px; min-width:200px;">
-                {% for kod, popis in moznosti_razeni %}
-                    <option value="{{ kod }}" {% if razeni == kod %}selected{% endif %}>{{ popis }}</option>
-                {% endfor %}
-            </select>
-        </form>
+        <div class="rx-razeni" id="tabulka">
+            <span class="rx-razeni-popisek">Řadit podle</span>
+            {% for v in volby_razeni %}
+                <a href="{{ v.url }}"
+                   class="rx-btn rx-btn-sm{% if v.aktivni %} rx-btn-primary{% endif %}"
+                   {% if v.aktivni %}aria-current="true"{% endif %}>{{ v.popis }}</a>
+            {% endfor %}
+        </div>
 
         <div style="overflow-x:auto;">
         <table style="width:100%; border-collapse:collapse; font-size:13px;">
