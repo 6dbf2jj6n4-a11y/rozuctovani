@@ -627,12 +627,24 @@ class ClientCard(models.Model):
         Ploch (CardUnit), takze u nove karty bez ulozenych ploch (self.pk je
         None, nebo karta jeste zadne Plochy nema) konflikt zjistit nejde -
         zkontroluje se az pri pristim ulozeni, kdy uz Plochy existuji."""
+        from django.db.models import Q
+
         if not self.pk:
             return None
         my_sites = set(self.sites())
         if not my_sites:
             return None
         others = ClientCard.objects.filter(client_id=self.client_id, is_active=True).exclude(pk=self.pk)
+        # Konflikt je jen tehdy, kdyz se platnosti PREKRYVAJI. Navazujici
+        # karty (jedna konci 31. 7., dalsi zacina 1. 8.) jsou bezny stav -
+        # tak je zaklada i prevod ploch z planku. Bez tehle podminky se
+        # navazujici karty hlasily navzajem a nesla ulozit ani jedna.
+        # Viz Daniel 2026-08-26 (CALAMARI SE mela v NJ tri navazujici).
+        others = others.filter(
+            Q(valid_to__isnull=True) | Q(valid_to__gte=self.valid_from)
+        )
+        if self.valid_to:
+            others = others.filter(valid_from__lte=self.valid_to)
         for other in others:
             if my_sites & set(other.sites()):
                 return other
