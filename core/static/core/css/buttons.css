@@ -117,19 +117,63 @@ Viz konverzace s Danielem 2026-08-19.
     flex-wrap: wrap;
 }
 
-/* Náhled Karty nájemce ve formuláři (core.admin.ClientCardAdmin).
-   Rámeček dostane rozumnou velikost, ať je stránka čitelná a přitom
-   nezabere celý formulář; poměr odpovídá A4 na výšku. */
-.rx-nahled-karty iframe {
-    display: block;
-    width: 100%;
-    max-width: 640px;
-    height: 880px;
-    margin-top: 8px;
+/* Karta nájemce ve formuláři (core.admin.ClientCardAdmin): vlevo
+   tlačítko, vpravo miniatura Karty, která se kliknutím zvětší.
+
+   Miniatura je ramecek v NORMALNI velikosti zmenseny pres transform -
+   kdyby se misto toho zuzil samotny <iframe>, prohlizec do nej nakresli
+   svou listu ovladani a z Karty nezbyde nic. Proto obal s pevnou
+   velikosti a overflow: hidden.
+
+   pointer-events na ramecku vypnute, dokud je miniatura mala: kliknuti
+   ma dopadnout na obal a zvetsit ji, ne skoncit v prohlizeci PDF.
+   Po zvetseni se zapnou, aby slo Kartou rolovat. */
+.rx-karta-akce {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 16px;
+    align-items: flex-start;
+}
+
+.rx-karta-tlacitka {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
+}
+
+.rx-karta-nahled {
+    position: relative;
+    width: 186px;
+    height: 258px;
+    overflow: hidden;
+    cursor: zoom-in;
     border: 1px solid var(--color-base-200);
     border-radius: 6px;
     background: #fff;
+    flex: 0 0 auto;
 }
-.dark .rx-nahled-karty iframe {
+
+.rx-karta-nahled iframe {
+    width: 620px;
+    height: 860px;
+    border: 0;
+    transform: scale(0.3);
+    transform-origin: top left;
+    pointer-events: none;
+}
+
+.rx-karta-nahled.rx-zvetseno {
+    width: 622px;
+    height: 862px;
+    cursor: zoom-out;
+}
+
+.rx-karta-nahled.rx-zvetseno iframe {
+    transform: none;
+    pointer-events: auto;
+}
+
+.dark .rx-karta-nahled {
     border-color: var(--color-base-700);
 }

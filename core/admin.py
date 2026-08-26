@@ -1,6 +1,8 @@
 from decimal import Decimal
 
 from django.contrib import admin, messages
+from django.utils.decorators import method_decorator
+from django.views.decorators.clickjacking import xframe_options_sameorigin
 from django.db.models import Q
 from django.contrib.auth.models import Group
 
@@ -1361,10 +1363,10 @@ class ClientCardAdmin(PodlePronajimatele, ModelAdmin):
             "fields": (("po_number_rent", "po_number_services"),)
         }),
         ("Karta nájemce (Příloha č. 1)", {
-            "fields": ("signed_on", "generate_card_button", "document", "nahled_karty")
+            "fields": ("signed_on", "generate_card_button", "document")
         }),
     )
-    readonly_fields = ("generate_card_button", "nahled_karty")
+    readonly_fields = ("generate_card_button",)
 
     def autocomplete_label(self, obj):
         # ClientCard.__str__ je schvalne prazdny (kvuli nadpisu v inline sekcich
@@ -1860,8 +1862,14 @@ class ClientCardAdmin(PodlePronajimatele, ModelAdmin):
         }
         return render(request, "admin/core/clientcard/report_najemne.html", context)
 
+    @method_decorator(xframe_options_sameorigin)
     def nahled_view(self, request, card_id):
         """Karta jako PDF k ZOBRAZENI v prohlizeci, ne ke stazeni.
+
+        Dekorator je nutny: projekt ma zapnuty XFrameOptionsMiddleware
+        a Django bez nej posle X-Frame-Options: DENY, coz zakaze
+        vykresleni i ve vlastnim ramu na tomtez webu - nahled pak zustal
+        prazdny. Daniel 2026-08-26.
 
         Nic se neuklada - narozdil od generate_card_and_download se
         vysledek nezapisuje do pole Dokument. Podivat se na kartu tedy
@@ -1908,42 +1916,31 @@ class ClientCardAdmin(PodlePronajimatele, ModelAdmin):
         if not obj.pk:
             return "Nejprve kartu uložte."
         url = reverse("admin:core_clientcard_generovat", args=[obj.pk])
+        url_nahled = reverse("admin:core_clientcard_nahled", args=[obj.pk])
+        # Tlacitko i miniatura vykresluje JEDNO pole, aby sedely vedle sebe -
+        # dve samostatna readonly pole si admin sazi pod sebe.
+        #
+        # Miniatura je normalne velky ramecek zmenseny pres CSS transform,
+        # ne uzky <iframe>: prohlizec by v uzkem ramu nakreslil svou listu
+        # a z Karty by nebylo videt nic. Nacita se rovnou pri otevreni
+        # formulare, ale na pozadi - stranka na nej necheka. Daniel 2026-08-26.
         return format_html(
-            '<a href="{}" class="rx-btn rx-btn-primary">'
-            'Generovat Kartu nájemce (.pdf)</a>',
-            url,
+            '<div class="rx-karta-akce">'
+            '<div class="rx-karta-tlacitka">'
+            '<a href="{}" class="rx-btn rx-btn-primary">Generovat Kartu nájemce (.pdf)</a>'
+            '</div>'
+            '<div class="rx-karta-nahled" title="Klikni pro zvětšení" '
+            'onclick="rxZvetsiKartu(this)">'
+            '<iframe src="{}" title="Náhled Karty nájemce" loading="lazy"></iframe>'
+            '</div>'
+            '</div>'
+            '<script>function rxZvetsiKartu(o){{'
+            'o.classList.toggle("rx-zvetseno");'
+            'o.title=o.classList.contains("rx-zvetseno")'
+            '?"Klikni pro zmenšení":"Klikni pro zvětšení";}}</script>',
+            url, url_nahled,
         )
     generate_card_button.short_description = ""
-
-    def nahled_karty(self, obj):
-        """Nahled Karty primo ve formulari, aby se kvuli podivani nemusel
-        pokazde stahovat soubor.
-
-        Nacita se AZ NA KLIKNUTI: vygenerovani trva podle karty 0,4 az 5
-        sekund (nejdele u tech s planovou prilohou), takze pri kazdem
-        otevreni formulare by to bylo znat. Kresli se z AKTUALNICH dat, ne
-        z ulozeneho souboru v poli Dokument - ten muze byt starsi nez
-        posledni uprava karty a nahled by pak ukazoval nesmysl.
-        Daniel 2026-08-26."""
-        from django.urls import reverse
-        from django.utils.html import format_html
-
-        if not obj.pk:
-            return "Nejprve kartu uložte."
-        url = reverse("admin:core_clientcard_nahled", args=[obj.pk])
-        return format_html(
-            '<div class="rx-nahled-karty">'
-            '<button type="button" class="rx-btn rx-btn-sm" '
-            'onclick="var r=this.parentNode.querySelector(\'iframe\');'
-            'if(r.src){{r.src=\'\';r.hidden=true;this.textContent=\'Zobrazit náhled\';}}'
-            'else{{this.textContent=\'Načítám…\';r.src=\'{}\';r.hidden=false;'
-            'r.onload=function(){{this.previousElementSibling.textContent=\'Skrýt náhled\';}};}}">'
-            'Zobrazit náhled</button>'
-            '<iframe hidden title="Náhled Karty nájemce"></iframe>'
-            '</div>',
-            url,
-        )
-    nahled_karty.short_description = "Náhled"
 
     def _presmeruj_cizi_kartu(self, request):
         from django.shortcuts import redirect
