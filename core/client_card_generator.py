@@ -193,7 +193,9 @@ def generate_client_card_document(card, output_path):
     total_area = Decimal("0")
     total_year = Decimal("0")
     total_month = Decimal("0")
-    for cu in card.card_units.select_related("unit__site"):
+    # Stejne poradi jako sekce Plochy a najemne v adminu (core.admin
+    # CardUnitInline.get_queryset) - at vytistena Karta sedi s formularem.
+    for cu in card.card_units.select_related("unit__site").order_by("unit__name"):
         area = cu.area_m2
         # cu.monthly_rent uz sjednanou pevnou castku resi (prebiji sazbu),
         # takze se z nej odvozuje i rocni najem - jinak by karta u takove

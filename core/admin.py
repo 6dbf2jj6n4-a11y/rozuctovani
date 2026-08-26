@@ -614,6 +614,18 @@ class CardUnitInline(TabularInline):
     class Media:
         js = ("core/js/cardunit_autofill.js",)
 
+    def get_queryset(self, request):
+        """Plochy podle abecedy - CardUnit zadne Meta.ordering nema, takze
+        radky chodily v poradi, v jakem se zakladaly. Daniel 2026-08-26.
+
+        POZOR na cisla: abecedne vyjde A10 pred A3, protoze se porovnavaji
+        znaky, ne hodnoty. Na dnesnich datech se to tyka JEDINE karty
+        (TENAUR, plochy A3 az A14); jinde maji nazvy v ramci karty stejny
+        pocet cislic, takze poradi sedi. Prirozene razeni by chtelo vyraz
+        specificky pro Postgres, coz by se nedalo overit na sqlite, na
+        kterem bezi zkousky - proto zatim takhle."""
+        return super().get_queryset(request).order_by("unit__name")
+
     def vymera_zasobnik(self, obj):
         if obj.unit and obj.unit.area_m2:
             return f"{obj.unit.area_m2} m²"
