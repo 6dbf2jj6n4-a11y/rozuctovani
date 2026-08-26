@@ -1926,7 +1926,30 @@ class ClientCardAdmin(PodlePronajimatele, ModelAdmin):
                 "yearly_rent_s_dph": (k_fakturaci_rocne * koef).quantize(Decimal("0.01")),
             })
 
-        rows.sort(key=lambda r: r["client"].name)
+        # Razeni si vybira uzivatel v panelu nad tabulkou.
+        #
+        # Abecedne se NESMI radit prostym porovnanim retezcu: velka pismena
+        # maji nizsi kod nez mala ("TVAROVKY" vyslo pred "Taneční") a
+        # diakritika je uplne mimo rozsah ASCII, takze "TŠ JUST DANCE"
+        # spadlo az za "Vodama". Klic proto jde na mala pismena a zbavi se
+        # diakritiky - "Šimek" se tim zaradi k "S", coz je pro ceskou
+        # abecedu spravne u vsech pismen krome ch/č/ř/š/ž jako
+        # samostatnych "pismen" ve slovnikovem razeni; na seznam klientu
+        # to bohate staci. Daniel 2026-08-26.
+        import unicodedata
+
+        def _abecedne(radek):
+            jmeno = radek["client"].name.lower()
+            return unicodedata.normalize("NFKD", jmeno).encode("ascii", "ignore").decode()
+
+        razeni = request.GET.get("razeni") or "klient"
+        if razeni == "najem":
+            rows.sort(key=lambda r: (-r["monthly_rent"], _abecedne(r)))
+        elif razeni == "vymera":
+            rows.sort(key=lambda r: (-r["area_m2"], _abecedne(r)))
+        else:
+            razeni = "klient"
+            rows.sort(key=_abecedne)
         total_monthly = sum((r["monthly_rent"] for r in rows), Decimal("0"))
 
         # Koeficient DPH (§76 ZDPH): podil zdanitelnych plneni na celkovem
@@ -1955,6 +1978,16 @@ class ClientCardAdmin(PodlePronajimatele, ModelAdmin):
             "periods": periods,
             "selected_period": period,
             "rows": rows,
+            "razeni": razeni,
+            # Jestli si arealy do koeficientu zvolil uzivatel sam. Panel
+            # filtru je pak musi nest s sebou (skryta pole), jinak by
+            # prepnuti radit-podle vratilo koeficient na vychozi vyber.
+            "koef_zvoleno": "koef_site" in request.GET,
+            "moznosti_razeni": (
+                ("klient", "Klient (A–Z)"),
+                ("najem", "Nájemné (od nejvyššího)"),
+                ("vymera", "Výměra (od největší)"),
+            ),
             "total_monthly": total_monthly,
             "total_yearly": total_monthly * 12,
             "total_monthly_s_dph": sum((r["k_fakturaci_s_dph"] for r in rows), Decimal("0")),

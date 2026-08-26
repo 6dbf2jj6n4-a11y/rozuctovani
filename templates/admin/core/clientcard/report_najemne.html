@@ -15,6 +15,17 @@
     </p>
 
     <form method="get" class="rx-filters">
+        {% comment %}
+        Vlastní výběr areálů do koeficientu se nese s sebou - jinak by
+        přepnutí Období, Areálu nebo Řazení shodilo koeficient zpátky na
+        výchozí výběr. Posílá se JEN když si ho uživatel opravdu zvolil,
+        aby se výchozí chování nezakonzervovalo do adresy.
+        {% endcomment %}
+        {% if koef_zvoleno %}
+            {% for s in koef_sites %}
+                {% if s.vybrany %}<input type="hidden" name="koef_site" value="{{ s.site.pk }}">{% endif %}
+            {% endfor %}
+        {% endif %}
         <div>
             <label for="id_period">Období</label>
             <select name="period" id="id_period" onchange="this.form.submit()" style="padding:8px; min-width:160px;">
@@ -56,6 +67,7 @@
                 <form method="get" style="margin:0 0 12px; display:flex; align-items:center; gap:14px; flex-wrap:wrap;">
                     <input type="hidden" name="period" value="{{ selected_period.pk }}">
                     {% if selected_site_id %}<input type="hidden" name="site" value="{{ selected_site_id }}">{% endif %}
+                    <input type="hidden" name="razeni" value="{{ razeni }}">
                     <span style="font-size:12px; color:#999;">Areály v koeficientu:</span>
                     {% for s in koef_sites %}
                         <label style="font-size:13px; display:inline-flex; align-items:center; gap:5px; cursor:pointer;">
@@ -154,6 +166,28 @@
                 {% endif %}
             </div>
         {% endif %}
+        {% comment %}
+        Přepínač řazení sedí přímo nad tabulkou, ne v panelu filtrů nahoře -
+        Daniel 2026-08-26. Je to samostatný formulář, takže si musí nést
+        i ostatní volby (Období, Areál, areály do koeficientu), jinak by
+        je přepnutí řazení shodilo na výchozí.
+        {% endcomment %}
+        <form method="get" style="display:flex; align-items:center; gap:8px; margin:0 0 8px;">
+            {% if selected_period %}<input type="hidden" name="period" value="{{ selected_period.pk }}">{% endif %}
+            {% if selected_site_id %}<input type="hidden" name="site" value="{{ selected_site_id }}">{% endif %}
+            {% if koef_zvoleno %}
+                {% for s in koef_sites %}
+                    {% if s.vybrany %}<input type="hidden" name="koef_site" value="{{ s.site.pk }}">{% endif %}
+                {% endfor %}
+            {% endif %}
+            <label for="id_razeni" style="font-size:12px; font-weight:600; opacity:.75;">Řadit podle</label>
+            <select name="razeni" id="id_razeni" onchange="this.form.submit()" style="padding:6px 8px; min-width:200px;">
+                {% for kod, popis in moznosti_razeni %}
+                    <option value="{{ kod }}" {% if razeni == kod %}selected{% endif %}>{{ popis }}</option>
+                {% endfor %}
+            </select>
+        </form>
+
         <div style="overflow-x:auto;">
         <table style="width:100%; border-collapse:collapse; font-size:13px;">
             <thead>
