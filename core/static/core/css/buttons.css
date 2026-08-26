@@ -116,3 +116,20 @@ Viz konverzace s Danielem 2026-08-19.
     gap: 6px;
     flex-wrap: wrap;
 }
+
+/* Náhled Karty nájemce ve formuláři (core.admin.ClientCardAdmin).
+   Rámeček dostane rozumnou velikost, ať je stránka čitelná a přitom
+   nezabere celý formulář; poměr odpovídá A4 na výšku. */
+.rx-nahled-karty iframe {
+    display: block;
+    width: 100%;
+    max-width: 640px;
+    height: 880px;
+    margin-top: 8px;
+    border: 1px solid var(--color-base-200);
+    border-radius: 6px;
+    background: #fff;
+}
+.dark .rx-nahled-karty iframe {
+    border-color: var(--color-base-700);
+}

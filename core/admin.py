@@ -1361,10 +1361,10 @@ class ClientCardAdmin(PodlePronajimatele, ModelAdmin):
             "fields": (("po_number_rent", "po_number_services"),)
         }),
         ("Karta nájemce (Příloha č. 1)", {
-            "fields": ("signed_on", "generate_card_button", "document")
+            "fields": ("signed_on", "generate_card_button", "document", "nahled_karty")
         }),
     )
-    readonly_fields = ("generate_card_button",)
+    readonly_fields = ("generate_card_button", "nahled_karty")
 
     def autocomplete_label(self, obj):
         # ClientCard.__str__ je schvalne prazdny (kvuli nadpisu v inline sekcich
@@ -1401,6 +1401,7 @@ class ClientCardAdmin(PodlePronajimatele, ModelAdmin):
         from django.urls import path
         urls = super().get_urls()
         custom = [
+            path("nahled-karty/<int:card_id>/", self.admin_site.admin_view(self.nahled_view), name="core_clientcard_nahled"),
             path("kopie/<int:card_id>/", self.admin_site.admin_view(self.kopie_view), name="core_clientcard_kopie"),
             path(
                 "kopie-klient/<int:card_id>/", self.admin_site.admin_view(self.kopie_klient_view),
@@ -1859,6 +1860,28 @@ class ClientCardAdmin(PodlePronajimatele, ModelAdmin):
         }
         return render(request, "admin/core/clientcard/report_najemne.html", context)
 
+    def nahled_view(self, request, card_id):
+        """Karta jako PDF k ZOBRAZENI v prohlizeci, ne ke stazeni.
+
+        Nic se neuklada - narozdil od generate_card_and_download se
+        vysledek nezapisuje do pole Dokument. Podivat se na kartu tedy
+        nezanechava stopu a nepretahuje uz vygenerovany soubor."""
+        from io import BytesIO
+
+        from django.http import HttpResponse
+
+        from core.client_card_generator import generate_client_card_document
+
+        card = self.get_queryset(request).filter(pk=card_id).first()
+        if card is None:
+            return self._presmeruj_cizi_kartu(request)
+
+        buf = BytesIO()
+        generate_client_card_document(card, buf)
+        odpoved = HttpResponse(buf.getvalue(), content_type="application/pdf")
+        odpoved["Content-Disposition"] = 'inline; filename="nahled_karty.pdf"'
+        return odpoved
+
     def generate_card_and_download(self, request, card_id):
         from io import BytesIO
         from django.core.files.base import ContentFile
@@ -1891,6 +1914,36 @@ class ClientCardAdmin(PodlePronajimatele, ModelAdmin):
             url,
         )
     generate_card_button.short_description = ""
+
+    def nahled_karty(self, obj):
+        """Nahled Karty primo ve formulari, aby se kvuli podivani nemusel
+        pokazde stahovat soubor.
+
+        Nacita se AZ NA KLIKNUTI: vygenerovani trva podle karty 0,4 az 5
+        sekund (nejdele u tech s planovou prilohou), takze pri kazdem
+        otevreni formulare by to bylo znat. Kresli se z AKTUALNICH dat, ne
+        z ulozeneho souboru v poli Dokument - ten muze byt starsi nez
+        posledni uprava karty a nahled by pak ukazoval nesmysl.
+        Daniel 2026-08-26."""
+        from django.urls import reverse
+        from django.utils.html import format_html
+
+        if not obj.pk:
+            return "Nejprve kartu uložte."
+        url = reverse("admin:core_clientcard_nahled", args=[obj.pk])
+        return format_html(
+            '<div class="rx-nahled-karty">'
+            '<button type="button" class="rx-btn rx-btn-sm" '
+            'onclick="var r=this.parentNode.querySelector(\'iframe\');'
+            'if(r.src){{r.src=\'\';r.hidden=true;this.textContent=\'Zobrazit náhled\';}}'
+            'else{{this.textContent=\'Načítám…\';r.src=\'{}\';r.hidden=false;'
+            'r.onload=function(){{this.previousElementSibling.textContent=\'Skrýt náhled\';}};}}">'
+            'Zobrazit náhled</button>'
+            '<iframe hidden title="Náhled Karty nájemce"></iframe>'
+            '</div>',
+            url,
+        )
+    nahled_karty.short_description = "Náhled"
 
     def _presmeruj_cizi_kartu(self, request):
         from django.shortcuts import redirect
