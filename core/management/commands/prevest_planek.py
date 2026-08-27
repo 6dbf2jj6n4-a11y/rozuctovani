@@ -36,8 +36,8 @@ INK = "{%s}" % INKSCAPE_NS
 
 # Co se pozna jako spolecny prostor - jeho `id` nema pro aplikaci vyznam,
 # rozhoduje jen vrstva, ve ktere lezi.
-SPOLECNE = ("chodba", "schodiste", "kotelna", "rozvodna", "wc", "uklid",
-            "denni_mistnost", "kuchynka", "vytah", "spolecne")
+SPOLECNE = ("spol", "spolecne", "chodba", "schodiste", "kotelna", "rozvodna",
+            "wc", "uklid", "denni_mistnost", "kuchynka", "vytah")
 
 
 class Command(BaseCommand):
