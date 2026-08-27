@@ -3510,9 +3510,38 @@ class SupplyPointAdmin(PodlePronajimatele, ModelAdmin):
         }),
     )
 
-    @display(description="Počet měřidel")
+    def get_queryset(self, request):
+        """Pocet clenskych meridel se pocita v databazi jednim dotazem.
+
+        Driv to bylo obj.member_meters.count() ve sloupci, tedy jeden
+        dotaz na KAZDY radek seznamu. Daniel 2026-08-26."""
+        from django.db.models import Count
+
+        return super().get_queryset(request).annotate(
+            pocet_meridel=Count("member_meters", distinct=True)
+        )
+
+    @display(description="Počet měřidel", ordering="pocet_meridel")
     def member_count(self, obj):
-        return obj.member_meters.count()
+        """Odkaz do seznamu Meridel omezeneho na tohle odberne misto -
+        aby slo z prehledu rovnou videt, co pod nej spada. Filtr
+        supply_point uz MeterAdmin.list_filter ma, takze staci adresa.
+        Nula se nelinkuje, nebylo by co ukazat. Daniel 2026-08-26."""
+        from django.urls import reverse
+        from django.utils.html import format_html
+
+        pocet = getattr(obj, "pocet_meridel", None)
+        if pocet is None:
+            pocet = obj.member_meters.count()
+        if not pocet:
+            return pocet
+        adresa = "%s?supply_point__id__exact=%s" % (
+            reverse("admin:core_meter_changelist"), obj.pk,
+        )
+        return format_html(
+            '<a href="{}" title="Ukázat měřidla tohoto odběrného místa">{}</a>',
+            adresa, pocet,
+        )
 
 
 @admin.register(MeterReading)
