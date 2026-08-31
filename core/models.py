@@ -550,6 +550,16 @@ class ClientCard(models.Model):
         "Datum podpisu", null=True, blank=True,
         help_text="Tiskne se na Kartu nájemce (Příloha č. 1). Pokud není vyplněno, předvyplní se při uložení podle Platnost od.",
     )
+    contract = models.ForeignKey(
+        "Contract", null=True, blank=True, on_delete=models.SET_NULL,
+        related_name="cards", verbose_name="Smlouva",
+        help_text=(
+            "Smlouva, ke které je tahle Karta přílohou. Smlouva se během "
+            "nájmu nemění, kdežto Karet může mít klient v čase víc - mění "
+            "se jimi předmět nájmu, aniž by se sepisoval nový dodatek. "
+            "Nechej prázdné u Karet, které ke smlouvě nepatří."
+        ),
+    )
     note = models.CharField("Poznámka", max_length=300, blank=True)
     external_id = models.IntegerField("Původní ID (IDK)", null=True, blank=True)
     description = models.CharField("Popis karty", max_length=200, blank=True)
@@ -624,6 +634,20 @@ class ClientCard(models.Model):
                     "takže by ji podepisovaly dvě různé osoby. Rozděl ji na "
                     "dvě Karty, každou za svůj areál."
                     % ", ".join(sorted(s.name for s in arealy))
+                )
+        # Smlouva a Karta musi patrit tomutez pronajimateli. Smlouva smi
+        # zahrnovat vic arealu (FM i NJ jsou CALAMARI SE), ale ne areal
+        # jine osoby - jednu smlouvu nepodepisuji dva pronajimatele.
+        # Viz Daniel 2026-09-08.
+        if self.pk and self.contract_id and self.contract.site_id:
+            muj = self.landlord
+            smluvni = self.contract.site.landlord
+            if muj and smluvni and muj != smluvni:
+                raise ValidationError(
+                    "Smlouva č. %s patří pronajímateli %s, ale plochy Karty "
+                    "jsou v areálu, který pronajímá %s. Jedna smlouva nemůže "
+                    "mít dva pronajímatele."
+                    % (self.contract.number or "bez čísla", smluvni, muj)
                 )
         if self.is_active:
             conflict = self.active_card_conflict()

@@ -1503,7 +1503,8 @@ class ClientCardAdmin(PodlePronajimatele, ModelAdmin):
     search_fields = ("client__name", "description")
     fieldsets = (
         ("Základní údaje", {
-            "fields": (("client", "description"), ("valid_from", "valid_to"), "is_active", "note")
+            "fields": (("client", "description"), ("valid_from", "valid_to"),
+                       "contract", "is_active", "note")
         }),
         ("Čísla objednávek (na faktury)", {
             "fields": (("po_number_rent", "po_number_services"),)
@@ -1516,6 +1517,32 @@ class ClientCardAdmin(PodlePronajimatele, ModelAdmin):
         }),
     )
     readonly_fields = ("generate_card_button",)
+
+    def formfield_for_foreignkey(self, db_field, request, **kwargs):
+        """V poli Smlouva nabidnout jen smlouvy tohoto klienta.
+
+        Bez toho by admin vypsal vsechny smlouvy v aplikaci. U prave
+        zakladane Karty klient jeste znamy neni - tam zustanou smlouvy
+        pronajimatele, se kterym uzivatel pracuje. Viz Daniel 2026-09-08."""
+        if db_field.name == "contract":
+            qs = pronajimatele.omez(Contract.objects.all(), "site", request)
+            karta_id = (request.resolver_match.kwargs.get("object_id")
+                        if request.resolver_match else None)
+            if karta_id:
+                karta = ClientCard.objects.filter(pk=karta_id).first()
+                if karta is not None:
+                    qs = qs.filter(client_id=karta.client_id)
+            kwargs["queryset"] = qs.select_related("site").order_by("-valid_from")
+            pole = super().formfield_for_foreignkey(db_field, request, **kwargs)
+            # Contract.__str__ vraci prazdny retezec, takze by v nabidce
+            # byly prazdne radky - popisek si tedy sestavime tady.
+            pole.label_from_instance = lambda s: "č. {} ({}{})".format(
+                s.number or "bez čísla",
+                s.site.name if s.site_id else "bez areálu",
+                ", od %s" % s.valid_from.strftime("%-d. %-m. %Y") if s.valid_from else "",
+            )
+            return pole
+        return super().formfield_for_foreignkey(db_field, request, **kwargs)
 
     def autocomplete_label(self, obj):
         # ClientCard.__str__ je schvalne prazdny (kvuli nadpisu v inline sekcich
