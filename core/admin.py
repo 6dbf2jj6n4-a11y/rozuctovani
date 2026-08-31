@@ -3677,11 +3677,23 @@ class SupplyPointAdmin(PodlePronajimatele, ModelAdmin):
 @admin.register(MeterReading)
 class MeterReadingAdmin(PodlePronajimatele, DefaultToCurrentPeriodMixin, ModelAdmin):
     cesta_k_arealu = "meter__site"
-    list_display = ("meter_colored", "period", "reading_date", "value", "reset_from_value")
+    list_display = ("meter_colored", "period", "reading_date", "value", "reset_from_value",
+                    "created_by")
     list_select_related = ("meter", "period")
     list_filter = ("meter__site", "meter__meter_type", "period", _PeriodDefaultMarkerFilter)
     search_fields = ("meter__code", "meter__name")
     autocomplete_fields = ("meter",)
+    readonly_fields = ("created_by",)
+
+    def save_model(self, request, obj, form, change):
+        """Kdo odecet zapsal - vyplni se jen pri zalozeni.
+
+        Pri pozdejsi uprave se puvodni autor nepresepisuje: zajima nas,
+        kdo stav odecetl, ne kdo naposledy opravil preklep.
+        Viz Daniel 2026-09-01."""
+        if not change and obj.created_by_id is None:
+            obj.created_by = request.user
+        super().save_model(request, obj, form, change)
     ordering = ("meter__code", "-period")
 
     @display(description="Měřidlo", ordering="meter__code")

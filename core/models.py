@@ -1331,6 +1331,15 @@ class MeterReading(models.Model):
         help_text="Podle nastavení měřidla: buď kumulativní stav, nebo rovnou spotřeba za období.",
     )
     note = models.CharField("Poznámka", max_length=300, blank=True)
+    created_by = models.ForeignKey(
+        "accounts.User", null=True, blank=True, on_delete=models.SET_NULL,
+        related_name="zapsane_odecty", verbose_name="Zadal",
+        help_text=(
+            "Kdo stav odečetl a zapsal. Vyplní se samo při zápisu z "
+            "Odečtů i z administrace; u odečtů z importu a u starších "
+            "záznamů zůstává prázdné."
+        ),
+    )
     photo = models.ImageField(
         "Foto odečtu", upload_to="odecty/%Y/%m/", null=True, blank=True,
         storage=R2MediaStorage(),

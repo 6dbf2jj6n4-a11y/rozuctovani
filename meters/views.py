@@ -207,6 +207,8 @@ def readings_save(request):
             "reset_from_value": reset_from_value,
             "note": (payload.get("note") or "")[:300],
             "reading_date": timezone.localdate(),
+            # kdo stav odecetl - pri nesrovnalosti se ma kdo doptat
+            "created_by": user,
         },
     )
     return JsonResponse({
