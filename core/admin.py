@@ -413,7 +413,13 @@ class AllocationKeyInlineBase(TabularInline):
     collapsible = True
     fields = ("service_item", "allocation_type", "value", "podil", "unit_price", "meter", "unit", "deduct_from_pool", "is_billed")
     readonly_fields = ("podil",)
-    autocomplete_fields = ("service_item", "meter", "unit")
+    # Jen Plocha zustava naseptavacem - tech je na FM pres sto. Polozka
+    # zasobniku a Meridlo jsou obycejny vyber schvalne: naseptavac chodi
+    # pres vlastni endpoint, ktery filtr z teto sekce nevidi, takze
+    # nabizel polozky VSECH Trid (Daniel 2026-09-08). Ve vyberu se
+    # uplatni formfield_for_foreignkey nize, ktery omezi na Tridu sekce
+    # i na areal Karty - polozek pak zbyde nanejvys deset.
+    autocomplete_fields = ("unit",)
 
     @display(description="Podíl")
     def podil(self, obj):
@@ -496,6 +502,11 @@ class AllocationKeyInlineBase(TabularInline):
         js = ("core/js/allocationkey_default_type.js",)
 
     def get_formset(self, request, obj=None, **kwargs):
+        # Karta se musi zapamatovat DRIV, nez super() posklada pole -
+        # formfield_for_foreignkey nize z ni bere areal a bez toho
+        # nabizel Polozky a Meridla ze vsech arealu pronajimatele.
+        # Viz Daniel 2026-09-08.
+        self.parent_obj = obj
         formset = super().get_formset(request, obj, **kwargs)
         return _formset_se_stabilnim_prefixem(formset, self.invoice_class)
 
@@ -519,11 +530,33 @@ class AllocationKeyInlineBase(TabularInline):
         )
 
     def formfield_for_foreignkey(self, db_field, request, **kwargs):
+        # Nabidka se zuzuje na Tridu teto sekce a na areal Karty. Bez
+        # toho se v sekci Voda nabizela i vodni polozka druheho arealu
+        # a u Meridla dokonce vsechna meridla bez ohledu na Tridu.
+        # Areal je znamy z parent_obj (viz get_formset vyse); u nove
+        # zakladane Karty jeste plochy nema, tam se filtruje jen Tridou.
+        # Viz Daniel 2026-09-08.
+        parent = getattr(self, "parent_obj", None)
+        # VSECHNY arealy Karty, ne jen prvni - Karta jich muze drzet vic
+        # a pak by se polozky toho druheho vubec nenabidly (Daniel
+        # 2026-09-08). U nove zakladane Karty plochy jeste nejsou, tam
+        # se filtruje jen Tridou a pronajimatelem.
+        arealy = list(parent.sites()) if parent is not None and parent.pk else []
         if db_field.name == "service_item":
-            kwargs["queryset"] = pronajimatele.omez(
+            qs = pronajimatele.omez(
                 ServicePoolItem.objects.filter(invoice_class=self.invoice_class),
                 "site", request,
             )
+            if arealy:
+                qs = qs.filter(site__in=arealy)
+            kwargs["queryset"] = qs.order_by("site__name", "name")
+        elif db_field.name == "meter":
+            qs = pronajimatele.omez(
+                Meter.objects.filter(meter_type=self.invoice_class), "site", request
+            )
+            if arealy:
+                qs = qs.filter(site__in=arealy)
+            kwargs["queryset"] = qs.order_by("site__name", "code")
         formfield = super().formfield_for_foreignkey(db_field, request, **kwargs)
         if db_field.name in ("meter", "unit") and hasattr(formfield.widget, "can_delete_related"):
             formfield.widget.can_delete_related = False
