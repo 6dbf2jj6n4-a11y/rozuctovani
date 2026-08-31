@@ -241,6 +241,33 @@ def priprav(units, klient, datum, sazba=None, cil_karta=None, rezim=REZIM_NOVA):
         })
         prevod.nove_plochy.extend(cu.unit for cu in cus)
 
+    # Klient uz muze mit v arealu bezici Kartu. Pak se NESMI zakladat
+    # dalsi - ClientCard.clean to zakazuje ("nejprve deaktivujte stavajici
+    # kartu"), jenze tudy karta vznika primo pres save(), ktery clean
+    # nespousti. Presne takhle u TSC Cleaning vznikly dve soubezne karty
+    # na jednom meridle (Daniel 2026-08-27). Na tenhle pripad jsou rezimy
+    # "navazat" (uzavrit a navazat novou) a "pridat" (rovnou do bezici).
+    #
+    # Kontroluje se jen prekryv OD data prevodu dal, ne pouhe is_active:
+    # karta uzavrena v minulosti uz nikomu nevadi a blokovat kvuli ni
+    # navrat najemce by bylo na obtiz.
+    if prevod.rezim == REZIM_NOVA:
+        from core.models import ClientCard
+
+        arealy = {u.site_id for u in units}
+        for bezici in ClientCard.objects.filter(client=klient, is_active=True):
+            if bezici.valid_to and bezici.valid_to < datum:
+                continue
+            if not arealy & set(bezici.sites().values_list("pk", flat=True)):
+                continue
+            prevod.potize.append(
+                "%s už má v tomto areálu běžící Kartu (%s, od %s). Další "
+                "by vznikla vedle ní a obě by si braly podíl. Zvol místo "
+                "„založit novou“ režim „navázat na běžící Kartu“ nebo "
+                "„přidat plochy do běžící Karty“."
+                % (klient, bezici, bezici.valid_from.strftime("%-d. %-m. %Y"))
+            )
+
     if prevod.cil_karta:
         soucet = _soucet_m2(prevod.cil_karta)
         prevod.cil_plosne_klice = [
