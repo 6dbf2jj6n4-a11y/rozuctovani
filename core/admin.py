@@ -1622,16 +1622,40 @@ class ClientCardAdmin(PodlePronajimatele, ModelAdmin):
             "card_units__card__client"
         ).order_by("site__name", "name")
 
+        # Rozhoduje PREKRYV PLATNOSTI, ne pouhy pocet klientu. Dokud se
+        # porovnaval jen priznak "aktivni", hlasila sestava jako konflikt
+        # i normalni stridani najemcu - u AB 3.04 tri karty (CALAMARI do
+        # 31. 7., CALAMARI do 31. 8., MI Roads od 1. 9.), ktere se ani
+        # jednim dnem nepotkaji. Z jedenacti hlasenych radku bylo sest
+        # planych. Daniel 2026-09-01.
+        from datetime import date as _date
+
+        DALEKO = _date(9999, 12, 31)
+
+        def _prekryvaji(a, b):
+            return max(a.valid_from, b.valid_from) <= min(a.valid_to or DALEKO,
+                                                          b.valid_to or DALEKO)
+
         conflicts_by_site = {}
         for unit in units:
-            active_cards = {
-                cu.card for cu in unit.card_units.all() if cu.card.is_active
-            }
-            clients = {card.client for card in active_cards}
-            if len(clients) > 1:
+            active_cards = sorted(
+                {cu.card for cu in unit.card_units.all() if cu.card.is_active},
+                key=lambda c: (c.valid_from, c.client.name),
+            )
+            # Do vypisu jdou jen karty, ktere se s nekym opravdu potkavaji -
+            # ta uzavrena z lonska ctenari nic nerekne.
+            kolidujici = set()
+            for i, prvni in enumerate(active_cards):
+                for druha in active_cards[i + 1:]:
+                    if prvni.client_id == druha.client_id:
+                        continue
+                    if _prekryvaji(prvni, druha):
+                        kolidujici.add(prvni)
+                        kolidujici.add(druha)
+            if kolidujici:
                 conflicts_by_site.setdefault(unit.site, []).append({
                     "unit": unit,
-                    "cards": sorted(active_cards, key=lambda c: c.client.name),
+                    "cards": sorted(kolidujici, key=lambda c: (c.valid_from, c.client.name)),
                 })
 
         groups = [

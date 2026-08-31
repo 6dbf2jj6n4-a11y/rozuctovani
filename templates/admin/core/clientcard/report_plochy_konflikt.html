@@ -3,9 +3,10 @@
 {% block content %}
 <div>
     <p style="color:#999; font-size:13px;">
-        Plochy, které jsou přes uložené Plochy karty (CardUnit) napojené na Aktivní kartu více
-        různých klientů najednou - typicky omylem dvakrat pronajatá plocha. Seskupeno podle
-        Areálu - stejně pojmenovaná Plocha ve dvou různých Areálech je vždy v jiné skupině.
+        Plochy, které drží víc různých klientů, jejichž karty se <strong>překrývají v době
+        platnosti</strong> - typicky omylem dvakrát pronajatá plocha. Normální střídání nájemců
+        (jeden skončí, druhý naváže) se tu záměrně neukazuje. Seskupeno podle Areálu - stejně
+        pojmenovaná Plocha ve dvou různých Areálech je vždy v jiné skupině.
     </p>
 
     {% if not groups %}
@@ -18,7 +19,7 @@
                 <thead>
                     <tr style="border-bottom:2px solid #666; text-align:left;">
                         <th style="padding:6px 8px;">Plocha</th>
-                        <th style="padding:6px 8px;">Klienti s aktivní kartou na této ploše</th>
+                        <th style="padding:6px 8px;">Klienti, jejichž karty se na této ploše překrývají</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -28,8 +29,10 @@
                             <td style="padding:6px 8px;">
                                 {% for card in row.cards %}
                                     <a href="/admin/core/clientcard/{{ card.pk }}/change/">
-                                        {{ card.client.name }} ({{ card.description|default:"bez popisu" }})
-                                    </a>{% if not forloop.last %}, {% endif %}
+                                        {{ card.client.name }}
+                                    </a>
+                                    <span style="opacity:.75;">({{ card.valid_from|date:'j. n. Y' }} –
+                                    {% if card.valid_to %}{{ card.valid_to|date:'j. n. Y' }}{% else %}bez konce{% endif %})</span>{% if not forloop.last %}, {% endif %}
                                 {% endfor %}
                             </td>
                         </tr>
