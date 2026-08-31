@@ -618,16 +618,26 @@ class CardUnitInlineFormSet(forms.BaseInlineFormSet):
         super().clean()
         if any(self.errors):
             return  # necha promluvit konkretnejsi chyby jednotlivych radku
-        zbyva = sum(
-            1 for f in self.forms
+        zustavaji = [
+            f.cleaned_data["unit"] for f in self.forms
             if getattr(f, "cleaned_data", None)
             and not f.cleaned_data.get("DELETE")
             and f.cleaned_data.get("unit")
-        )
-        if not zbyva:
+        ]
+        if not zustavaji:
             raise forms.ValidationError(
                 "Karta musí mít aspoň jednu Plochu - vyber ji v sekci "
                 "„Plochy a nájemné“."
+            )
+        # Jedna Karta = jeden areál - viz ClientCard.clean. Model to hlida
+        # az u ulozene Karty, tenhle formular uz pri zadavani.
+        arealy = {u.site_id: u.site for u in zustavaji}
+        if len(arealy) > 1:
+            raise forms.ValidationError(
+                "Plochy jsou ze dvou areálů (%s). Jedna Karta patří vždy "
+                "jednomu areálu - pronajímatel je vlastnost areálu, takže by "
+                "smlouvu podepisovaly dvě různé osoby. Založ pro druhý areál "
+                "samostatnou Kartu." % ", ".join(sorted(s.name for s in arealy.values()))
             )
 
 

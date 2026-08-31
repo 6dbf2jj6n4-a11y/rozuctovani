@@ -163,6 +163,21 @@ def priprav(units, klient, datum, sazba=None, cil_karta=None, rezim=REZIM_NOVA):
                cu.card.valid_from.strftime("%-d. %-m. %Y"))
         )
 
+    # Jedna Karta = jeden areal (viz ClientCard.clean). Prevod plochy do
+    # bezici Karty jineho arealu by takovou Kartu vyrobil a ta by pak sla
+    # jen precist, ne ulozit. Viz Daniel 2026-09-08.
+    if cil_karta is not None and rezim != REZIM_NOVA:
+        cizi = {s.name for s in cil_karta.sites()} - {u.site.name for u in units}
+        vlastni = {u.site.name for u in units}
+        if cizi and vlastni - {s.name for s in cil_karta.sites()}:
+            prevod.potize.append(
+                "Karta %s patří areálu %s, ale převádíš plochy z %s. Jedna "
+                "Karta patří vždy jednomu areálu - zvol „Založit další "
+                "samostatnou kartu“."
+                % (cil_karta.description, ", ".join(sorted(cizi)),
+                   ", ".join(sorted(vlastni)))
+            )
+
     for unit in units:
         if unit.id not in drzene:
             prevod.bez_karty.append(unit)

@@ -609,6 +609,22 @@ class ClientCard(models.Model):
                 "Karta musí mít aspoň jednu Plochu - přidej ji v sekci "
                 "„Plochy a nájemné“."
             )
+        # Jedna Karta = jeden areál. Pronajimatel je vlastnosti arealu
+        # (Site.landlord), takze Karta pres dva arealy by mela dva
+        # pronajimatele - jednu smlouvu by podepisovaly dve ruzne osoby
+        # a michalo by se na ni platcovstvi DPH. Kdyz ma najemce plochy
+        # ve dvou arealech, patri to na dve Karty - presne tak to ma
+        # CALAMARI SE (FM a NJ zvlast). Viz Daniel 2026-09-08.
+        if self.pk:
+            arealy = list(self.sites())
+            if len(arealy) > 1:
+                raise ValidationError(
+                    "Karta míchá plochy z víc areálů (%s). Jedna Karta patří "
+                    "vždy jednomu areálu - pronajímatel je vlastnost areálu, "
+                    "takže by ji podepisovaly dvě různé osoby. Rozděl ji na "
+                    "dvě Karty, každou za svůj areál."
+                    % ", ".join(sorted(s.name for s in arealy))
+                )
         if self.is_active:
             conflict = self.active_card_conflict()
             if conflict:
