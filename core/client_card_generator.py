@@ -101,8 +101,41 @@ def _strip_trailing_zeros(value):
     return text
 
 
-def _fmt_key_value(key):
-    """Hodnota klíče formátovaná podle typu výpočtu - měna jen tam, kam patří."""
+def _sdilena_meridla(keys):
+    """Dvojice (položka, měřidlo), na kterých je karet víc než jedna.
+
+    Jen tam má hodnota klíče význam váhy - viz _fmt_key_value. Zjišťuje
+    se jedním dotazem pro všechny klíče karty najednou; počítají se jen
+    aktivní karty, tedy kdo měřidlo sdílí dnes."""
+    from django.db.models import Count
+
+    meridla = [k.meter_id for k in keys if k.meter_id]
+    if not meridla:
+        return set()
+    return set(
+        AllocationKey.objects.filter(
+            meter_id__in=meridla, client_card__is_active=True
+        )
+        .values("service_item_id", "meter_id")
+        .annotate(karet=Count("client_card", distinct=True))
+        .filter(karet__gt=1)
+        .values_list("service_item_id", "meter_id")
+    )
+
+
+def _fmt_key_value(key, sdilene_meridlo=False):
+    """Hodnota klíče formátovaná podle typu výpočtu - měna jen tam, kam patří.
+
+    U typu "Podle váhy na měřidle" záleží na tom, jestli měřidlo někdo
+    sdílí. Když je na něm karta SAMA, dostane celou jeho spotřebu a
+    hodnota nic neurčuje - tiskne se pomlčka. Když ho sdílí víc karet,
+    je hodnota VÁHA, kterou se spotřeba mezi ně dělí, a musí být vidět.
+
+    Dřív se tiskla pomlčka vždy, což byl pozůstatek doby, kdy se ten typ
+    jmenoval "Podružné měřidlo (1:1)". Po přejmenování na "Podle váhy na
+    měřidle" to začalo skrývat váhy i tam, kde nesou celý výpočet - na
+    kartě KJO EU vycházelo osm hodnot z deseti jako pomlčka.
+    Daniel 2026-08-27."""
     if key.value is None:
         return "—"
     t = AllocationKey.AllocationType
@@ -111,9 +144,14 @@ def _fmt_key_value(key):
         return f"{value} m²"
     if key.allocation_type == t.FIXED_AMOUNT:
         return _fmt_kc(key.value)
-    if key.allocation_type == t.SUBMETER:
+    # Pomlcka jen kdyz klic MERIDLO MA a je na nem sam - tehdy dostane
+    # celou jeho spotrebu a hodnota nic neurcuje. Klic typu "na meridle"
+    # BEZ meridla je nesmyslna kombinace (stava se pri zakladani karty);
+    # hodnota v nem funguje jako vaha, tak ji radeji ukazat, nez ji tise
+    # schovat za pomlcku.
+    if key.allocation_type == t.SUBMETER and key.meter_id and not sdilene_meridlo:
         return "—"
-    if key.allocation_type == t.WEIGHTED_COUNT and key.weight_unit_label:
+    if key.weight_unit_label:
         return f"{value} ({key.weight_unit_label})"
     return f"{value}"
 
@@ -246,6 +284,10 @@ def generate_client_card_document(card, output_path):
             F("meter__code").asc(nulls_first=True), "pk",
         )
     )
+    # Ktera meridla karta s nekym sdili - rozhoduje o tom, jestli se
+    # u klice tiskne vaha, nebo pomlcka (viz _fmt_key_value).
+    sdilena = _sdilena_meridla(keys)
+
     # Poradi i nazvy Trid se berou z DB (Nastaveni -> Tridy) az za behu -
     # na urovni modulu by to byl dotaz uz pri importu (pada pri migrate).
     class_labels = InvoiceClassColor.label_map()
@@ -266,7 +308,9 @@ def generate_client_card_document(card, output_path):
                 key.service_item.name,
                 str(key.meter) if key.meter else "—",
                 type_labels.get(key.allocation_type, key.allocation_type),
-                _fmt_key_value(key),
+                _fmt_key_value(
+                    key, (key.service_item_id, key.meter_id) in sdilena
+                ),
                 "Ano" if key.is_billed else "V paušálu",
             ])
 
