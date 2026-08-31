@@ -4,10 +4,16 @@
 <div style="max-width: 480px;">
     <p>
         Kopíruješ kartu <strong>{{ original.description|default:"bez popisu" }}</strong>
-        (klient: {{ original.client }}) včetně jejích ploch. Vyber, komu má nová kopie patřit:
+        (klient: {{ original.client }}) včetně jejích ploch{% if clients %}. Vyber, komu má
+        nová kopie patřit, a od kdy platí{% else %} a klíčů. Zadej, od kdy nová karta platí{% endif %}:
     </p>
     <form method="post">
         {% csrf_token %}
+        {% comment %}
+        Výběr klienta se ukazuje jen u kopie NA JINÉHO klienta - obyčejná
+        kopie zůstává témuž a v kontextu se žádní klienti nepředávají.
+        {% endcomment %}
+        {% if clients %}
         <div style="margin: 16px 0;">
             <label for="id_new_client" style="display: block; font-weight: 600; margin-bottom: 6px;">
                 Nový klient
@@ -18,6 +24,19 @@
                     <option value="{{ client.pk }}">{{ client }}</option>
                 {% endfor %}
             </select>
+        </div>
+        {% endif %}
+        <div style="margin: 16px 0;">
+            <label for="id_valid_from" style="display: block; font-weight: 600; margin-bottom: 6px;">
+                Platnost od
+            </label>
+            <input type="date" name="valid_from" id="id_valid_from" required
+                   value="{{ original.valid_from|date:'Y-m-d' }}"
+                   style="padding: 8px;">
+            <p style="font-size: 12px; opacity: .75; margin: 6px 0 0;">
+                Původní karta platí od {{ original.valid_from|date:'j. n. Y' }}. Dřív než
+                ona nová karta začít nemůže.
+            </p>
         </div>
         <input type="submit" value="Vytvořit kopii" class="button default" style="background-color: #2563eb; color: white; font-weight: 600; padding: 8px 16px; border-radius: 6px; border: none; cursor: pointer;">
         <a href="{% url 'admin:core_clientcard_change' original.pk %}" class="button" style="margin-left: 8px;">Zrušit</a>

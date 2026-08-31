@@ -2189,8 +2189,18 @@ class ClientCardAdmin(PodlePronajimatele, ModelAdmin):
         return redirect("admin:core_clientcard_changelist")
 
     def kopie_view(self, request, card_id):
-        """Obycejna kopie - stejny klient, okamzite, bez potvrzeni."""
-        from django.shortcuts import redirect
+        """Kopie karty pro TEHOZ klienta - zepta se, od kdy nova plati.
+
+        Driv se kopie zakladala okamzite a zdedila platnost originalu,
+        takze se obe data musela prepisovat rucne a snadno vznikla kopie
+        se stejnym zacatkem jako original. Daniel 2026-09-01.
+
+        Karta se zaklada NEAKTIVNI (create_exact_copy) - to je zamer:
+        neaktivni karta do rozuctovani nevstupuje, takze si ji jde v klidu
+        upravit, a teprve pri jejim zaskrtnuti jako aktivni projde
+        ClientCard.clean kontrolou dvou soubeznych karet."""
+        from django.shortcuts import redirect, render
+
         # Karta se bere pres self.get_queryset, tedy stejnym filtrem jako
         # seznam (PodlePronajimatele). Driv slo prostym ID v adrese
         # zkopirovat kartu cizniho pronajimatele - a tohle ZAPISUJE.
@@ -2198,9 +2208,51 @@ class ClientCardAdmin(PodlePronajimatele, ModelAdmin):
         original = self.get_queryset(request).filter(pk=card_id).first()
         if original is None:
             return self._presmeruj_cizi_kartu(request)
-        new_card = original.create_exact_copy()
-        self.message_user(request, "Kopie karty byla vytvořena.")
-        return redirect(f"/admin/core/clientcard/{new_card.pk}/change/")
+
+        if request.method == "POST":
+            platnost = self._datum_kopie(request, original)
+            if platnost is None:
+                return redirect(request.path)
+            new_card = original.create_exact_copy(valid_from=platnost)
+            self.message_user(
+                request,
+                "Kopie karty byla vytvořena s platností od %s. Je zatím "
+                "neaktivní – zkontroluj ji a teprve pak zaškrtni Aktivní."
+                % platnost.strftime("%-d. %-m. %Y"),
+            )
+            return redirect(f"/admin/core/clientcard/{new_card.pk}/change/")
+
+        return render(request, "admin/core/clientcard/kopie_form.html", {
+            **self.admin_site.each_context(request),
+            "title": "Kopírovat kartu",
+            "original": original,
+            "opts": self.model._meta,
+        })
+
+    def _datum_kopie(self, request, original):
+        """Datum 'platnost od' z formulare kopie, nebo None pri chybe."""
+        from datetime import date
+
+        zadane = (request.POST.get("valid_from") or "").strip()
+        if not zadane:
+            self.message_user(request, "Vyplň, od kdy má nová karta platit.",
+                              level=messages.ERROR)
+            return None
+        try:
+            platnost = date.fromisoformat(zadane)
+        except ValueError:
+            self.message_user(request, "Datum nedává smysl.", level=messages.ERROR)
+            return None
+        if platnost < original.valid_from:
+            self.message_user(
+                request,
+                "Nová karta nemůže začít dřív (%s) než ta, ze které se "
+                "kopíruje (%s)." % (platnost.strftime("%-d. %-m. %Y"),
+                                    original.valid_from.strftime("%-d. %-m. %Y")),
+                level=messages.ERROR,
+            )
+            return None
+        return platnost
 
     def kopie_klient_view(self, request, card_id):
         """Kopie na jineho klienta - napr. kdyz si prostor pronajme novy najemce."""
@@ -2214,8 +2266,16 @@ class ClientCardAdmin(PodlePronajimatele, ModelAdmin):
             if not new_client:
                 self.message_user(request, "Musíš vybrat klienta, na kterého se má karta zkopírovat.", level=messages.ERROR)
                 return redirect(request.path)
-            new_card = original.create_exact_copy(client=new_client)
-            self.message_user(request, f"Kopie karty byla vytvořena pro klienta {new_client}.")
+            platnost = self._datum_kopie(request, original)
+            if platnost is None:
+                return redirect(request.path)
+            new_card = original.create_exact_copy(client=new_client, valid_from=platnost)
+            self.message_user(
+                request,
+                "Kopie karty byla vytvořena pro klienta %s s platností od %s. "
+                "Je zatím neaktivní – zkontroluj ji a teprve pak zaškrtni Aktivní."
+                % (new_client, platnost.strftime("%-d. %-m. %Y")),
+            )
             return redirect(f"/admin/core/clientcard/{new_card.pk}/change/")
 
         context = {
