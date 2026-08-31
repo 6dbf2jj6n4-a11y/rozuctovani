@@ -92,7 +92,7 @@ class Command(BaseCommand):
                     polozka = ServicePoolItem.objects.create(
                         site=site, name=nazev, invoice_class=trida, meter=meridlo,
                         default_allocation_type=(
-                            AllocationKey.AllocationType.SUBMETER if zpusob == "submeter"
+                            AllocationKey.AllocationType.WEIGHTED_COUNT if zpusob == "submeter"
                             else AllocationKey.AllocationType.WEIGHTED_COUNT
                         ),
                         weight_unit_label=popis_vahy,
@@ -124,7 +124,7 @@ class Command(BaseCommand):
                         self.stderr.write("      ✗ {:4} měřidlo {} neexistuje".format(plocha, kod))
                         continue
                     popis = "podměr {}".format(kod)
-                    udaje = dict(allocation_type=AllocationKey.AllocationType.SUBMETER,
+                    udaje = dict(allocation_type=AllocationKey.AllocationType.WEIGHTED_COUNT,
                                  meter=podmer)
                 else:
                     popis = "rovným dílem (váha 1)"

@@ -149,7 +149,7 @@ def _fmt_key_value(key, sdilene_meridlo=False):
     # BEZ meridla je nesmyslna kombinace (stava se pri zakladani karty);
     # hodnota v nem funguje jako vaha, tak ji radeji ukazat, nez ji tise
     # schovat za pomlcku.
-    if key.allocation_type == t.SUBMETER and key.meter_id and not sdilene_meridlo:
+    if key.allocation_type == t.WEIGHTED_COUNT and key.meter_id and not sdilene_meridlo:
         return "—"
     if key.weight_unit_label:
         return f"{value} ({key.weight_unit_label})"

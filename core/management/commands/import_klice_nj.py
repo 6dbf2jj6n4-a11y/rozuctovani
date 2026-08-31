@@ -204,7 +204,7 @@ class Command(BaseCommand):
                     # _consumption_shares). Bez realnych odectu (virtualni
                     # skupina, napr. spolecna/zbytkova spotreba) zustava
                     # weighted_count jako dosud.
-                    allocation_type = "submeter"
+                    allocation_type = "weighted_count"
                 else:
                     allocation_type = "weighted_count"
             elif typ == "K_PLOSE":

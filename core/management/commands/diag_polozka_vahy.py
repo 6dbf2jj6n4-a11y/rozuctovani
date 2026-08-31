@@ -60,10 +60,10 @@ class Command(BaseCommand):
             by_key_share = {}
             shares, total_consumption = _consumption_shares(item, period, warnings, by_key_out=by_key_share)
 
-            submeter_keys = [k for k in valid_keys if k.allocation_type == AllocationKey.AllocationType.SUBMETER]
+            submeter_keys = [k for k in valid_keys if k.allocation_type == AllocationKey.AllocationType.WEIGHTED_COUNT]
             weight_keys = [
                 k for k in valid_keys
-                if k.allocation_type not in (AllocationKey.AllocationType.SUBMETER,) and k.allocation_type not in ABSOLUTE_AMOUNT_TYPES
+                if k.allocation_type not in (AllocationKey.AllocationType.WEIGHTED_COUNT,) and k.allocation_type not in ABSOLUTE_AMOUNT_TYPES
             ]
 
             self.stdout.write(f"\n-- podružná měřidla (1:1, spotřeba/celková spotřeba) --")

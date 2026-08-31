@@ -40,7 +40,7 @@ class Command(BaseCommand):
                     continue
                 for key in keys:
                     flag = ""
-                    if key.allocation_type == AllocationKey.AllocationType.SUBMETER:
+                    if key.allocation_type == AllocationKey.AllocationType.WEIGHTED_COUNT:
                         flag = "  <-- PODRUŽNÉ MĚŘIDLO"
                         any_submeter_total = True
                     self.stdout.write(

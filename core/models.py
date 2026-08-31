@@ -16,17 +16,16 @@ from core.storage import R2MediaStorage
 # Typy rozpoctu - sdileno mezi ServicePoolItem (vychozi typ) a AllocationKey
 # (skutecny typ pouzity na konkretni karte klienta).
 #
-# "submeter" se drive jmenoval "Podružné měřidlo (1:1)", coz svadelo:
-# vypadalo to, ze meridlo ma klient sam pro sebe. Kdyz ho ale sdili vic
-# karet, engine deli jeho spotrebu mezi ne podle Hodnoty - tedy uplne
-# stejne jako "Podle váhy", jen se nejdriv z celku vyrizne skutecna
-# spotreba toho meridla. Dvojice nazvu to ted rika primo. Ulozena hodnota
-# ("submeter"/"weighted_count") se NEMENI, jde jen o popisky.
-# Daniel 2026-08-26.
+# "Podle vahy" je JEDEN typ. Drive byly dva - "na meridle" (submeter)
+# a "bez meridla" (weighted_count) - jenze vypocet mezi nimi nikdy
+# nerozlisoval: billing/engine.py se diva na to, jestli je na Klici
+# vyplnene Meridlo, a podle toho vaha deli bud spotrebu toho meridla,
+# nebo zbytek polozky zasobniku. Dva typy pro jednu vec jen matly a daly
+# se nastavit proti skutecnosti (typ "bez meridla" s vyplnenym meridlem).
+# Viz Daniel 2026-09-01, migrace 0092.
 ALLOCATION_TYPE_CHOICES = [
-    ("submeter", "Podle váhy na měřidle"),
+    ("weighted_count", "Podle váhy"),
     ("fixed_amount", "Pevná částka"),
-    ("weighted_count", "Podle váhy bez měřidla"),
     ("area_price", "Dle výměry (m²)"),
 ]
 
@@ -1621,10 +1620,16 @@ class CardOccupant(models.Model):
 
 class AllocationKey(models.Model):
     class AllocationType(models.TextChoices):
-        SUBMETER = "submeter", "Podle váhy na měřidle"
+        # "Podle vahy" je jeden typ. Jestli se vaha aplikuje na spotrebu
+        # konkretniho meridla, nebo na zbytek polozky zasobniku, rozhoduje
+        # to, jestli je na Klici vyplnene Meridlo - presne tak to dela
+        # i vypocet (billing/engine.py _consumption_shares, ktery typ
+        # vubec nezkouma). Dva typy pro jednu vec jen matly.
+        # Viz Daniel 2026-09-01.
+        WEIGHTED_COUNT = "weighted_count", "Podle váhy"
         FIXED_AMOUNT = "fixed_amount", "Pevná částka"
-        WEIGHTED_COUNT = "weighted_count", "Podle váhy bez měřidla"
         AREA_PRICE = "area_price", "Dle výměry (m²)"
+
 
     client_card = models.ForeignKey(
         ClientCard, on_delete=models.CASCADE, related_name="allocation_keys", verbose_name="Karta klienta"
@@ -2170,7 +2175,7 @@ class UnitService(models.Model):
     allocation_type = models.CharField(
         "Typ rozpočtu", max_length=20,
         choices=AllocationKey.AllocationType.choices,
-        default=AllocationKey.AllocationType.SUBMETER
+        default=AllocationKey.AllocationType.WEIGHTED_COUNT
     )
     value = models.DecimalField(
         "Hodnota", max_digits=12, decimal_places=4, null=True, blank=True

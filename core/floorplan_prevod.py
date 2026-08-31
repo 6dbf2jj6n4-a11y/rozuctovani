@@ -20,7 +20,7 @@ from django.db import transaction
 PRIZNAK_PRESUNU = "(část přesunuta)"
 
 #: typy klíčů, jejichž hodnota je výměra - přepočítají se podle m²
-PLOSNE_TYPY = ("weighted_count", "area_price", "submeter")
+PLOSNE_TYPY = ("weighted_count", "area_price")
 
 
 def _soucet_m2(card):
