@@ -734,7 +734,10 @@
         saveTimers[m.id] = setTimeout(save, 700);
     }
 
-    function save() {
+    // potvrzeno = uživatel už viděl varování o neobvyklé spotřebě a
+    // trvá na uložení. Automatické ukládání po psaní volá save() bez
+    // argumentu, takže se varování ukáže vždy znovu.
+    function save(potvrzeno) {
         if (periodClosed) return;
         var i = idx;
         var m = meters[i];
@@ -760,6 +763,7 @@
                 value: val,
                 reset_from_value: resetFromValue,
                 note: note,
+                potvrzeno: !!potvrzeno,
             }),
         })
             .then(function (r) { return r.json().then(function (data) { return { status: r.status, data: data }; }); })
@@ -778,6 +782,15 @@
                     refreshRowIndicators(i);
                     var parent = meters.find(function (p) { return p.id === m.parent_id; });
                     if (parent) updateSumBanner();
+                } else if (res.status === 409 && res.data.warning) {
+                    // Server hlásí neobvyklou spotřebu. Nejde o zákaz -
+                    // po potvrzení se uloží. Bez tohohle kroku byl odznak
+                    // "Neobvyklá odchylka" jen ozdoba a překlep prošel.
+                    statusEl.textContent = "Neuloženo – zkontroluj hodnotu";
+                    statusEl.className = "status error";
+                    if (window.confirm(res.data.warning + "\n\nOpravdu uložit?")) {
+                        save(true);
+                    }
                 } else if (i === idx) {
                     statusEl.textContent = res.data.error || "Chyba při ukládání."; statusEl.className = "status error";
                 }

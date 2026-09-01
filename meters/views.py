@@ -17,6 +17,80 @@ from django.views.decorators.http import require_POST
 from core.models import Client, Meter, MeterReading, Period
 
 
+#: Kolik procent nad prumerem poslednich obdobi uz je podezrele.
+ODCHYLKA_PCT = 40
+#: Kolikrat smi spotreba prekonat dosavadni maximum meridla.
+NASOBEK_MAXIMA = 3
+#: Pod touhle spotrebou se nekrici vubec - u drobnych meridel je
+#: procentualni odchylka jen sum.
+PRAH_SPOTREBY = 50
+#: Z kolika poslednich obdobi se pocita reference.
+POSLEDNICH_OBDOBI = 3
+
+
+def _podezrela_spotreba(meter, period, consumption):
+    """Vrati duvod, proc spotreba vypada neverohodne, nebo None.
+
+    Proc klouzavy prumer poslednich obdobi a ne prumer cele historie:
+    teplo je sezonni a pres jaro prirozene klesa, takze prumer cele
+    historie by kazde jaro hlasil desitky planych poplachu. Meri se
+    jen RUST - pokles spotreby penize nikomu nepretoci a je skoro vzdy
+    sezonni. Overeno na cele historii odectu: prumer historie oboustranne
+    oznacil 92 z 839 spotreb (11 %), tohle pravidlo 23 (2,7 %).
+
+    Druhe pravidlo (nad nasobek dosavadniho maxima) resi pripad, kdy je
+    reference NULA - tam procenta nedavaji smysl a stara kontrola
+    v prohlizeci proto mlcela. Presne takhle proslo u E_B5 v 08/2026
+    prepsani 11 764 na 111 764: osm mesicu nulova spotreba, pak 100 000
+    kWh, ktere si vzalo 93 % cele polozky. Daniel 2026-09-01.
+    """
+    if consumption is None or consumption < PRAH_SPOTREBY:
+        return None
+
+    historie = []
+    predchozi = None
+    for r in (meter.readings.select_related("period")
+              .order_by("period__year", "period__month")):
+        if r.period_id == period.id:
+            break
+        if r.reset_from_value is not None:
+            historie.append(r.value - r.reset_from_value)
+        elif predchozi is not None:
+            historie.append(r.value - predchozi.value)
+        predchozi = r
+    if not historie:
+        return None
+
+    maximum = max(historie)
+    if maximum <= 0:
+        return (
+            "Měřidlo dosud nikdy nic nespotřebovalo, teď by spotřeba byla "
+            "%s. Není to překlep v hodnotě?" % _cislo(consumption)
+        )
+    if consumption > maximum * NASOBEK_MAXIMA:
+        return (
+            "Spotřeba %s je %.0f× vyšší než dosavadní maximum tohoto "
+            "měřidla (%s)." % (_cislo(consumption),
+                               consumption / maximum, _cislo(maximum))
+        )
+
+    posledni = historie[-POSLEDNICH_OBDOBI:]
+    prumer = sum(posledni) / len(posledni)
+    if prumer > 0:
+        odchylka = (consumption - prumer) / prumer * 100
+        if odchylka > ODCHYLKA_PCT:
+            return (
+                "Spotřeba %s je o %.0f %% vyšší než průměr posledních období "
+                "(%s)." % (_cislo(consumption), odchylka, _cislo(prumer))
+            )
+    return None
+
+
+def _cislo(hodnota):
+    """Cislo bez zbytecnych nul - do hlasky pro cloveka."""
+    return ("%.0f" % hodnota) if hodnota == hodnota.to_integral_value() else ("%s" % hodnota)
+
+
 def _require_spravce(user):
     if not user.is_spravce_role:
         raise PermissionDenied("Zadávání odečtů je jen pro správce.")
@@ -199,6 +273,14 @@ def readings_save(request):
                 "zadej počáteční stav nového měřidla."
             ),
         }, status=400)
+
+    # Varovani, ne zakaz: klimatizace v lete nebo naskok noveho najemce
+    # muze spotrebu legitimne zvednout. Musi se ale POTVRDIT - dosud to
+    # byl jen odznak v prohlizeci, ktery nikoho nezastavil.
+    if not payload.get("potvrzeno"):
+        duvod = _podezrela_spotreba(meter, period, consumption)
+        if duvod:
+            return JsonResponse({"ok": False, "warning": duvod}, status=409)
 
     MeterReading.objects.update_or_create(
         meter=meter, period=period,
