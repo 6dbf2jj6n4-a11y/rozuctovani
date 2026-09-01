@@ -14,7 +14,7 @@ from django.shortcuts import get_object_or_404, render
 from django.utils import timezone
 from django.views.decorators.http import require_POST
 
-from core.models import Client, Meter, MeterReading, Period
+from core.models import Client, Meter, MeterReading, Period, ReadingsClosure, Site
 
 
 #: Kolik procent nad prumerem poslednich obdobi uz je podezrele.
@@ -214,6 +214,14 @@ def readings_entry(request):
         "period": period,
         "meters_data": meters_data,
         "period_closed": bool(period and period.status == Period.Status.CLOSED),
+        # Uzavreni odectu je NECO JINEHO nez uzavreni Obdobi: tohle si
+        # rekne sam spravce ("mam hotovo") a plati jen na tuhle obrazovku,
+        # admin muze opravovat dal. Viz core.models.ReadingsClosure.
+        "readings_closure": (
+            ReadingsClosure.objects.filter(period=period, site=site)
+            .select_related("closed_by").first()
+            if period and site else None
+        ),
         # Stejna hlavicka (logo/verze/pronajimatel) jako v Django adminu
         # (config.settings.UNFOLD SITE_ICON/SITE_HEADER/SITE_SUBHEADER) -
         # viz konverzace s Danielem 2026-08-09, chtel sjednoceny vzhled.
@@ -274,6 +282,15 @@ def readings_save(request):
             ),
         }, status=400)
 
+    if ReadingsClosure.objects.filter(period=period, site=meter.site).exists():
+        return JsonResponse({
+            "ok": False,
+            "error": (
+                "Odečty za toto období a areál jsou uzavřené. Když je "
+                "potřeba je ještě opravit, musí uzavření zrušit admin."
+            ),
+        }, status=400)
+
     # Varovani, ne zakaz: klimatizace v lete nebo naskok noveho najemce
     # muze spotrebu legitimne zvednout. Musi se ale POTVRDIT - dosud to
     # byl jen odznak v prohlizeci, ktery nikoho nezastavil.
@@ -297,6 +314,54 @@ def readings_save(request):
         "ok": True,
         "consumption": float(consumption) if consumption is not None else None,
     })
+
+
+@login_required
+@require_POST
+def readings_close(request):
+    """Spravce uzavre odecty za obdobi a areal - "mam hotovo".
+
+    Zpet uz to spravce nerozlomi, od toho je admin: kdyby si zamek mohl
+    sam otevrit, neni to razitko, ale jen dalsi tlacitko.
+    Odemyka se smazanim zaznamu v administraci.
+    """
+    user = request.user
+    _require_spravce(user)
+
+    site = get_object_or_404(Site, pk=request.POST.get("site_id"))
+    period = get_object_or_404(Period, pk=request.POST.get("period_id"))
+    if not user.get_accessible_sites().filter(pk=site.pk).exists():
+        raise PermissionDenied("K tomuto areálu nemáš přístup.")
+
+    chybejici = _meridla_bez_odectu(site, period)
+    if chybejici and not request.POST.get("potvrzeno"):
+        return JsonResponse({
+            "ok": False,
+            "warning": (
+                "Ještě chybí odečet u %d měřidel (%s%s). Opravdu uzavřít?"
+                % (len(chybejici), ", ".join(m.code for m in chybejici[:5]),
+                   " a další" if len(chybejici) > 5 else "")
+            ),
+        }, status=409)
+
+    ReadingsClosure.objects.get_or_create(
+        period=period, site=site, defaults={"closed_by": user},
+    )
+    return JsonResponse({"ok": True})
+
+
+def _meridla_bez_odectu(site, period):
+    """Meridla arealu, ktera za obdobi jeste nemaji odecet."""
+    ma_odecet = set(
+        MeterReading.objects.filter(period=period, meter__site=site)
+        .values_list("meter_id", flat=True)
+    )
+    # Virtualni meridla se neodecitaji - jejich hodnota se pocita ze
+    # vzorce z jinych meridel, takze do "chybejicich" nepatri.
+    return [
+        m for m in Meter.objects.filter(site=site, is_virtual=False).order_by("code")
+        if m.id not in ma_odecet
+    ]
 
 
 @login_required

@@ -1386,6 +1386,51 @@ class MeterReading(models.Model):
         super().save(*args, **kwargs)
 
 
+class ReadingsClosure(models.Model):
+    """Uzavreni odectu za jedno Obdobi a jeden Areal.
+
+    Spravce tim rekne "mam hotovo" - odecty v tom arealu uz na obrazovce
+    zadavani nejdou menit a admin vidi, ze se na ne muze spolehnout.
+    NENI to totez co uzavreni Obdobi (Period.status): to zamyka i naklady
+    a vyuctovani a dela ho admin. Tohle je jen o odectech.
+
+    Zamek plati na obrazovku spravce, ne na admin - admin musi mit moznost
+    opravit prehmat i potom (typicky prave po nem, kdyz si stavu vsimne).
+    Odemyka se smazanim zaznamu.
+
+    Granularita je areal + obdobi, protoze odecty chodi po arealech: FM
+    muze byt hotove, kdyz se v NJ jeste obchazi. Daniel 2026-09-01.
+    """
+
+    period = models.ForeignKey(
+        "Period", on_delete=models.CASCADE, related_name="readings_closures",
+        verbose_name="Období",
+    )
+    site = models.ForeignKey(
+        "Site", on_delete=models.CASCADE, related_name="readings_closures",
+        verbose_name="Areál",
+    )
+    closed_at = models.DateTimeField("Uzavřeno", auto_now_add=True)
+    closed_by = models.ForeignKey(
+        "accounts.User", null=True, blank=True, on_delete=models.SET_NULL,
+        related_name="readings_closures", verbose_name="Uzavřel",
+    )
+    note = models.CharField("Poznámka", max_length=300, blank=True)
+
+    class Meta:
+        verbose_name = "Uzavření odečtů"
+        verbose_name_plural = "Uzavření odečtů"
+        ordering = ["-period__year", "-period__month", "site__name"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["period", "site"], name="jedno_uzavreni_odectu_na_areal_a_obdobi"
+            )
+        ]
+
+    def __str__(self):
+        return f"{self.site} – {self.period}"
+
+
 class ServicePoolItem(models.Model):
     class InvoiceClass(models.TextChoices):
         """Ponecháno jako zdroj výchozí hodnoty pole a kvůli starším

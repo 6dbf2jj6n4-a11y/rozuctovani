@@ -207,6 +207,15 @@
         .nav-hint { font-size: 12px; color: var(--text-faint); }
         .empty { padding: 24px 18px; color: var(--text-muted); font-size: 14px; background: var(--surface); border-radius: 12px; }
         .closed-warning { background: var(--warn-bg); color: var(--warn-text); font-size: 13px; padding: 10px 12px; border-radius: 8px; margin-bottom: 14px; }
+        /* Uzavření odečtů - "mám hotovo" pro admina. Záměrně nenápadné
+           a dole pod odečty, aby se na něj nedalo omylem sáhnout cestou. */
+        .uzavrit-row { max-width: 1200px; margin: 18px auto 0; display: flex;
+            align-items: center; gap: 12px; flex-wrap: wrap; }
+        .uzavrit-btn { padding: 8px 16px; border-radius: 8px; border: 1px solid var(--label);
+            background: var(--surface); color: var(--label); font-size: 14px; cursor: pointer; }
+        .uzavrit-btn:hover { color: var(--text); }
+        .uzavrit-btn:disabled { opacity: .5; cursor: default; }
+        .uzavrit-hint { font-size: 12px; color: var(--label); }
         .layout { display: flex; gap: 24px; max-width: 1200px; margin: 0 auto; align-items: flex-start; }
         .sidebar {
             display: none; flex: 1; min-width: 260px; background: var(--surface); border-radius: 12px;
@@ -248,6 +257,18 @@
             .wrap { position: sticky; top: 20px; }
         }
     </style>
+    {% if site and period and not period_closed and not readings_closure and meters_data %}
+        {% comment %}
+        Uzavření je "mám hotovo" pro admina - viz core.models.ReadingsClosure.
+        Zpět už ho správce nerozlomí, od toho je admin; kdyby si zámek mohl
+        sám otevřít, není to razítko, ale jen další tlačítko.
+        {% endcomment %}
+        <div class="uzavrit-row">
+            <button type="button" id="uzavrit-btn" class="uzavrit-btn">Uzavřít odečty za {{ period }}</button>
+            <span class="uzavrit-hint">Tím dáš adminovi vědět, že je areál {{ site.name }} hotový.</span>
+        </div>
+    {% endif %}
+
     <script>
         (function () {
             try {
@@ -328,6 +349,13 @@
 
     {% if period_closed %}
         <div class="closed-warning">Toto období je uzavřené - odečty se dají jen prohlížet, ne upravovat.</div>
+    {% elif readings_closure %}
+        <div class="closed-warning">
+            Odečty za tento areál a období jsi uzavřel
+            {{ readings_closure.closed_at|date:"j. n. Y" }}{% if readings_closure.closed_by %}
+            ({{ readings_closure.closed_by.get_full_name|default:readings_closure.closed_by.username }}){% endif %}.
+            Když je potřeba ještě něco opravit, musí uzavření zrušit admin.
+        </div>
     {% endif %}
 
     {% if not site %}
@@ -469,6 +497,7 @@
     var saveUrl = "{% url 'odecty-ulozit' %}";
     var reorderUrl = "{% url 'odecty-preradit' %}";
     var photoUrl = "{% url 'odecty-foto' %}";
+    var uzavritUrl = "{% url 'odecty-uzavrit' %}";
     var photoDeleteUrl = "{% url 'odecty-foto-smazat' %}";
 
     var idx = 0;
@@ -737,6 +766,35 @@
     // potvrzeno = uživatel už viděl varování o neobvyklé spotřebě a
     // trvá na uložení. Automatické ukládání po psaní volá save() bez
     // argumentu, takže se varování ukáže vždy znovu.
+    var uzavritBtn = document.getElementById("uzavrit-btn");
+    if (uzavritBtn) {
+        uzavritBtn.addEventListener("click", function () { uzavri(false); });
+    }
+
+    function uzavri(potvrzeno) {
+        uzavritBtn.disabled = true;
+        var telo = new FormData();
+        telo.append("site_id", siteId);
+        telo.append("period_id", periodId);
+        if (potvrzeno) { telo.append("potvrzeno", "1"); }
+        fetch(uzavritUrl, { method: "POST", headers: { "X-CSRFToken": csrfToken }, body: telo })
+            .then(function (r) { return r.json().then(function (d) { return { status: r.status, data: d }; }); })
+            .then(function (res) {
+                if (res.data.ok) { window.location.reload(); return; }
+                uzavritBtn.disabled = false;
+                // 409 = ještě chybí odečty; není to zákaz, jen ať o tom ví
+                if (res.status === 409 && res.data.warning) {
+                    if (window.confirm(res.data.warning)) { uzavri(true); }
+                } else {
+                    window.alert(res.data.error || "Uzavření se nepovedlo.");
+                }
+            })
+            .catch(function () {
+                uzavritBtn.disabled = false;
+                window.alert("Chyba spojení, zkus to znovu.");
+            });
+    }
+
     function save(potvrzeno) {
         if (periodClosed) return;
         var i = idx;

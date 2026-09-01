@@ -23,7 +23,7 @@ from .models import (
     Client, ClientCard, Contract, Site, Unit, CardUnit, Floorplan,
     Meter, MeterReading, Period, InflationRate, SupplyPoint, InvoiceClassColor,
     ServicePoolItem, AllocationKey, PriceList, CostEntry, BillingLine, UnitService,
-    CardOccupant,
+    CardOccupant, ReadingsClosure,
     normalizovat_telefon,
 )
 
@@ -3714,6 +3714,20 @@ class _MaFotoFilter(admin.SimpleListFilter):
         if self.value() == "0":
             return queryset.filter(Q(photo="") | Q(photo__isnull=True))
         return queryset
+
+
+@admin.register(ReadingsClosure)
+class ReadingsClosureAdmin(PodlePronajimatele, ModelAdmin):
+    """Uzavreni odectu - hlavne proto, aby ho admin mohl ZRUSIT.
+
+    Zaklada ho spravce tlacitkem na obrazovce odectu; smazanim zaznamu se
+    odecty zase odemknou. Daniel 2026-09-01."""
+
+    cesta_k_arealu = "site"
+    list_display = ("period", "site", "closed_at", "closed_by", "note")
+    list_select_related = ("period", "site", "closed_by")
+    list_filter = ("period", "site")
+    readonly_fields = ("closed_at", "closed_by")
 
 
 @admin.register(MeterReading)
