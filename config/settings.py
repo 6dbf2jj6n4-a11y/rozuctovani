@@ -170,7 +170,7 @@ SESSION_SAVE_EVERY_REQUEST = True
 # 2027.0), i kdyby se nekdo zapomnel APP_VERSION_YEAR rucne prepsat -
 # dohoda s Danielem 2026-08-15.
 APP_VERSION_YEAR = 2026
-APP_VERSION_SEQUENCE = 239
+APP_VERSION_SEQUENCE = 240
 APP_VERSION = (
     f"{APP_VERSION_YEAR}.{APP_VERSION_SEQUENCE}"
     if date.today().year == APP_VERSION_YEAR
@@ -380,6 +380,11 @@ UNFOLD = {
                         "title": _("Nepřiřazená měřidla"),
                         "icon": "speed",
                         "link": reverse_lazy("admin:core_meter_report_neprirazena"),
+                    },
+                    {
+                        "title": _("Stav odečtů"),
+                        "icon": "fact_check",
+                        "link": reverse_lazy("admin:core_meter_report_stav_odectu"),
                     },
                     {
                         "title": _("Spotřeby dle hierarchie"),

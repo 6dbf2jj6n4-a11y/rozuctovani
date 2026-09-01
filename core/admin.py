@@ -2532,6 +2532,11 @@ class MeterAdmin(PodlePronajimatele, DuplicateModelAdminMixin, ModelAdmin):
                 self.admin_site.admin_view(self.report_spotreby_view),
                 name="core_meter_report_spotreby",
             ),
+            path(
+                "report/stav-odectu/",
+                self.admin_site.admin_view(self.report_stav_odectu_view),
+                name="core_meter_report_stav_odectu",
+            ),
         ]
         return custom + urls
 
@@ -2907,6 +2912,69 @@ class MeterAdmin(PodlePronajimatele, DuplicateModelAdminMixin, ModelAdmin):
             for referenced_meter, _sign in vm._formula_tokens():
                 protected.setdefault(referenced_meter.id, []).append(str(vm))
         return protected
+
+    def report_stav_odectu_view(self, request):
+        """Sestava (Reporty v menu): stav odectu za obdobi po arealech.
+
+        Odpovida na jedinou otazku - "muzu za tohle obdobi pocitat?".
+        Ke kazdemu arealu: kolik meridel ma odecet, kde chybi, kde chybi
+        fotka, ktere spotreby vypadaji neverohodne a jestli uz to spravce
+        uzavrel. Daniel 2026-09-01.
+
+        Neverohodnost pocita STEJNA funkce, ktera hlida zadavani odectu
+        (meters.views._podezrela_spotreba) - aby sestava a obrazovka
+        spravce nerikaly kazda neco jineho.
+        """
+        from django.shortcuts import render
+
+        from meters.views import _meridla_bez_odectu, _podezrela_spotreba
+
+        periods = Period.objects.all()
+        period_id = request.GET.get("period")
+        period = periods.filter(pk=period_id).first() if period_id else Period.current()
+
+        skupiny = []
+        if period is not None:
+            for site in pronajimatele.arealy(request).order_by("name"):
+                meridla = list(Meter.objects.filter(site=site, is_virtual=False).order_by("code"))
+                odecty = {
+                    r.meter_id: r
+                    for r in MeterReading.objects.select_related("meter").filter(
+                        period=period, meter__site=site)
+                }
+                chybejici = [m for m in meridla if m.id not in odecty]
+                bez_foto = [odecty[m.id] for m in meridla if m.id in odecty and not odecty[m.id].photo]
+
+                podezrele = []
+                for m in meridla:
+                    r = odecty.get(m.id)
+                    if r is None:
+                        continue
+                    spotreba = m.consumption_for(period)
+                    duvod = _podezrela_spotreba(m, period, spotreba) if spotreba is not None else None
+                    if duvod:
+                        podezrele.append({"reading": r, "consumption": spotreba, "duvod": duvod})
+
+                skupiny.append({
+                    "site": site,
+                    "meridel": len(meridla),
+                    "s_odectem": len(meridla) - len(chybejici),
+                    "chybejici": chybejici,
+                    "bez_foto": bez_foto,
+                    "podezrele": podezrele,
+                    "uzavreno": ReadingsClosure.objects.filter(
+                        period=period, site=site).select_related("closed_by").first(),
+                })
+
+        context = {
+            **self.admin_site.each_context(request),
+            "title": "Stav odečtů za období",
+            "periods": periods,
+            "selected_period": period,
+            "skupiny": skupiny,
+            "opts": self.model._meta,
+        }
+        return render(request, "admin/core/meter/report_stav_odectu.html", context)
 
     def report_neprirazena_view(self, request):
         """Report (Reporty v menu) s moznosti hromadne smazat vybrana

@@ -1,0 +1,88 @@
+{% extends "admin/base_site.html" %}
+{% load l10n %}
+
+{% block content %}
+<div>
+    <p style="color:#999; font-size:13px;">
+        Odpovídá na jedinou otázku: <strong>můžu za tohle období počítat?</strong> Ke každému
+        areálu kolik měřidel má odečet, kde chybí, kde chybí fotka a které spotřeby vypadají
+        nevěrohodně. Nevěrohodnost počítá stejné pravidlo, které hlídá zadávání odečtů, takže
+        sestava a obrazovka správce říkají totéž.
+    </p>
+
+    <form method="get" class="rx-filters">
+        <div>
+            <label for="id_period">Období</label>
+            <select name="period" id="id_period" onchange="this.form.submit()" style="padding:8px; min-width:160px;">
+                {% for p in periods %}
+                    <option value="{{ p.pk }}" {% if selected_period and p.pk == selected_period.pk %}selected{% endif %}>{{ p }}</option>
+                {% endfor %}
+            </select>
+        </div>
+    </form>
+
+    {% if not skupiny %}
+        <p>Žádný areál k zobrazení.</p>
+    {% endif %}
+
+    {% for s in skupiny %}
+        <h2 style="margin-top:28px;">
+            {{ s.site.name }}
+            {% if s.uzavreno %}
+                <span style="font-size:13px; font-weight:400; color:#15803d;">
+                    &ndash; uzavřeno {{ s.uzavreno.closed_at|date:'j. n. Y' }}{% if s.uzavreno.closed_by %}
+                    ({{ s.uzavreno.closed_by.get_full_name|default:s.uzavreno.closed_by.username }}){% endif %}
+                </span>
+            {% else %}
+                <span style="font-size:13px; font-weight:400; color:#d97706;">&ndash; správce zatím neuzavřel</span>
+            {% endif %}
+        </h2>
+
+        <p style="font-size:13px;">
+            Odečteno <strong>{{ s.s_odectem }}</strong> z {{ s.meridel }} měřidel.
+            {% if s.chybejici %}<span style="color:#d97706;">Chybí {{ s.chybejici|length }}.</span>{% endif %}
+            {% if s.bez_foto %}<span style="color:#999;">Bez fotky {{ s.bez_foto|length }}.</span>{% endif %}
+        </p>
+
+        {% if s.podezrele %}
+            <table style="width:100%; border-collapse:collapse; font-size:13px; margin-bottom:10px;">
+                <thead>
+                    <tr style="border-bottom:2px solid #666; text-align:left;">
+                        <th style="padding:6px 8px;">Podezřelý odečet</th>
+                        <th style="padding:6px 8px; text-align:right;">Spotřeba</th>
+                        <th style="padding:6px 8px;">Proč</th>
+                        <th style="padding:6px 8px;">Zadal</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for p in s.podezrele %}
+                        <tr style="border-bottom:1px solid #333;">
+                            <td style="padding:6px 8px;">
+                                <a href="/admin/core/meterreading/{{ p.reading.pk }}/change/">{{ p.reading.meter.code }}</a>
+                                <span style="opacity:.7;">{{ p.reading.meter.name }}</span>
+                            </td>
+                            <td style="padding:6px 8px; text-align:right;">{{ p.consumption|floatformat:0 }}</td>
+                            <td style="padding:6px 8px; color:#d97706;">{{ p.duvod }}</td>
+                            <td style="padding:6px 8px;">{{ p.reading.created_by|default:"—" }}</td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        {% endif %}
+
+        {% if s.chybejici %}
+            <p style="font-size:13px;">
+                <strong>Chybí odečet:</strong>
+                {% for m in s.chybejici %}{{ m.code }}{% if not forloop.last %}, {% endif %}{% endfor %}
+            </p>
+        {% endif %}
+
+        {% if s.bez_foto %}
+            <p style="font-size:13px; color:#999;">
+                <strong>Bez fotky:</strong>
+                {% for r in s.bez_foto %}{{ r.meter.code }}{% if not forloop.last %}, {% endif %}{% endfor %}
+            </p>
+        {% endif %}
+    {% endfor %}
+</div>
+{% endblock %}
