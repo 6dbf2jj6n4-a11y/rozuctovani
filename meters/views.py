@@ -4,7 +4,7 @@ obrazovku, navigace sipkami/swipem, kontrola odchylky proti historii.
 Viz core/models.py Meter.consumption_for pro vypocet spotreby.
 """
 import json
-from decimal import Decimal, InvalidOperation
+from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 
 from django.conf import settings
 from django.contrib.auth.decorators import login_required
@@ -87,8 +87,15 @@ def _podezrela_spotreba(meter, period, consumption):
 
 
 def _cislo(hodnota):
-    """Cislo bez zbytecnych nul - do hlasky pro cloveka."""
-    return ("%.0f" % hodnota) if hodnota == hodnota.to_integral_value() else ("%s" % hodnota)
+    """Cislo pro hlasku cloveku: nejvyse dve desetinna mista, bez koncovych nul.
+
+    Prumer vychazi z deleni Decimalu, takze bez zaokrouhleni by se do hlasky
+    dostalo "387.666666666666666666666667".
+    """
+    hodnota = Decimal(hodnota).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+    if hodnota == hodnota.to_integral_value():
+        return "%.0f" % hodnota
+    return ("%s" % hodnota).rstrip("0")
 
 
 def _require_spravce(user):

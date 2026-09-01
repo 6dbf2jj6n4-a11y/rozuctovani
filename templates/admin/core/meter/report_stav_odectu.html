@@ -61,7 +61,7 @@
                                 <a href="/admin/core/meterreading/{{ p.reading.pk }}/change/">{{ p.reading.meter.code }}</a>
                                 <span style="opacity:.7;">{{ p.reading.meter.name }}</span>
                             </td>
-                            <td style="padding:6px 8px; text-align:right;">{{ p.consumption|floatformat:0 }}</td>
+                            <td style="padding:6px 8px; text-align:right;">{{ p.consumption|floatformat:"-2" }}</td>
                             <td style="padding:6px 8px; color:#d97706;">{{ p.duvod }}</td>
                             <td style="padding:6px 8px;">{{ p.reading.created_by|default:"—" }}</td>
                         </tr>
