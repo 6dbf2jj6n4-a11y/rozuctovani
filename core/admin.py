@@ -3698,16 +3698,42 @@ class SupplyPointAdmin(PodlePronajimatele, ModelAdmin):
         )
 
 
+class _MaFotoFilter(admin.SimpleListFilter):
+    """Filtr "ma fotku" - hlavne kvuli dohledani odectu, ke kterym
+    fotka chybi. Daniel 2026-09-01."""
+
+    title = "Foto odečtu"
+    parameter_name = "ma_foto"
+
+    def lookups(self, request, model_admin):
+        return (("1", "s fotkou"), ("0", "bez fotky"))
+
+    def queryset(self, request, queryset):
+        if self.value() == "1":
+            return queryset.exclude(photo="").exclude(photo__isnull=True)
+        if self.value() == "0":
+            return queryset.filter(Q(photo="") | Q(photo__isnull=True))
+        return queryset
+
+
 @admin.register(MeterReading)
 class MeterReadingAdmin(PodlePronajimatele, DefaultToCurrentPeriodMixin, ModelAdmin):
     cesta_k_arealu = "meter__site"
     list_display = ("meter_colored", "period", "reading_date", "value", "reset_from_value",
-                    "created_by")
+                    "ma_foto", "created_by")
     list_select_related = ("meter", "period")
-    list_filter = ("meter__site", "meter__meter_type", "period", _PeriodDefaultMarkerFilter)
+    list_filter = ("meter__site", "meter__meter_type", "period", _PeriodDefaultMarkerFilter,
+                   _MaFotoFilter)
     search_fields = ("meter__code", "meter__name")
     autocomplete_fields = ("meter",)
     readonly_fields = ("created_by",)
+
+    @display(description="Foto", boolean=True, ordering="photo")
+    def ma_foto(self, obj):
+        """Jestli u odectu visi fotka. Cte se primo z radku (pole photo),
+        takze zadny dotaz navic - na R2 se nesaha, jen se kouka, jestli je
+        vyplnene jmeno souboru. Daniel 2026-09-01."""
+        return bool(obj.photo)
 
     def save_model(self, request, obj, form, change):
         """Kdo odecet zapsal - vyplni se jen pri zalozeni.
