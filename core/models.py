@@ -1978,6 +1978,90 @@ class CostEntry(models.Model):
             "count": len(entries),
         }
 
+    #: O kolik se smi cena z Ceniku lisit od ceny ze skutecnych faktur,
+    #: nez se to nahlasi. 25 % pokryje bezne kolisani ceny energii mezi
+    #: mesici, ale radovy omyl (100 Kc/kWh misto 4,83) neprojde.
+    TOLERANCE_CENY = Decimal("0.25")
+
+    @classmethod
+    def realizovana_cena(cls, service_item, do_obdobi=None):
+        """Skutecna cena za jednotku z poslednich faktur, nebo (None, None).
+
+        Bere nejnovejsi obdobi (nejvyse `do_obdobi`), ve kterem jsou u VSECH
+        nakladu polozky vyplnene jednotky i castka - z nich soucet Kc deleny
+        souctem jednotek. Prumeruje se pres dodavatele zamerne: elektrina FM
+        chodi ze dvou EAN s ruznou cenou (TEDOM ~5,16, SZYPKA ~2,07 Kc/kWh)
+        a smysl ma cena za celou dodavku.
+
+        Slouzi ke kontrole Ceniku, ktery se pouzije, kdyz u nakladu chybi
+        castka - viz `cenik_mimo`.
+        """
+        naklady = cls.objects.filter(
+            service_item=service_item,
+            amount_units__isnull=False, amount_czk__isnull=False,
+        ).select_related("period")
+        if do_obdobi is not None:
+            naklady = naklady.filter(
+                models.Q(period__year__lt=do_obdobi.year)
+                | models.Q(period__year=do_obdobi.year,
+                           period__month__lte=do_obdobi.month)
+            )
+        podle_obdobi = {}
+        for ce in naklady:
+            podle_obdobi.setdefault(ce.period, []).append(ce)
+        for obdobi in sorted(podle_obdobi, key=lambda o: (o.year, o.month), reverse=True):
+            radky = podle_obdobi[obdobi]
+            # obdobi se pocita jen cele - kdyz je jedna ze dvou faktur
+            # zadana bez mnozstvi, vyslo by z nej nesmyslne vysoke Kc/j
+            if cls.objects.filter(service_item=service_item, period=obdobi).count() != len(radky):
+                continue
+            jednotky = sum((ce.amount_units for ce in radky), Decimal("0"))
+            if jednotky > 0:
+                castka = sum((ce.amount_czk for ce in radky), Decimal("0"))
+                return (castka / jednotky).quantize(Decimal("0.0001")), obdobi
+        return None, None
+
+    @classmethod
+    def cenik_mimo(cls, service_item, period, entries=None, price_cache=None):
+        """Hlida cenu z Ceniku proti cene ze skutecnych faktur.
+
+        Kdyz u nakladu chybi castka v Kc, dopocita se z Ceniku - a nikde se
+        pak nepozna, ze cena v Ceniku byla zastarala nebo jen zkusmo zadana.
+        Presne to se stalo v 08/2026: u FM zustala v Ceniku elektrina za
+        100 Kc/kWh (skutecnych 4,83), Daniel zadal jen kWh a vyuctovani
+        vyslo 761 500 Kc misto 36 000 (Daniel 2026-09-01).
+
+        Vraci text varovani, nebo None kdyz je vse v poradku. Kontroluje se
+        jen tam, kde je s cim porovnavat: polozka fakturovana vzdycky jen
+        v jednotkach (teplo NJ - pelety) zadnou skutecnou cenu nema a
+        varovani nedostane.
+        """
+        if entries is None:
+            entries = list(cls.objects.filter(service_item=service_item, period=period))
+        # cena z Ceniku se uplatni jen u nakladu bez castky a bez vlastni ceny
+        if not any(ce.amount_czk is None and ce.amount_units is not None
+                   and ce.price_per_unit is None for ce in entries):
+            return None
+        cena_cenik = PriceList.get_price_for_period(
+            service_item, period, price_cache=price_cache)
+        if not cena_cenik:
+            return None
+        cena_skutecna, obdobi = cls.realizovana_cena(service_item, do_obdobi=period)
+        if cena_skutecna is None or cena_skutecna <= 0:
+            return None
+        odchylka = abs(cena_cenik - cena_skutecna) / cena_skutecna
+        if odchylka <= cls.TOLERANCE_CENY:
+            return None
+        # Decimal.normalize() by ze 100.0000 udelalo "1E+2"
+        cislo = lambda d: ("%f" % d).rstrip("0").rstrip(".").replace(".", ",")
+        return (
+            "cena {} Kč/j z Ceníku se {}× liší od ceny ze skutečných faktur "
+            "({} Kč/j podle {}). Náklad je zadaný jen v jednotkách, takže se "
+            "počítá z Ceníku - zkontroluj, jestli nechybí částka v Kč."
+        ).format(cislo(cena_cenik),
+                 cislo((cena_cenik / cena_skutecna).quantize(Decimal("0.1"))),
+                 cislo(cena_skutecna), obdobi)
+
     _tracked_fields = ("period_id", "amount_units", "amount_czk", "note")
 
     def clean(self):

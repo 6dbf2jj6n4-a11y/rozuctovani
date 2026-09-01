@@ -3377,6 +3377,7 @@ class PeriodAdmin(ModelAdmin):
             missing_cost = []
             missing_price = []
             stale_price = []
+            spatna_cena = []
 
             for item in pronajimatele.omez(
                     ServicePoolItem.objects, "site", request).select_related("site"):
@@ -3404,6 +3405,10 @@ class PeriodAdmin(ModelAdmin):
                     .order_by("-period__year", "-period__month")
                     .first()
                 )
+                mimo = CostEntry.cenik_mimo(item, period, entries=item_costs)
+                if mimo:
+                    spatna_cena.append((item, mimo))
+
                 if price_entry is None:
                     missing_price.append(item)
                 elif price_entry.period_id != period.id:
@@ -3428,6 +3433,10 @@ class PeriodAdmin(ModelAdmin):
                     f"{label}: má zadané jednotky, ale chybí jakákoliv cena v Ceníku: {names}",
                     level=messages.WARNING,
                 )
+            for item, text in spatna_cena:
+                self.message_user(
+                    request, f"{label}: {item} - {text}", level=messages.ERROR,
+                )
             if stale_price:
                 text = "; ".join(
                     f"{item} (cena naposledy nastavena {price_period}, {age} měs. zpět)"
@@ -3437,7 +3446,7 @@ class PeriodAdmin(ModelAdmin):
                     request, f"{label}: platné ceny z dřívějška - zkontroluj, jestli se nezměnily: {text}",
                     level=messages.INFO,
                 )
-            if not (missing_cost or missing_price or stale_price):
+            if not (missing_cost or missing_price or stale_price or spatna_cena):
                 self.message_user(
                     request, f"{label}: vše zadané, nic nechybí.", level=messages.SUCCESS
                 )

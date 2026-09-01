@@ -645,12 +645,30 @@ def calculate_period(period, site=None):
             if item_costs:
                 total_cost = cost_totals["czk"]
                 if total_cost is None:
-                    warnings.append(
-                        f"{service_item} / {period}: náklad je zadaný v jednotkách, ale chybí "
-                        f"cena v Ceníku - položka vynechána."
-                    )
+                    # Rozlisit prazdny zalozeny naklad ("K DOPLNENI") od
+                    # nakladu v jednotkach bez ceny - Daniel jinak hleda
+                    # chybejici cenu v Ceniku u polozky, kde neni zadana
+                    # ani castka, ani mnozstvi.
+                    if all(ce.amount_units is None and ce.amount_czk is None
+                           for ce in item_costs):
+                        warnings.append(
+                            f"{service_item} / {period}: náklad je založený, ale prázdný "
+                            f"(bez částky i množství) - položka vynechána."
+                        )
+                    else:
+                        warnings.append(
+                            f"{service_item} / {period}: náklad je zadaný v jednotkách, ale chybí "
+                            f"cena v Ceníku - položka vynechána."
+                        )
                     continue
                 cost_source = "naklad_za_obdobi"
+                # Cena z Ceniku se uplatni potichu - kdyz je zastarala nebo
+                # zkusmo zadana, vyuctovani vyjde radove vedle a nic to
+                # nenahlasi (FM elektro 08/2026: 100 Kc/kWh misto 4,83).
+                mimo = CostEntry.cenik_mimo(
+                    service_item, period, entries=item_costs, price_cache=price_cache)
+                if mimo:
+                    warnings.append(f"{service_item} / {period}: {mimo}")
             elif service_item.default_amount_czk is not None:
                 total_cost = service_item.default_amount_czk
                 cost_source = "vychozi_castka_polozky"
