@@ -72,6 +72,15 @@ ABSOLUTE_AMOUNT_TYPES = (
 )
 
 
+def _polozka_ma_meridlo(service_item, cache=None):
+    """Ma polozka hlavni meridlo, ze ktereho jde vzit spotreba?
+
+    Samo `service_item.meter` nestaci - muze to byt meridlo zalozene jen
+    kvuli popisku vahy, bez jedineho odectu a bez vzorce."""
+    return (service_item.meter is not None
+            and _meter_provides_consumption(service_item.meter, cache=cache))
+
+
 def _meter_provides_consumption(meter, cache=None):
     """Rozliší meridlo skutecne pouzivane pro rozpocet spotreby (realne s
     odecty, nebo virtualni se vzorcem) od meridla napojeneho na klic typu
@@ -339,7 +348,15 @@ def _consumption_shares(
         else:
             weight_keys.append(key)
 
-    main_meter = service_item.meter
+    # Hlavni meridlo se bere jen tehdy, kdyz opravdu nese spotrebu.
+    # Nektera meridla existuji jen kvuli popisku "Co je vahou" (SNIH -
+    # virtualni, prazdny vzorec, jednotka Kc, vaha m2) a zadny odecet
+    # nikdy mit nebudou - pres ne by se cela polozka vyradila jako
+    # "chybi odecet". U klicu se tohle rozliseni delalo uz drive
+    # (viz _meter_provides_consumption), na hlavni meridlo polozky se
+    # zapomnelo. Viz Daniel 2026-09-05.
+    main_meter = service_item.meter if _polozka_ma_meridlo(
+        service_item, cache=meter_provides_cache) else None
     if main_meter is not None:
         total_consumption = main_meter.consumption_for(period, readings_cache=readings_cache)
         if total_consumption is None:
@@ -732,12 +749,27 @@ def calculate_period(period, site=None):
                     remaining_cost -= amount
 
             if remaining_cost < 0:
-                warnings.append(
-                    f"{service_item} / {period}: pevné částky odečítané ze společného nákladu "
-                    f"překračují celkový náklad ({total_cost} Kč) - přebytek se nerozpočítává "
-                    f"ostatním kartám (jen informativní hláška, zvaž u některých klíčů vypnout "
-                    f"'Odečíst z celkového nákladu')."
-                )
+                # Decimal("0E-7") se do hlasky tiskl doslova (0 kWh krat cena
+                # z Ceniku) - cislo musi byt citelne. Nulovy naklad je navic
+                # jina situace nez maly naklad: nic se nespotrebovalo, ale
+                # pausaly se stejne vyuctuji, a to je potreba rict primo.
+                # Viz Daniel 2026-09-05.
+                castka = f"{total_cost.quantize(Decimal('0.01'))} Kč".replace(".", ",")
+                pausaly = f"{(-remaining_cost).quantize(Decimal('0.01'))}".replace(".", ",")
+                if total_cost == 0:
+                    warnings.append(
+                        f"{service_item} / {period}: náklad za období je nulový, ale karty "
+                        f"mají pevné částky za {pausaly} Kč - ty se vyúčtují i tak. Pokud se "
+                        f"paušál v měsíci bez spotřeby platit nemá, omez platnost těch klíčů "
+                        f"na sezónu (Platí od / Platí do)."
+                    )
+                else:
+                    warnings.append(
+                        f"{service_item} / {period}: pevné částky odečítané ze společného nákladu "
+                        f"překračují celkový náklad ({castka}) - přebytek se nerozpočítává "
+                        f"ostatním kartám (jen informativní hláška, zvaž u některých klíčů vypnout "
+                        f"'Odečíst z celkového nákladu')."
+                    )
                 # Prebytek se nerozpocitava jako "sleva" spotrebovym kartam.
                 remaining_cost = Decimal("0")
 
@@ -751,7 +783,7 @@ def calculate_period(period, site=None):
                 k.meter_id is not None and _meter_provides_consumption(k.meter, cache=meter_provides_cache)
                 for k in valid_keys if k.allocation_type not in ABSOLUTE_AMOUNT_TYPES
             )
-            if service_item.meter or has_meter_keys:
+            if _polozka_ma_meridlo(service_item, cache=meter_provides_cache) or has_meter_keys:
                 shares, total_consumption = _consumption_shares(
                     service_item, period, warnings,
                     meter_provides_cache=meter_provides_cache, readings_cache=readings_cache,
@@ -804,7 +836,7 @@ def calculate_period(period, site=None):
                     # _consumption_shares) neni jedno spolecne meridlo, ze
                     # ktereho by sla vzit jednotka - vezme se z prvniho
                     # klice s napojenym meridlem, jinak zustane prazdna.
-                    if service_item.meter:
+                    if _polozka_ma_meridlo(service_item, cache=meter_provides_cache):
                         unit_of_measure = service_item.meter.unit_of_measure
                     else:
                         key_with_meter = next((k for k in valid_keys if k.meter_id), None)
