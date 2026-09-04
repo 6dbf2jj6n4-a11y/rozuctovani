@@ -1,0 +1,33 @@
+{% comment %}
+Pruh nad tabulkou Klientu (ClientAdmin.list_before_template): tlacitko
+mesicni kontroly rizik v ARES + vysvetlivky barev.
+
+Unfold tuhle sablonu vklada JESTE PRED <form id="changelist-form">, takze
+zdejsi <form> nekonci vnoreny v hromadnych akcich (to byla past u Obdobi,
+kde vnoreny formular odesilal hromadnou akci vcetne mazani).
+
+Pozor: viceradkovy komentar MUSI byt {% comment %}, ne {# #} - to plati
+jen na jeden radek a jinak se vypise na stranku.
+{% endcomment %}
+{% if muze_menit_klienty %}
+    {% comment %}
+    Rozvrzeni radku je v inline stylu, ne v Tailwind tridach: predkompilovane
+    CSS Unfoldu obsahuje jen tridy, ktere sam pouziva (napr. gap-x-6 z
+    vysvetlivek pod tim v nem vubec neni). Vlastni tridu ma jen tlacitko
+    (rx-btn z core/static/core/css/buttons.css), ktera je nase.
+    {% endcomment %}
+    <form method="post" action="{% url 'admin:core_client_kontrola_rizik' %}"
+          style="display:flex; flex-wrap:wrap; align-items:center; gap:12px; margin-bottom:16px;"
+          onsubmit="var b = this.querySelector('button'); setTimeout(function () { b.disabled = true; b.style.opacity = '0.6'; b.innerHTML = 'Kontroluji v ARES…'; }, 0);">
+        {% csrf_token %}
+        <button type="submit" class="rx-btn">
+            <span class="material-symbols-outlined md-18">gpp_maybe</span>
+            Zkontrolovat rizika (ARES)
+        </button>
+        <span style="color:#999; font-size:13px;">
+            Likvidace a insolvence u všech aktivních klientů s IČO (napříč pronajímateli).
+            Chvíli to trvá – ARES se ptáme na každého zvlášť.
+        </span>
+    </form>
+{% endif %}
+{% include "admin/core/client/legenda.html" %}

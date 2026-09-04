@@ -25,4 +25,9 @@ ENV PGHOST_DEFAULT=postgres.railway.internal
 # i bezne seznamy. Viz konverzace s Danielem - "uplne vsechno pomale"
 # i po vypnuti DEBUG (druha pricina byl chybejici CONN_MAX_AGE, viz
 # config/settings.py).
-CMD echo "PGHOST=$PGHOST PGUSER=$PGUSER" && python manage.py migrate --noinput && python manage.py ensure_superuser && python manage.py collectstatic --noinput && gunicorn config.wsgi:application --bind 0.0.0.0:${PORT:-8000} --workers 3 --threads 2 --worker-class gthread
+#
+# --timeout 300: gunicorn defaultne utne request po 30 s. Tlacitko
+# "Zkontrolovat rizika (ARES)" nad seznamem Klientu se pta ARESu na
+# kazdeho klienta zvlast (viz core/rizika.py), takze bezne bezi dele -
+# s 30 s by worker spadl a uzivatel by videl jen 502.
+CMD echo "PGHOST=$PGHOST PGUSER=$PGUSER" && python manage.py migrate --noinput && python manage.py ensure_superuser && python manage.py collectstatic --noinput && gunicorn config.wsgi:application --bind 0.0.0.0:${PORT:-8000} --workers 3 --threads 2 --worker-class gthread --timeout 300

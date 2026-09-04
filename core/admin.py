@@ -16,7 +16,7 @@ except admin.sites.NotRegistered:
 from django import forms
 from unfold.decorators import display
 from unfold.widgets import UnfoldBooleanSwitchWidget
-from . import pronajimatele
+from . import pronajimatele, rizika
 from .admin_mixins import ModelAdmin, TabularInline
 
 from .models import (
@@ -1029,13 +1029,21 @@ class ClientAdmin(PodlePronajimatele, ModelAdmin):
     BARVA_RIZIKO = "#dc2626"
     BARVA_PRONAJIMATEL = "#ca8a04"
 
-    list_before_template = "admin/core/client/legenda.html"
+    # Pruh nad tabulkou: tlacitko "Zkontrolovat rizika (ARES)" + vysvetlivky
+    # barev. Unfold tuhle sablonu vklada JESTE PRED <form id="changelist-form">
+    # (viz unfold/templates/admin/change_list.html), takze vlastni <form>
+    # tlacitka se do hromadnych akci nezanori - na rozdil od Obdobi, kde
+    # vnoreny formular odesilal hromadnou akci.
+    list_before_template = "admin/core/client/nad_seznamem.html"
 
     def changelist_view(self, request, extra_context=None):
         """Preda vysvetlivce stejne barvy, jakymi se obarvuji nazvy."""
         extra_context = extra_context or {}
         extra_context["barva_riziko"] = self.BARVA_RIZIKO
         extra_context["barva_pronajimatel"] = self.BARVA_PRONAJIMATEL
+        # Tlacitko kontroly rizik prepisuje udaje klientu - kdo nema pravo
+        # menit, at ho ani nevidi (view samo si to hlida znovu).
+        extra_context["muze_menit_klienty"] = self.has_change_permission(request)
         return super().changelist_view(request, extra_context)
 
     def _is_risky(self, obj):
@@ -1111,8 +1119,45 @@ class ClientAdmin(PodlePronajimatele, ModelAdmin):
                 self.admin_site.admin_view(self.report_kontakty_view),
                 name="core_client_report_kontakty",
             ),
+            path(
+                "kontrola-rizik/",
+                self.admin_site.admin_view(self.kontrola_rizik_view),
+                name="core_client_kontrola_rizik",
+            ),
         ]
         return custom + urls
+
+    def kontrola_rizik_view(self, request):
+        """Tlacitko nad seznamem Klientu - totez, co mesicni prikaz
+        `python manage.py zkontrolovat_rizika`, jen s vysledkem na strance
+        a s odkazy primo na dotcene klienty.
+
+        Kontroluji se VSICHNI aktivni klienti s ICO, napric pronajimateli
+        (stejne jako prikaz) - je to udrzbova akce, ne report, a nemelo by
+        smysl ji poustet zvlast za kazdeho pronajimatele.
+
+        Jen POST: kontrola prepisuje nazvy klientu a insolvency_status,
+        takze se nesmi dat spustit pouhym otevrenim odkazu (nacteni
+        z historie, predvybirani odkazu prohlizecem apod.).
+        """
+        from django.core.exceptions import PermissionDenied
+        from django.shortcuts import redirect, render
+
+        if not self.has_change_permission(request):
+            raise PermissionDenied
+
+        if request.method != "POST":
+            return redirect("admin:core_client_changelist")
+
+        vysledek = rizika.zkontrolovat()
+        context = {
+            **self.admin_site.each_context(request),
+            "title": "Kontrola rizik v ARES",
+            "opts": self.model._meta,
+            "je_neco_k_reseni": rizika.je_neco_k_reseni(vysledek),
+            **vysledek,
+        }
+        return render(request, "admin/core/client/kontrola_rizik.html", context)
 
     def report_kontakty_view(self, request):
         """Report (Reporty v menu): jednoduchy seznam aktivnich klientu

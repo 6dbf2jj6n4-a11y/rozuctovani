@@ -1,0 +1,126 @@
+{% extends "admin/base_site.html" %}
+
+{% comment %}
+Vysledek kontroly rizik v ARES (ClientAdmin.kontrola_rizik_view) - totez,
+co vypise `python manage.py zkontrolovat_rizika`, jen s odkazy na klienty.
+
+Nahore jsou veci, ktere chteji reakci ("NOVE zjisteno"), pod nimi uz jen
+stav a informativni poznamky.
+{% endcomment %}
+
+{% block content %}
+<div style="max-width:900px;">
+
+    {% if je_neco_k_reseni %}
+        <p style="margin-bottom:20px; padding:10px 14px; border-left:4px solid #dc2626; background:rgba(220,38,38,0.08); font-size:14px;">
+            Objevilo se nové riziko – projdi červené sekce níže.
+        </p>
+    {% else %}
+        <p style="margin-bottom:20px; padding:10px 14px; border-left:4px solid #16a34a; background:rgba(22,163,74,0.08); font-size:14px;">
+            Žádné nové riziko. Nic nového k řešení.
+        </p>
+    {% endif %}
+
+    {% if nove_likvidace %}
+        <h2 style="color:#dc2626; font-size:16px; margin:24px 0 8px;">
+            NOVĚ zjištěno „v likvidaci“ ({{ nove_likvidace|length }})
+        </h2>
+        <p style="color:#999; font-size:13px; margin-bottom:8px;">
+            Název klienta byl přepsán na aktuální znění z ARES, klient se teď v seznamu
+            zvýrazní červeně.
+        </p>
+        <ul style="font-size:14px; line-height:1.7;">
+            {% for client, puvodni, novy in nove_likvidace %}
+                <li>
+                    <a href="{% url 'admin:core_client_change' client.pk %}">{{ novy }}</a>
+                    <span style="color:#999;">(dříve {{ puvodni }}, IČO {{ client.ico }})</span>
+                </li>
+            {% endfor %}
+        </ul>
+    {% endif %}
+
+    {% if nove_insolvence %}
+        <h2 style="color:#dc2626; font-size:16px; margin:24px 0 8px;">
+            NOVĚ zjištěno AKTIVNÍ insolvenční řízení ({{ nove_insolvence|length }})
+        </h2>
+        <p style="color:#999; font-size:13px; margin-bottom:8px;">
+            Detail spisu dohledej ručně v
+            <a href="https://isir.justice.cz/isir/common/index.do" target="_blank" rel="noopener">insolvenčním rejstříku</a>
+            (hledej podle IČO) a projdi u těchto klientů platební morálku a smlouvu.
+        </p>
+        <ul style="font-size:14px; line-height:1.7;">
+            {% for client in nove_insolvence %}
+                <li>
+                    <a href="{% url 'admin:core_client_change' client.pk %}">{{ client.name }}</a>
+                    <span style="color:#999;">(IČO {{ client.ico }})</span>
+                </li>
+            {% endfor %}
+        </ul>
+    {% endif %}
+
+    {% if vyresene_insolvence %}
+        <h2 style="color:#ca8a04; font-size:16px; margin:24px 0 8px;">
+            Insolvenční řízení už není aktivní ({{ vyresene_insolvence|length }})
+        </h2>
+        <ul style="font-size:14px; line-height:1.7;">
+            {% for client in vyresene_insolvence %}
+                <li><a href="{% url 'admin:core_client_change' client.pk %}">{{ client.name }}</a></li>
+            {% endfor %}
+        </ul>
+    {% endif %}
+
+    {% if drive_likvidace %}
+        <h2 style="font-size:16px; margin:24px 0 8px;">
+            Už dříve označeno „v likvidaci“ ({{ drive_likvidace|length }})
+        </h2>
+        <ul style="font-size:14px; line-height:1.7;">
+            {% for client in drive_likvidace %}
+                <li><a href="{% url 'admin:core_client_change' client.pk %}">{{ client.name }}</a></li>
+            {% endfor %}
+        </ul>
+    {% endif %}
+
+    {% if bez_provozovny %}
+        <h2 style="font-size:16px; margin:24px 0 8px;">
+            Informativně – OSVČ bez aktivní provozovny ({{ bez_provozovny|length }})
+        </h2>
+        <p style="color:#999; font-size:13px; margin-bottom:8px;">
+            Není to riziko samo o sobě – spousta OSVČ podniká bez registrované provozovny.
+            Může to ale být kontext k likvidaci nebo insolvenci.
+        </p>
+        <ul style="font-size:14px; line-height:1.7;">
+            {% for client, zanikle in bez_provozovny %}
+                <li>
+                    <a href="{% url 'admin:core_client_change' client.pk %}">{{ client.name }}</a>
+                    <span style="color:#999;">(0 aktivních, {{ zanikle }} zaniklých)</span>
+                </li>
+            {% endfor %}
+        </ul>
+    {% endif %}
+
+    {% if nenalezeno %}
+        <h2 style="font-size:16px; margin:24px 0 8px;">
+            Nenalezeno v ARES ({{ nenalezeno|length }})
+        </h2>
+        <p style="color:#999; font-size:13px; margin-bottom:8px;">
+            Nejspíš překlep v IČO nebo dočasně nedostupný ARES – zkontrolovat nešli.
+        </p>
+        <ul style="font-size:14px; line-height:1.7;">
+            {% for client in nenalezeno %}
+                <li>
+                    <a href="{% url 'admin:core_client_change' client.pk %}">{{ client.name }}</a>
+                    <span style="color:#999;">(IČO {{ client.ico }})</span>
+                </li>
+            {% endfor %}
+        </ul>
+    {% endif %}
+
+    <p style="color:#999; font-size:13px; margin-top:28px;">
+        Zkontrolováno {{ zkontrolovano }} aktivních klientů s IČO.
+    </p>
+
+    <p style="margin-top:20px;">
+        <a href="{% url 'admin:core_client_changelist' %}" class="rx-btn">Zpět na seznam klientů</a>
+    </p>
+</div>
+{% endblock %}
