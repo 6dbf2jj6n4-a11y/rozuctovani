@@ -3937,6 +3937,7 @@ def _format_kc(value, decimals=2):
 ZDROJ_FAKTURA = "faktura"
 ZDROJ_CENA_NA_NAKLADU = "cena na nákladu"
 ZDROJ_CENIK = "Ceník"
+ZDROJ_CENIK_ODHAD = "předběžná cena v Ceníku"
 
 
 def _zdroj_castky(cost_entry):
@@ -3953,9 +3954,9 @@ def _zdroj_castky(cost_entry):
     if cost_entry.amount_units:
         if cost_entry.price_per_unit is not None:
             return cost_entry.price_per_unit, ZDROJ_CENA_NA_NAKLADU
-        cena = PriceList.get_price_for_period(cost_entry.service_item, cost_entry.period)
-        if cena:
-            return cena, ZDROJ_CENIK
+        radek = PriceList.radek_pro_obdobi(cost_entry.service_item, cost_entry.period)
+        if radek and radek.price_per_unit:
+            return radek.price_per_unit, (ZDROJ_CENIK_ODHAD if radek.is_estimate else ZDROJ_CENIK)
     return None, None
 
 
@@ -3967,16 +3968,22 @@ def _efektivni_cena_za_jednotku(cost_entry):
 
 
 def _s_odhadem(text, zdroj):
-    """Dopoctenou hodnotu odlisi barvou a stitkem se zdrojem."""
+    """Odlisi castku, ktera stoji na PREDBEZNE cene.
+
+    Dopocet z Ceniku sam o sobe odhad NENI - u vody se fakturovane m3
+    proste vynasobi sjednanou cenou a je to stejne presne jako castka
+    z faktury. Odhad je az to, co stoji na cene oznacene v Ceniku jako
+    "Predbezna". Viz Daniel 2026-09-04."""
     from django.utils.html import format_html
 
-    if zdroj in (None, ZDROJ_FAKTURA):
+    if zdroj != ZDROJ_CENIK_ODHAD:
         return text
     return format_html(
-        '<span style="color:#a70;" title="Není z faktury - dopočítáno z {}. '
-        'Až přijde faktura, zadej částku v Kč a přepíše to.">{} '
-        '<span style="font-size:11px; opacity:.85;">odhad ({})</span></span>',
-        zdroj, text, zdroj,
+        '<span style="color:#a70;" title="Stojí na předběžné ceně v Ceníku - '
+        'skutečná faktura ještě nepřišla. Až dorazí, zadej částku v Kč '
+        '(nebo oprav cenu v Ceníku a odškrtni „Předběžná cena“).">{} '
+        '<span style="font-size:11px; opacity:.85;">odhad</span></span>',
+        text,
     )
 
 
@@ -4355,7 +4362,8 @@ class CostEntryAdmin(PodlePronajimatele, DefaultToCurrentPeriodMixin, ModelAdmin
     cesta_k_arealu = "service_item__site"
 
     list_display = (
-        "trida", "service_item", "supplier", "period", "amount_units", "amount_czk",
+        "trida", "service_item", "zadava_se", "supplier", "period",
+        "amount_units", "amount_czk",
         "jednotka", "kc_za_jednotku", "amount_czk_display",
     )
     list_select_related = ("service_item", "service_item__meter", "service_item__site", "period")
@@ -4367,6 +4375,58 @@ class CostEntryAdmin(PodlePronajimatele, DefaultToCurrentPeriodMixin, ModelAdmin
     )
     search_fields = ("note", "service_item__name")
     list_after_template = "admin/core/costentry/default_amount_items.html"
+
+    @admin.display(description="Zadává se", ordering="service_item__cost_in_units")
+    def zadava_se(self, obj):
+        from django.utils.html import format_html
+
+        if obj.service_item.cost_in_units:
+            return format_html(
+                '<span title="Dodavatel fakturuje množství. Vyplň Fakturované '
+                'množství; Částku jen když ji faktura uvádí - jinak se dopočítá '
+                'cenou z Ceníku.">množství</span>')
+        return format_html(
+            '<span style="opacity:.75;" title="Služba se fakturuje rovnou částkou. '
+            'Vyplň jen Částku (Kč). Nula je platná odpověď - znamená, že za tohle '
+            'období služba nic nestála.">jen částka</span>')
+
+    def get_fields(self, request, obj=None):
+        """Ve formulari se ukazou jen pole, ktera u te polozky maji smysl -
+        u sluzby fakturovane castkou nema Fakturovane mnozstvi ani cena za
+        jednotku co delat. Daniel 2026-09-04: "musi byt jasne, co u ktere
+        polozky zadavam"."""
+        pole = list(super().get_fields(request, obj))
+        v_jednotkach = obj.service_item.cost_in_units if obj and obj.service_item_id else True
+        if not v_jednotkach:
+            for skryt in ("amount_units", "unit_of_measure", "price_per_unit",
+                          "kontrola_cena_za_jednotku"):
+                if skryt in pole:
+                    pole.remove(skryt)
+        return pole
+
+    def get_changelist_form(self, request, **kwargs):
+        """V hromadnem zadavani (list_editable) se pole Fakturovane mnozstvi
+        u castkovych polozek zamkne - jinak by slo do radku, kam nepatri,
+        cislo napsat a chyba by se ukazala az pri ulozeni. Zamyka se pres
+        `disabled` na POLI (ne jen na widgetu): Django pak hodnotu z POSTu
+        ignoruje a nechá puvodni, takze se nedá obejit ani rucne."""
+        zaklad = super().get_changelist_form(request, **kwargs)
+
+        class Formular(zaklad):
+            def __init__(self, *args, **kwargs_f):
+                super().__init__(*args, **kwargs_f)
+                polozka = getattr(self.instance, "service_item", None)
+                if (polozka is not None and not polozka.cost_in_units
+                        and "amount_units" in self.fields):
+                    pole = self.fields["amount_units"]
+                    pole.disabled = True
+                    pole.widget.attrs["title"] = (
+                        "Tahle služba se fakturuje rovnou částkou - množství se u ní "
+                        "nezadává."
+                    )
+                    pole.widget.attrs["style"] = "opacity:.35;"
+
+        return Formular
 
     def changelist_view(self, request, extra_context=None):
         extra_context = extra_context or {}

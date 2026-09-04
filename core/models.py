@@ -1473,6 +1473,17 @@ class ServicePoolItem(models.Model):
             "zadaný, má vždy přednost před touto výchozí částkou."
         ),
     )
+    cost_in_units = models.BooleanField(
+        "Náklad se zadává v jednotkách", default=False,
+        help_text=(
+            "Zapni u odběrů, kde dodavatel fakturuje MNOŽSTVÍ (kWh, m³, GJ, "
+            "kg) - do Nákladu za období se pak zadává množství a Kč se "
+            "dopočítají cenou z Ceníku, nebo se zadá i částka z faktury. "
+            "Vypnuté je u služeb, které se fakturují jen částkou (ostraha, "
+            "úklid, revize, srážkové vody) - tam pole Fakturované množství "
+            "nedává smysl a nejde vyplnit."
+        ),
+    )
     weight_unit_label = models.CharField(
         "Co je váhou (u klíčů bez měřidla)", max_length=100, blank=True,
         help_text=(
@@ -1813,6 +1824,16 @@ class PriceList(models.Model):
     price_per_unit = models.DecimalField(
         "Cena za jednotku (Kč)", max_digits=12, decimal_places=4
     )
+    is_estimate = models.BooleanField(
+        "Předběžná cena", default=False,
+        help_text=(
+            "Zaškrtni, když cena není sjednaná ani z faktury, ale jen odhad "
+            "do doby, než faktura přijde. Částky z ní dopočítané se v "
+            "Nákladech za období označí jako odhad. U cen platných celý rok "
+            "(vodné/stočné, pelety) nech vypnuté - tam je dopočet z Ceníku "
+            "normální způsob zadání, ne odhad."
+        ),
+    )
     note = models.CharField("Poznámka", max_length=300, blank=True)
 
     class Meta:
@@ -1845,6 +1866,25 @@ class PriceList(models.Model):
         super().save(*args, **kwargs)
 
     @classmethod
+    def radek_pro_obdobi(cls, service_item, period, price_cache=None):
+        """Jako get_price_for_period, ale vrati cely zaznam Ceniku.
+
+        Potreba tam, kde nestaci samo cislo - hlavne u priznaku
+        "Predbezna cena": z dopoctene castky pak jde poznat, jestli je
+        to skutecna cena, nebo jen odhad do prichodu faktury."""
+        if price_cache is not None:
+            for pl in price_cache.get(service_item.id, []):
+                if (pl.period.year, pl.period.month) <= (period.year, period.month):
+                    return pl
+            return None
+        return cls.objects.filter(
+            service_item=service_item,
+        ).filter(
+            models.Q(period__year__lt=period.year) |
+            models.Q(period__year=period.year, period__month__lte=period.month)
+        ).order_by("-period__year", "-period__month").first()
+
+    @classmethod
     def get_price_for_period(cls, service_item, period, price_cache=None):
         """
         Vrátí cenu za jednotku pro dané nebo nejbližší předchozí období.
@@ -1873,12 +1913,21 @@ class CostEntry(models.Model):
     """
     Náklady/spotřeba za období.
 
-    Pro MĚŘENÉ služby (energie):
-      - amount_units = fakturované množství od dodavatele (kWh, m³, GJ...)
-      - amount_czk nechat prázdné - Kč se vypočítá přes PriceList
-    Pro NEMĚŘENÉ služby (úklid, ostraha...):
-      - amount_czk = přímá fakturovaná částka v Kč
-      - amount_units nechat prázdné
+    Co se u které položky vyplňuje, rozhoduje
+    ServicePoolItem.cost_in_units:
+
+    ZAPNUTÉ - dodavatel fakturuje MNOŽSTVÍ (energie):
+      - amount_units = fakturované množství (kWh, m³, GJ, kg)
+      - amount_czk vyplň, jen když částku faktura uvádí; jinak nech
+        prázdné a Kč se dopočítají cenou z Ceníku
+    VYPNUTÉ - služba se fakturuje ROVNOU ČÁSTKOU (úklid, ostraha, revize,
+    srážkové vody):
+      - amount_czk = fakturovaná částka v Kč
+      - amount_units se nezadává a formulář ho ani nenabídne
+
+    Prázdné pole a nula nejsou totéž: prázdné znamená "ještě nevím"
+    (engine položku vynechá a nahlásí to), nula znamená "za tohle období
+    to nic nestálo" (rozúčtuje se nula, nic se nehlásí).
     """
     NOTE_K_DOPLNENI = "K DOPLNĚNÍ"
     service_item = models.ForeignKey(
@@ -1893,13 +1942,22 @@ class CostEntry(models.Model):
         "Fakturované množství (jednotky)",
         max_digits=14, decimal_places=3,
         null=True, blank=True,
-        help_text="Pro měřené služby: kWh, m³, GJ... od dodavatele.",
+        help_text=(
+            "Množství z faktury dodavatele (kWh, m³, GJ, kg). Jen u položek, "
+            "které mají v Zásobníku služeb zapnuté „Náklad se zadává "
+            "v jednotkách“ - u ostatních se nevyplňuje."
+        ),
     )
     amount_czk = models.DecimalField(
         "Částka (Kč)",
         max_digits=14, decimal_places=2,
         null=True, blank=True,
-        help_text="Pro neměřené služby: přímá fakturovaná částka v Kč.",
+        help_text=(
+            "Fakturovaná částka. U položek zadávaných v jednotkách ji vyplň, "
+            "jen když ji faktura uvádí - jinak nech prázdné a Kč se dopočítají "
+            "z Ceníku. Nula je platná odpověď (za tohle období nic nestálo), "
+            "prázdné pole znamená „ještě nevím“ a položka se nerozúčtuje."
+        ),
     )
     supplier = models.CharField(
         "Dodavatel / zdroj", max_length=100, blank=True,
@@ -2070,28 +2128,28 @@ class CostEntry(models.Model):
     _tracked_fields = ("period_id", "amount_units", "amount_czk", "note")
 
     def clean(self):
-        """0 v amount_units/amount_czk NENÍ totéž co prázdné pole -
-        get_amount_czk() bere `is not None`, takže amount_czk=0 by se
-        vzalo jako skutečná (a konečná) nulová částka a amount_units by
-        se vůbec nepoužilo - položka by se klientům potichu vyúčtovala
-        na 0 Kč. Kdo nemá pro tenhle záznam částku/množství, ať pole
-        nechá prázdné, ne 0 (viz konverzace s Danielem)."""
+        """0 a prázdné pole NEJSOU totéž a obojí jde zadat:
+
+        * prázdné = "ještě nevím" - engine položku za dané období vynechá
+          a nahlásí to jako varování,
+        * 0 = "vím, že to za tohle období nic nestálo" - rozúčtuje se
+          nula a nic se nehlásí.
+
+        Sezonní služby (odklizení sněhu, revize) mají v části roku
+        skutečně nulový náklad a nula je pro ně správná odpověď; dřív
+        se zakazovala, takže se musely nechávat prázdné a hlásily se
+        každý měsíc jako nezadané. Viz Daniel 2026-09-04."""
         if self.period_id and self.period.status == Period.Status.CLOSED and self._cost_data_changed():
             raise ValidationError("Období je uzavřené, náklad nejde přidat ani upravit.")
-        if self.amount_units == 0:
+        if (self.amount_units is not None and self.service_item_id
+                and not self.service_item.cost_in_units and self._cost_data_changed()):
             raise ValidationError({
                 "amount_units": (
-                    "Nezadávej 0 - pokud tahle položka fakturované množství nemá, "
-                    "nech pole prázdné."
-                )
-            })
-        if self.amount_czk == 0:
-            raise ValidationError({
-                "amount_czk": (
-                    "Nezadávej 0 - Kč se buď dopočítá z jednotek přes Ceník, nebo "
-                    "sem zadej skutečnou fakturovanou částku. Nech pole prázdné, "
-                    "pokud přímou částku nezadáváš."
-                )
+                    "U položky „%s“ se množství nezadává - fakturuje se rovnou "
+                    "částkou. Vyplň jen Částku (Kč). Kdyby ta služba měla mít "
+                    "měřené množství, zapni u položky v Zásobníku služeb "
+                    "„Náklad se zadává v jednotkách“."
+                ) % self.service_item.name
             })
 
     def _cost_data_changed(self):
