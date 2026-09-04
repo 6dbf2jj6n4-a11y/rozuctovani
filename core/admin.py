@@ -3930,18 +3930,54 @@ def _format_kc(value, decimals=2):
     return format_html('<span style="{}">{} Kč</span>', style, text)
 
 
+# Odkud se vzala castka v Kc. Faktura je jistota, zbyle dva jsou dopocet -
+# a ten je potreba v seznamu poznat na prvni pohled, jinak se odhad tvari
+# jako skutecnost (Daniel 2026-09-04: "to je ale nejaky odhad, meli
+# bychom nejak odlisit").
+ZDROJ_FAKTURA = "faktura"
+ZDROJ_CENA_NA_NAKLADU = "cena na nákladu"
+ZDROJ_CENIK = "Ceník"
+
+
+def _zdroj_castky(cost_entry):
+    """Vraci (cena_za_jednotku, zdroj) - stejnym postupem, jakym castku
+    urcuje CostEntry.get_amount_czk, aby se zobrazena cena nerozchazela
+    s tou, kterou pouzije vypocet."""
+    if cost_entry.amount_czk is not None:
+        if cost_entry.amount_units:
+            try:
+                return cost_entry.amount_czk / cost_entry.amount_units, ZDROJ_FAKTURA
+            except ZeroDivisionError:
+                pass
+        return None, ZDROJ_FAKTURA
+    if cost_entry.amount_units:
+        if cost_entry.price_per_unit is not None:
+            return cost_entry.price_per_unit, ZDROJ_CENA_NA_NAKLADU
+        cena = PriceList.get_price_for_period(cost_entry.service_item, cost_entry.period)
+        if cena:
+            return cena, ZDROJ_CENIK
+    return None, None
+
+
 def _efektivni_cena_za_jednotku(cost_entry):
     """Efektivni cena za jednotku pro CostEntry - primo z amount_czk/
     amount_units, pripadne (u merenych polozek bez primo zadaneho
-    amount_czk) z aktualne platneho Ceniku pro dane obdobi."""
-    if cost_entry.amount_units:
-        if cost_entry.amount_czk is not None:
-            try:
-                return cost_entry.amount_czk / cost_entry.amount_units
-            except ZeroDivisionError:
-                pass
-        return PriceList.get_price_for_period(cost_entry.service_item, cost_entry.period)
-    return None
+    amount_czk) z ceny na nakladu nebo z platneho Ceniku."""
+    return _zdroj_castky(cost_entry)[0]
+
+
+def _s_odhadem(text, zdroj):
+    """Dopoctenou hodnotu odlisi barvou a stitkem se zdrojem."""
+    from django.utils.html import format_html
+
+    if zdroj in (None, ZDROJ_FAKTURA):
+        return text
+    return format_html(
+        '<span style="color:#a70;" title="Není z faktury - dopočítáno z {}. '
+        'Až přijde faktura, zadej částku v Kč a přepíše to.">{} '
+        '<span style="font-size:11px; opacity:.85;">odhad ({})</span></span>',
+        zdroj, text, zdroj,
+    )
 
 
 @admin.register(ServicePoolItem)
@@ -4435,12 +4471,12 @@ class CostEntryAdmin(PodlePronajimatele, DefaultToCurrentPeriodMixin, ModelAdmin
 
     @admin.display(description="Kč/jednotka")
     def kc_za_jednotku(self, obj):
-        price = _efektivni_cena_za_jednotku(obj)
-        return _format_kc(price, decimals=4)
+        price, zdroj = _zdroj_castky(obj)
+        return _s_odhadem(_format_kc(price, decimals=4), zdroj)
 
     @admin.display(description="Částka (Kč)", ordering="amount_czk")
     def amount_czk_display(self, obj):
-        return _format_kc(obj.get_amount_czk())
+        return _s_odhadem(_format_kc(obj.get_amount_czk()), _zdroj_castky(obj)[1])
 
     @admin.display(description="Cena za jednotku (kontrola)")
     def kontrola_cena_za_jednotku(self, obj):
@@ -4451,14 +4487,14 @@ class CostEntryAdmin(PodlePronajimatele, DefaultToCurrentPeriodMixin, ModelAdmin
         chce to vidy pro kontrolu proti fakturovanemu tarifu dodavatele."""
         if obj is None or obj.pk is None:
             return "(uloží se po prvním uložení záznamu)"
-        price = _efektivni_cena_za_jednotku(obj)
-        return _format_kc(price, decimals=4)
+        price, zdroj = _zdroj_castky(obj)
+        return _s_odhadem(_format_kc(price, decimals=4), zdroj)
 
     @admin.display(description="Celková částka (kontrola)")
     def kontrola_castka_celkem(self, obj):
         if obj is None or obj.pk is None:
             return "(uloží se po prvním uložení záznamu)"
-        return _format_kc(obj.get_amount_czk())
+        return _s_odhadem(_format_kc(obj.get_amount_czk()), _zdroj_castky(obj)[1])
 
 
 @admin.register(BillingLine)
