@@ -4362,8 +4362,7 @@ class CostEntryAdmin(PodlePronajimatele, DefaultToCurrentPeriodMixin, ModelAdmin
     cesta_k_arealu = "service_item__site"
 
     list_display = (
-        "trida", "service_item", "zadava_se", "supplier", "period",
-        "amount_units", "amount_czk",
+        "trida", "service_item", "supplier", "period", "amount_units", "amount_czk",
         "jednotka", "kc_za_jednotku", "amount_czk_display",
     )
     list_select_related = ("service_item", "service_item__meter", "service_item__site", "period")
@@ -4375,20 +4374,6 @@ class CostEntryAdmin(PodlePronajimatele, DefaultToCurrentPeriodMixin, ModelAdmin
     )
     search_fields = ("note", "service_item__name")
     list_after_template = "admin/core/costentry/default_amount_items.html"
-
-    @admin.display(description="Zadává se", ordering="service_item__cost_in_units")
-    def zadava_se(self, obj):
-        from django.utils.html import format_html
-
-        if obj.service_item.cost_in_units:
-            return format_html(
-                '<span title="Dodavatel fakturuje množství. Vyplň Fakturované '
-                'množství; Částku jen když ji faktura uvádí - jinak se dopočítá '
-                'cenou z Ceníku.">množství</span>')
-        return format_html(
-            '<span style="opacity:.75;" title="Služba se fakturuje rovnou částkou. '
-            'Vyplň jen Částku (Kč). Nula je platná odpověď - znamená, že za tohle '
-            'období služba nic nestála.">jen částka</span>')
 
     def get_fields(self, request, obj=None):
         """Ve formulari se ukazou jen pole, ktera u te polozky maji smysl -
@@ -4422,9 +4407,17 @@ class CostEntryAdmin(PodlePronajimatele, DefaultToCurrentPeriodMixin, ModelAdmin
                     pole.disabled = True
                     pole.widget.attrs["title"] = (
                         "Tahle služba se fakturuje rovnou částkou - množství se u ní "
-                        "nezadává."
+                        "nezadává. Vyplň jen Částku (Kč)."
                     )
-                    pole.widget.attrs["style"] = "opacity:.35;"
+                    pole.widget.attrs["placeholder"] = "—"
+                    # Unfold da inputu bilé pozadi svou tridou, takze samotny
+                    # atribut disabled neni skoro videt - zamek musi byt na
+                    # prvni pohled jasny. Hodnota zustava citelna: nektere
+                    # starsi zaznamy mnozstvi vyplnene maji (srazkove vody NJ).
+                    pole.widget.attrs["style"] = (
+                        "background:rgba(120,120,120,.16); border-style:dashed; "
+                        "opacity:.55; cursor:not-allowed;"
+                    )
 
         return Formular
 
