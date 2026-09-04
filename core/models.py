@@ -1473,15 +1473,24 @@ class ServicePoolItem(models.Model):
             "zadaný, má vždy přednost před touto výchozí částkou."
         ),
     )
-    cost_in_units = models.BooleanField(
-        "Náklad se zadává v jednotkách", default=False,
+    class ZadaniNakladu(models.TextChoices):
+        CASTKA = "castka", "Jen částku (Kč)"
+        MNOZSTVI = "mnozstvi", "Jen množství – Kč se dopočítá z Ceníku"
+        OBOJI = "oboji", "Množství i částku z faktury"
+
+    cost_input = models.CharField(
+        "Jak se zadává náklad", max_length=20,
+        choices=ZadaniNakladu.choices, default=ZadaniNakladu.CASTKA,
         help_text=(
-            "Zapni u odběrů, kde dodavatel fakturuje MNOŽSTVÍ (kWh, m³, GJ, "
-            "kg) - do Nákladu za období se pak zadává množství a Kč se "
-            "dopočítají cenou z Ceníku, nebo se zadá i částka z faktury. "
-            "Vypnuté je u služeb, které se fakturují jen částkou (ostraha, "
-            "úklid, revize, srážkové vody) - tam pole Fakturované množství "
-            "nedává smysl a nejde vyplnit."
+            "Řídí, která pole jde u Nákladu za období vyplnit - ostatní se "
+            "zamknou.\n"
+            "• Jen částku: služby fakturované rovnou částkou (ostraha, úklid, "
+            "revize, srážkové vody).\n"
+            "• Jen množství: odběry se sjednanou cenou platnou celé období "
+            "(vodné/stočné, pelety) - zadá se jen množství a Kč se dopočítají "
+            "z Ceníku.\n"
+            "• Množství i částku: odběry, kde faktura uvádí obojí a cena se "
+            "mění po měsících (elektřina, teplo)."
         ),
     )
     weight_unit_label = models.CharField(
@@ -1914,16 +1923,17 @@ class CostEntry(models.Model):
     Náklady/spotřeba za období.
 
     Co se u které položky vyplňuje, rozhoduje
-    ServicePoolItem.cost_in_units:
+    ServicePoolItem.cost_input - druhé pole se vždycky zamkne:
 
-    ZAPNUTÉ - dodavatel fakturuje MNOŽSTVÍ (energie):
-      - amount_units = fakturované množství (kWh, m³, GJ, kg)
-      - amount_czk vyplň, jen když částku faktura uvádí; jinak nech
-        prázdné a Kč se dopočítají cenou z Ceníku
-    VYPNUTÉ - služba se fakturuje ROVNOU ČÁSTKOU (úklid, ostraha, revize,
-    srážkové vody):
-      - amount_czk = fakturovaná částka v Kč
-      - amount_units se nezadává a formulář ho ani nenabídne
+    "Jen částku" - služby fakturované rovnou částkou (ostraha, úklid,
+      revize, srážkové vody): vyplní se amount_czk.
+    "Jen množství" - odběry se sjednanou cenou platnou celé období
+      (vodné/stočné, pelety): vyplní se amount_units a Kč se dopočítají
+      cenou z Ceníku. Částka se nezadává, aby nešlo omylem přebít
+      sjednanou cenu.
+    "Množství i částku" - odběry, kde faktura uvádí obojí a cena se mění
+      po měsících (elektřina, teplo): vyplní se obojí; když částka ještě
+      není známá, nechá se prázdná a dopočítá se z Ceníku.
 
     Prázdné pole a nula nejsou totéž: prázdné znamená "ještě nevím"
     (engine položku vynechá a nahlásí to), nula znamená "za tohle období
@@ -2141,16 +2151,27 @@ class CostEntry(models.Model):
         každý měsíc jako nezadané. Viz Daniel 2026-09-04."""
         if self.period_id and self.period.status == Period.Status.CLOSED and self._cost_data_changed():
             raise ValidationError("Období je uzavřené, náklad nejde přidat ani upravit.")
-        if (self.amount_units is not None and self.service_item_id
-                and not self.service_item.cost_in_units and self._cost_data_changed()):
-            raise ValidationError({
-                "amount_units": (
-                    "U položky „%s“ se množství nezadává - fakturuje se rovnou "
-                    "částkou. Vyplň jen Částku (Kč). Kdyby ta služba měla mít "
-                    "měřené množství, zapni u položky v Zásobníku služeb "
-                    "„Náklad se zadává v jednotkách“."
-                ) % self.service_item.name
-            })
+        if self.service_item_id and self._cost_data_changed():
+            zpusob = self.service_item.cost_input
+            volby = ServicePoolItem.ZadaniNakladu
+            if self.amount_units is not None and zpusob == volby.CASTKA:
+                raise ValidationError({
+                    "amount_units": (
+                        "U položky „%s“ se množství nezadává - fakturuje se rovnou "
+                        "částkou. Vyplň jen Částku (Kč). Kdyby to tak být nemělo, "
+                        "přepni u položky v Zásobníku služeb „Jak se zadává náklad“."
+                    ) % self.service_item.name
+                })
+            if self.amount_czk is not None and zpusob == volby.MNOZSTVI:
+                raise ValidationError({
+                    "amount_czk": (
+                        "U položky „%s“ se částka nezadává - dopočítá se z množství "
+                        "cenou z Ceníku. Vyplň jen Fakturované množství. Kdyby "
+                        "faktura částku uváděla a měla se přebít, přepni u položky "
+                        "v Zásobníku služeb „Jak se zadává náklad“ na „Množství "
+                        "i částku“."
+                    ) % self.service_item.name
+                })
 
     def _cost_data_changed(self):
         """True pro novy naklad nebo pokud se u existujiciho zmenil nektery

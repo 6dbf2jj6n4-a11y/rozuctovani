@@ -3992,7 +3992,8 @@ class ServicePoolItemAdmin(PodlePronajimatele, ModelAdmin):
     cesta_k_arealu = "site"
     list_display = (
         "name", "site", "invoice_class", "unit", "meter", "jednotka",
-        "default_allocation_type", "default_amount_czk_display", "weight_unit_label",
+        "cost_input", "default_allocation_type", "default_amount_czk_display",
+        "weight_unit_label",
     )
     list_select_related = ("site", "unit", "meter")
     list_filter = ("site", "invoice_class")
@@ -4381,13 +4382,17 @@ class CostEntryAdmin(PodlePronajimatele, DefaultToCurrentPeriodMixin, ModelAdmin
         jednotku co delat. Daniel 2026-09-04: "musi byt jasne, co u ktere
         polozky zadavam"."""
         pole = list(super().get_fields(request, obj))
-        v_jednotkach = obj.service_item.cost_in_units if obj and obj.service_item_id else True
-        if not v_jednotkach:
-            for skryt in ("amount_units", "unit_of_measure", "price_per_unit",
-                          "kontrola_cena_za_jednotku"):
-                if skryt in pole:
-                    pole.remove(skryt)
-        return pole
+        if not (obj and obj.service_item_id):
+            return pole
+        volby = ServicePoolItem.ZadaniNakladu
+        zpusob = obj.service_item.cost_input
+        skryt = []
+        if zpusob == volby.CASTKA:
+            skryt = ["amount_units", "unit_of_measure", "price_per_unit",
+                     "kontrola_cena_za_jednotku"]
+        elif zpusob == volby.MNOZSTVI:
+            skryt = ["amount_czk"]
+        return [p for p in pole if p not in skryt]
 
     def get_changelist_form(self, request, **kwargs):
         """V hromadnem zadavani (list_editable) se pole Fakturovane mnozstvi
@@ -4397,27 +4402,40 @@ class CostEntryAdmin(PodlePronajimatele, DefaultToCurrentPeriodMixin, ModelAdmin
         ignoruje a nechá puvodni, takze se nedá obejit ani rucne."""
         zaklad = super().get_changelist_form(request, **kwargs)
 
+        volby = ServicePoolItem.ZadaniNakladu
+        # ktere pole se u ktereho zpusobu zamyka a proc
+        ZAMKY = {
+            volby.CASTKA: ("amount_units",
+                           "Tahle služba se fakturuje rovnou částkou - množství se "
+                           "u ní nezadává. Vyplň jen Částku (Kč)."),
+            volby.MNOZSTVI: ("amount_czk",
+                             "U téhle položky se částka nezadává - dopočítá se "
+                             "z množství cenou z Ceníku. Vyplň jen Fakturované "
+                             "množství."),
+        }
+
         class Formular(zaklad):
             def __init__(self, *args, **kwargs_f):
                 super().__init__(*args, **kwargs_f)
                 polozka = getattr(self.instance, "service_item", None)
-                if (polozka is not None and not polozka.cost_in_units
-                        and "amount_units" in self.fields):
-                    pole = self.fields["amount_units"]
-                    pole.disabled = True
-                    pole.widget.attrs["title"] = (
-                        "Tahle služba se fakturuje rovnou částkou - množství se u ní "
-                        "nezadává. Vyplň jen Částku (Kč)."
-                    )
-                    pole.widget.attrs["placeholder"] = "—"
-                    # Unfold da inputu bilé pozadi svou tridou, takze samotny
-                    # atribut disabled neni skoro videt - zamek musi byt na
-                    # prvni pohled jasny. Hodnota zustava citelna: nektere
-                    # starsi zaznamy mnozstvi vyplnene maji (srazkove vody NJ).
-                    pole.widget.attrs["style"] = (
-                        "background:rgba(120,120,120,.16); border-style:dashed; "
-                        "opacity:.55; cursor:not-allowed;"
-                    )
+                if polozka is None:
+                    return
+                zamek = ZAMKY.get(polozka.cost_input)
+                if zamek is None or zamek[0] not in self.fields:
+                    return
+                nazev, popis = zamek
+                pole = self.fields[nazev]
+                pole.disabled = True
+                pole.widget.attrs["title"] = popis
+                pole.widget.attrs["placeholder"] = "—"
+                # Unfold da inputu bilé pozadi svou tridou, takze samotny
+                # atribut disabled neni skoro videt - zamek musi byt na
+                # prvni pohled jasny. Hodnota zustava citelna: nektere
+                # starsi zaznamy vyplnene jsou (srazkove vody NJ, voda FM).
+                pole.widget.attrs["style"] = (
+                    "background:rgba(120,120,120,.16); border-style:dashed; "
+                    "opacity:.55; cursor:not-allowed;"
+                )
 
         return Formular
 
