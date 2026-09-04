@@ -555,6 +555,20 @@ def sync_card_activity(period, site=None):
         if not c.is_active and c.valid_from <= period_end and (not c.valid_to or c.valid_to >= period_start)
     ]
     for card in to_check:
+        # Neaktivni klient znamena "tenhle najem nebezi" - karta se mu
+        # nesmi zapnout sama, jinak by ho neslo vypnout: Client.save()
+        # sice pri deaktivaci klienta jeho karty zhasne, ale nejblizsi
+        # prepocet obdobi, do ktereho spada jejich platnost, by je zase
+        # rozsvitil. Typicky pripad je najemce, ktery smlouvu podepsal,
+        # ale najem nikdy nezahajil. Viz Daniel 2026-09-05.
+        if not card.client.is_active:
+            results.append((
+                "warning",
+                f"{card.client} ({card}): platnost od {card.valid_from} už začala, ale klient "
+                f"je Neaktivní - karta zůstává Neaktivní. Až nájem opravdu začne, zapni "
+                f"nejdřív klienta."
+            ))
+            continue
         conflict = card.active_card_conflict()
         if conflict is None:
             card.is_active = True
