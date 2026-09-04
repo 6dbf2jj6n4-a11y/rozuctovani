@@ -1293,15 +1293,19 @@ class SupplyPoint(models.Model):
     )
     cost_item = models.ForeignKey(
         "ServicePoolItem", null=True, blank=True, on_delete=models.SET_NULL,
-        related_name="supplies_as_cost_source", verbose_name="Náklad, ze kterého brát fakturované množství",
+        related_name="supplies_as_cost_source", verbose_name="Náklad (faktura) tohoto odběru",
         help_text=(
-            "Položka zásobníku, jejíž Fakturované množství se má přepisovat "
-            "do Přívodního měřidla (akce „Dotáhnout fakturovaná množství“ "
-            "u Období). Nastav jen u odběrů, kde se dodané množství bere "
-            "z faktury, ne z vlastního měřidla - jinak nech prázdné. "
-            "Hádat to podle areálu a třídy nejde: teplo NJ má dvě položky "
-            "(pelety a záložní elektrokotel) a u vody by se do toho připletly "
-            "srážkové vody, které v jednotkách nesou m² plochy, ne m³."
+            "Položka zásobníku, na které se za tenhle odběr účtuje. Použije "
+            "se dvakrát: v Přehledu spotřeb se její Fakturované množství "
+            "porovná s tím, co naměřilo Přívodní měřidlo, a u odběrů BEZ "
+            "vlastního odečtu (přívodní měřidlo v režimu „spotřeba“) se jím "
+            "měřidlo rovnou naplní akcí „Dotáhnout fakturovaná množství“ "
+            "u Období. Do měřidla, které se odečítá ručně (režim „stav“), "
+            "se nikdy nezapisuje - přepsalo by správcův odečet. "
+            "Hádat položku podle areálu a třídy nejde: teplo NJ má dvě "
+            "(pelety a záložní elektrokotel) a u vody by se do toho "
+            "připletly srážkové vody, které v jednotkách nesou m² plochy, "
+            "ne m³."
         ),
     )
     note = models.CharField("Poznámka", max_length=300, blank=True)

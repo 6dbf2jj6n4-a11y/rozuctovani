@@ -2726,7 +2726,7 @@ class MeterAdmin(PodlePronajimatele, DuplicateModelAdminMixin, ModelAdmin):
             # "Nezarazena". Viz konverzace s Danielem 2026-08-12.
             supplies_qs = pronajimatele.omez(
                 SupplyPoint.objects, "site", request
-            ).select_related("main_meter", "site")
+            ).select_related("main_meter", "site", "cost_item")
             if site is not None:
                 supplies_qs = supplies_qs.filter(site=site)
             supplies = list(supplies_qs)
@@ -2867,8 +2867,26 @@ class MeterAdmin(PodlePronajimatele, DuplicateModelAdminMixin, ModelAdmin):
                         if realne:
                             skutecne_pct = skutecne / realne * Decimal("100")
 
+                    # Porovnani faktury s vlastnim privodnim meridlem.
+                    # "Dodano" je nas odecet, "Fakturovano" je mnozstvi od
+                    # dodavatele - dve nezavisla cisla, ktera se dosud nedala
+                    # postavit vedle sebe (privodni meridlo bylo bud jedno,
+                    # nebo druhe). Odhali spatne opsany odecet, chybu
+                    # dodavatele i unik. Rozdil bude vzdycky nejaky, protoze
+                    # fakturacni obdobi dodavatele nesedi na kalendarni mesic
+                    # - sleduje se trend, ne jeden mesic. Daniel 2026-09-04.
+                    fakturovano = rozdil = rozdil_pct = None
+                    if sp.cost_item_id:
+                        fakturovano = CostEntry.totals_for(sp.cost_item, period)["units"]
+                    if fakturovano is not None and dodano is not None:
+                        rozdil = dodano - fakturovano
+                        if fakturovano:
+                            rozdil_pct = rozdil / fakturovano * Decimal("100")
+
                     supply_blocks.append({
                         "supply": sp, "dodano": dodano, "zakonne": zakonne,
+                        "fakturovano": fakturovano, "rozdil": rozdil,
+                        "rozdil_pct": rozdil_pct,
                         "realne": realne, "podmery": podmery, "spolecne": spolecne,
                         "vahou": vahou, "skutecne": skutecne,
                         "skutecne_pct": skutecne_pct,

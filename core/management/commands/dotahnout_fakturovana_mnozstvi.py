@@ -44,6 +44,18 @@ def dotahnout(period, write=False):
         # meridla patri jejich SOUCET, ale jen kdyz jdou secist (stejna
         # jednotka). Pri ruznych jednotkach (pelety v kg vs elektrokotel
         # v kWh) neni co zapsat.
+        # Do meridla, ktere nekdo fyzicky odecita (rezim "stav"), se
+        # fakturovane mnozstvi zapsat NESMI - prepsalo by spravcuv odecet
+        # a mesicni mnozstvi z faktury navic jako kumulativni stav nedava
+        # smysl. Presne to hrozilo u vody NJ, jakmile ji zacal Olda
+        # odecitat. Vazba na Naklad u takoveho odberu zustava - slouzi
+        # k porovnani "privod vs. faktura" v Prehledu spotreb.
+        # Viz Daniel 2026-09-04.
+        if sp.main_meter.reading_mode != sp.main_meter.ReadingMode.CONSUMPTION:
+            radek["stav"] = "přívod se odečítá ručně (režim „stav“) - nepřepisuji"
+            vysledek.append(radek)
+            continue
+
         totals = CostEntry.totals_for(sp.cost_item, period)
         if totals["count"] == 0:
             radek["stav"] = "bez fakturovaného množství"
@@ -70,6 +82,18 @@ def dotahnout(period, write=False):
         radek["koeficient"] = koef
 
         stavajici = MeterReading.objects.filter(meter=sp.main_meter, period=period).first()
+        if stavajici is not None and stavajici.created_by_id is not None:
+            # Odecet, ktery nekdo zapsal rucne, se neprepisuje - je to
+            # samostatne mereni a v Prehledu spotreb se porovnava proti
+            # fakture. Vlastni drivejsi zapisy tohohle prikazu maji
+            # "Zadal" prazdne, takze se aktualizovat porad daji.
+            # Bez teto pojistky by srpnovy odecet tepla FM (David, 1233)
+            # prepsalo fakturovanych 6 GJ. Viz Daniel 2026-09-04.
+            radek["hodnota"] = hodnota
+            radek["stav"] = "odečet zapsal {} - nepřepisuji (rozdíl vidíš v Přehledu spotřeb)".format(
+                stavajici.created_by.get_full_name() or stavajici.created_by.username)
+            vysledek.append(radek)
+            continue
         if stavajici is not None:
             if stavajici.value == hodnota:
                 radek["stav"] = "sedí, beze změny"

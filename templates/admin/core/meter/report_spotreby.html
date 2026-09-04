@@ -62,6 +62,19 @@
                                 <td style="padding:1px 8px; text-align:right;">{% if leaf.consumption != None %}{{ leaf.consumption|floatformat:3 }}{% else %}—{% endif %}</td>
                             </tr>
                         {% endfor %}
+                        {# ---- kontrola: co naměřil náš přívod vs. co přišlo na faktuře ---- #}
+                        {% if block.fakturovano != None %}
+                            <tr style="color:#888;">
+                                <td style="padding:2px 8px 2px 24px;">Fakturováno dodavatelem <span style="color:#888;">({{ block.supply.cost_item.name }})</span></td>
+                                <td style="padding:2px 8px; text-align:right;">{{ block.fakturovano|floatformat:3 }} {{ group.unit }}</td>
+                            </tr>
+                            {% if block.rozdil != None %}
+                                <tr style="{% if block.rozdil_pct >= 10 or block.rozdil_pct <= -10 %}color:#c33; font-weight:600;{% else %}color:#888;{% endif %}">
+                                    <td style="padding:2px 8px 2px 24px;">= Rozdíl přívod − faktura{% if block.rozdil_pct >= 10 or block.rozdil_pct <= -10 %} <span title="Rozdíl nad 10 % - zkontroluj odečet i fakturu. Menší rozdíly jsou běžné, fakturační období dodavatele nesedí na kalendářní měsíc.">⚠️</span>{% endif %}</td>
+                                    <td style="padding:2px 8px; text-align:right;">{{ block.rozdil|floatformat:3 }} {{ group.unit }}{% if block.rozdil_pct != None %} <span style="font-size:12px;">({{ block.rozdil_pct|floatformat:1 }} %)</span>{% endif %}</td>
+                                </tr>
+                            {% endif %}
+                        {% endif %}
                         {% if block.zakonne != None and block.pct %}
                             <tr style="color:#a70;">
                                 <td style="padding:2px 8px 2px 24px;">− Zákonné ztráty ({{ block.pct|floatformat:0 }} %)</td>
