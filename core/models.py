@@ -2208,12 +2208,16 @@ class CostEntry(models.Model):
             # Cena primo na nakladu ma prednost pred Cenikem - dodavatele
             # jedne polozky mivaji ruzne ceny (elektrina FM: TEDOM vs
             # SZYPKA), takze jedna cena v Ceniku by nestacila.
+            # Zaokrouhleni na halere je tu schvalne: bez nej vysel soucin
+            # v plne presnosti Decimalu a nulove mnozstvi se pak tisklo
+            # jako "0E-7 Kc" (0 kg pelet krat cena z Ceniku). Kc jsou
+            # penize, halere staci. Viz Daniel 2026-09-05.
             if self.price_per_unit is not None:
-                return self.amount_units * self.price_per_unit
+                return (self.amount_units * self.price_per_unit).quantize(Decimal("0.01"))
             p = period or self.period
             price = PriceList.get_price_for_period(self.service_item, p, price_cache=price_cache)
             if price:
-                return self.amount_units * price
+                return (self.amount_units * price).quantize(Decimal("0.01"))
         return None
 
 
