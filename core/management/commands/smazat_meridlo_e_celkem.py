@@ -17,13 +17,17 @@ Pred spustenim doporucuji overit bezpecnost pres
 core/management/commands/diag_klice_hlavni_elektro.py (zadny Klic
 typu "Podruzne meridlo" by na mazana meridla nemel ukazovat).
 
+POZOR: kody nejsou globalne unikatni. Bez --areal se maze na VSECH
+arealech, kde kod existuje - W_TUV je na FM i v NJ. Kdyz jde o jeden
+areal, vzdycky ho uved.
+
 Pouziti:
   python manage.py smazat_meridlo_e_celkem E_CELKEM
-  python manage.py smazat_meridlo_e_celkem E_CELKEM T_CELKEM W_CELKEM --dry-run
+  python manage.py smazat_meridlo_e_celkem W_TUV W_C1 --areal NJ --dry-run
 """
-from django.core.management.base import BaseCommand
+from django.core.management.base import BaseCommand, CommandError
 
-from core.models import Meter, ServicePoolItem
+from core.models import AllocationKey, Meter, ServicePoolItem, Site, SupplyPoint, UnitService
 
 
 class Command(BaseCommand):
@@ -31,18 +35,46 @@ class Command(BaseCommand):
 
     def add_arguments(self, parser):
         parser.add_argument("kody", nargs="+", type=str, help="Kódy měřidel, např. E_CELKEM T_CELKEM W_CELKEM")
+        parser.add_argument("--areal", help="Název areálu - bez něj se maže na všech, kde kód existuje.")
         parser.add_argument("--dry-run", action="store_true", help="Jen ukázat, co by se stalo")
 
     def handle(self, *args, **options):
         dry_run = options["dry_run"]
 
-        meters = list(Meter.objects.filter(code__in=options["kody"]))
+        qs = Meter.objects.filter(code__in=options["kody"])
+        if options["areal"]:
+            areal = Site.objects.filter(name=options["areal"]).first()
+            if areal is None:
+                raise CommandError("Areál %r neexistuje." % options["areal"])
+            qs = qs.filter(site=areal)
+        meters = list(qs)
         if not meters:
             self.stdout.write(self.style.WARNING(f"Žádné měřidlo s kódy {options['kody']} v databázi neexistuje."))
             return
 
+        # Pojistka: meridlo, ktere nekde zive visi, se nemaze. Puvodne
+        # prikaz mazal cokoliv - u odectu a Klicu je to ale ztrata dat,
+        # ktera se pozna az pri prepoctu. Viz Daniel 2026-09-04.
+        blokovana = []
         for meter in meters:
             self.stdout.write(self.style.WARNING(f"\n--- {meter} (#{meter.pk}, areál {meter.site}) ---"))
+
+            duvody = []
+            for popis, dotaz in (
+                ("Klíčů na kartách", AllocationKey.objects.filter(meter=meter)),
+                ("Výchozích služeb ploch", UnitService.objects.filter(meter=meter)),
+                ("Odběrných míst (přívodní měřidlo)", SupplyPoint.objects.filter(main_meter=meter)),
+            ):
+                pocet = dotaz.count()
+                if pocet:
+                    duvody.append(f"{popis}: {pocet}")
+            odecty = meter.readings.count()
+            if odecty:
+                self.stdout.write(f"  Smaže se s ním i {odecty} odečtů.")
+            if duvody:
+                blokovana.append(meter)
+                self.stderr.write(self.style.ERROR(
+                    "  NEMAŽU - měřidlo se používá: " + ", ".join(duvody)))
 
             items = ServicePoolItem.objects.filter(meter=meter)
             for item in items:
@@ -51,6 +83,14 @@ class Command(BaseCommand):
             children = Meter.objects.filter(parent_meter=meter)
             for child in children:
                 self.stdout.write(f"  Měřidlo '{child}' mělo {meter.code} jako Master měřidlo -> vynuluje se.")
+
+        meters = [m for m in meters if m not in blokovana]
+        if blokovana:
+            self.stderr.write(self.style.ERROR(
+                "\nVynecháno kvůli použití: " + ", ".join(m.code for m in blokovana)))
+        if not meters:
+            self.stdout.write(self.style.WARNING("\nNezbylo nic k smazání."))
+            return
 
         if dry_run:
             self.stdout.write(self.style.WARNING(f"\n--dry-run: {len(meters)} měřidel by bylo smazáno, nic se neuložilo."))
