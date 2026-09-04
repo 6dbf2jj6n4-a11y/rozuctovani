@@ -1000,7 +1000,7 @@ class Meter(models.Model):
         help_text="Pouze pro virtuální měřidla, např. E_A1+E_AB1 (kódy jiných měřidel).",
     )
     weight_unit_label = models.CharField(
-        "Co je váhou (u klíčů „Podle váhy na měřidle“)", max_length=100, blank=True,
+        "Co je váhou (u klíčů s tímto měřidlem)", max_length=100, blank=True,
         help_text=(
             "Krátký popis, co hodnota Klíče typu 'Podle váhy' napojeného na "
             "toto měřidlo znamená - např. 'm2', 'počet osob', 'počet "
@@ -1470,7 +1470,7 @@ class ServicePoolItem(models.Model):
         ),
     )
     weight_unit_label = models.CharField(
-        "Co je váhou (u klíčů „Podle váhy bez měřidla“)", max_length=100, blank=True,
+        "Co je váhou (u klíčů bez měřidla)", max_length=100, blank=True,
         help_text=(
             "Krátký popis, co hodnota Klíče typu 'Podle váhy' na téhle "
             "položce znamená - např. 'm2', 'počet osob'. Použije se jen "
@@ -1685,12 +1685,13 @@ class AllocationKey(models.Model):
     allocation_type = models.CharField(
         "Typ rozpočtu", max_length=20, choices=AllocationType.choices,
         help_text=(
-            "„Podle váhy na měřidle“ nejdřív vyřízne z položky skutečnou "
-            "spotřebu zvoleného měřidla a teprve tu rozdělí – mezi karty, "
+            "O způsobu dělení u „Podle váhy“ rozhoduje Měřidlo níže, ne typ. "
+            "S vyplněným Měřidlem se z položky nejdřív vyřízne skutečná "
+            "spotřeba toho měřidla a teprve ta se rozdělí – mezi karty, "
             "které měřidlo sdílejí, poměrem podle Hodnoty (m², osoby, kusy). "
             "Když je na měřidle karta sama, dostane celou jeho spotřebu. "
-            "„Podle váhy bez měřidla“ dělí náklad položky rovnou podle "
-            "Hodnoty, bez ohledu na to, kolik se kde skutečně naměřilo."
+            "Bez Měřidla se náklad položky dělí rovnou podle Hodnoty, bez "
+            "ohledu na to, kolik se kde skutečně naměřilo."
         ),
     )
     value = models.DecimalField(
@@ -1698,10 +1699,10 @@ class AllocationKey(models.Model):
         help_text=(
             "Význam závisí na typu: u 'Pevná částka' jde o hotovou Kč částku/měsíc, "
             "u 'Dle výměry (m2)' jde o výměru v m2 (cena/m2/rok se bere z Ceníku "
-            "položky pro dané období), u „Podle váhy na měřidle“ se použije jen pokud "
+            "položky pro dané období), u „Podle váhy“ S MĚŘIDLEM se použije jen pokud "
             "stejné měřidlo sdílí více karet - pak jde o váhu pro rozdělení jeho "
             "spotřeby mezi ně (u jedné karty na měřidlo se nepoužije, dostane celou "
-            "spotřebu). U „Podle váhy bez měřidla“ jde o libovolné relativní číslo vyjadřující "
+            "spotřebu). U „Podle váhy“ BEZ MĚŘIDLA jde o libovolné relativní číslo vyjadřující "
             "podíl na společném nákladu (m2, počet osob, počet kusů, radiátorů "
             "apod. - jednotka záleží na tom, jak položka danou spotřebu/náklad "
             "rozpočítává) - systém ho vždy normalizuje tak, aby součet všech karet "

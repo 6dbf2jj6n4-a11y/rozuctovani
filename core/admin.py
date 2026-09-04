@@ -3936,13 +3936,47 @@ class ServicePoolItemAdmin(PodlePronajimatele, ModelAdmin):
     list_select_related = ("site", "unit", "meter")
     list_filter = ("site", "invoice_class")
     search_fields = ("name",)
-    autocomplete_fields = ("unit", "meter")
+    # Meridlo je obycejny vyber, ne naseptavac: naseptavac chodi pres
+    # vlastni endpoint, ktery zna jen pronajimatele, takze nabizel
+    # meridla VSECH arealu a VSECH Trid - v polozce "voda FM" tak slo
+    # vybrat elektromer z NJ. Ve vyberu se uplatni
+    # formfield_for_foreignkey nize. Plocha naseptavacem zustava, tech
+    # je na FM pres sto. Stejny duvod jako u Klicu na Karte klienta,
+    # viz AllocationKeyInlineBase. Daniel 2026-09-04.
+    autocomplete_fields = ("unit",)
     readonly_fields = ("meridla_prehled",)
 
     def formfield_for_dbfield(self, db_field, request, **kwargs):
         if db_field.name == "invoice_class":
             return invoice_class_choice_field(db_field)
         return super().formfield_for_dbfield(db_field, request, **kwargs)
+
+    def get_form(self, request, obj=None, **kwargs):
+        # Polozka se musi zapamatovat DRIV, nez super() posklada pole -
+        # formfield_for_foreignkey nize z ni bere areal a Tridu.
+        self.objekt = obj
+        return super().get_form(request, obj, **kwargs)
+
+    def formfield_for_foreignkey(self, db_field, request, **kwargs):
+        """Meridlo jen z arealu polozky a jeji Tridy.
+
+        U nove zakladane polozky jeste areal ani Trida nejsou vyplnene -
+        tam zbyde omezeni na pronajimatele (to zaridi PodlePronajimatele)
+        a zuzi se to po prvnim ulozeni. Uz nastavene meridlo se v nabidce
+        necha vzdycky, i kdyby filtru neodpovidalo - jinak by se pri
+        ulozeni formulare potichu vymazalo."""
+        if db_field.name == "meter":
+            from django.db.models import Q
+
+            qs = pronajimatele.omez(Meter.objects, "site", request)
+            obj = getattr(self, "objekt", None)
+            if obj is not None and obj.pk:
+                podminka = Q(site=obj.site_id, meter_type=obj.invoice_class)
+                if obj.meter_id:
+                    podminka |= Q(pk=obj.meter_id)
+                qs = qs.filter(podminka)
+            kwargs["queryset"] = qs.order_by("site__name", "meter_type", "code")
+        return super().formfield_for_foreignkey(db_field, request, **kwargs)
 
     @admin.display(description="Jednotka")
     def jednotka(self, obj):
