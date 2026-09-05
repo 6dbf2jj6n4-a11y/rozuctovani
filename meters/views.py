@@ -14,7 +14,7 @@ from django.shortcuts import get_object_or_404, render
 from django.utils import timezone
 from django.views.decorators.http import require_POST
 
-from core.models import Client, Meter, MeterReading, Period, ReadingsClosure, Site
+from core.models import Client, InvoiceClassColor, Meter, MeterReading, Period, ReadingsClosure, Site
 
 
 #: Kolik procent nad prumerem poslednich obdobi uz je podezrele.
@@ -192,6 +192,7 @@ def readings_entry(request):
                 "id": m.id,
                 "code": m.code,
                 "name": m.name,
+                "meter_type": m.meter_type,
                 "meter_type_label": m.get_meter_type_display(),
                 "unit": m.jednotka_odectu,
                 "reading_mode": m.reading_mode,
@@ -214,12 +215,27 @@ def readings_entry(request):
 
     landlord = Client.objects.filter(is_landlord=True).first()
 
+    # Stejny zdroj barev jako zbytek adminu (Mericha/Odecty/Ceniky listy,
+    # core.views.class_colors_css) - Trida je jediny editovatelny seznam
+    # (InvoiceClassColor), zadny pevny vycet typu uz neexistuje. Klic je
+    # kod Tridy (Meter.meter_type), ne popisek, ktery se muze prejmenovat.
+    class_colors = {
+        c.invoice_class: {
+            "bg_light": c.color_light,
+            "bg_dark": c.color_dark,
+            "text_light": c.text_color_light,
+            "text_dark": c.text_color_dark,
+        }
+        for c in InvoiceClassColor.objects.all()
+    }
+
     return render(request, "meters/readings_entry.html", {
         "sites": sites,
         "site": site,
         "periods": periods,
         "period": period,
         "meters_data": meters_data,
+        "class_colors": class_colors,
         "period_closed": bool(period and period.status == Period.Status.CLOSED),
         # Uzavreni odectu je NECO JINEHO nez uzavreni Obdobi: tohle si
         # rekne sam spravce ("mam hotovo") a plati jen na tuhle obrazovku,

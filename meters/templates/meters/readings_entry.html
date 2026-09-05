@@ -31,11 +31,6 @@
             --err-bg: #fee2e2; --err-text: #b91c1c;
             --info-bg: #dbeafe; --info-text: #1e40af; --info-border: #1d4ed8;
             --neutral-bg: #f3f4f6; --neutral-text: #6b7280;
-            --type-electricity: #fef3c7;
-            --type-water: #dbeafe;
-            --type-gas: #ede9fe;
-            --type-heat: #fee2e2;
-            --type-other: #f3f4f6;
         }
         html[data-theme="dark"] {
             --bg: #0f172a;
@@ -62,11 +57,6 @@
             --err-bg: rgba(239,68,68,0.15); --err-text: #f87171;
             --info-bg: rgba(59,130,246,0.15); --info-text: #60a5fa; --info-border: #3b82f6;
             --neutral-bg: #1e293b; --neutral-text: #9ca3af;
-            --type-electricity: rgba(245,158,11,0.14);
-            --type-water: rgba(59,130,246,0.14);
-            --type-gas: rgba(139,92,246,0.14);
-            --type-heat: rgba(239,68,68,0.14);
-            --type-other: rgba(148,163,184,0.1);
         }
         body {
             font-family: -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
@@ -138,9 +128,13 @@
         .progress-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
         .progress-label { font-size: 13px; color: var(--text-muted); }
         .dots { display: flex; gap: 5px; flex-wrap: wrap; }
-        .dot { width: 8px; height: 8px; border-radius: 50%; cursor: pointer; background: var(--dot-bg); border: none; padding: 0; }
-        .dot.filled { background: var(--dot-filled); }
-        .dot.current { background: var(--accent); }
+        .dot {
+            width: 9px; height: 9px; border-radius: 50%; cursor: pointer; border: none; padding: 0;
+            background: var(--m-bg-light, var(--dot-bg)); opacity: 0.4;
+        }
+        html[data-theme="dark"] .dot { background: var(--m-bg-dark, var(--dot-bg)); }
+        .dot.filled { opacity: 1; }
+        .dot.current { opacity: 1; box-shadow: 0 0 0 2px var(--accent); }
         .card {
             background: var(--surface); border-radius: 12px; box-shadow: 0 1px 4px var(--shadow);
             padding: 16px 18px; transition: transform 0.25s ease, opacity 0.2s ease;
@@ -225,6 +219,8 @@
         .sidebar-title { font-size: 13px; font-weight: 600; color: var(--label); padding: 10px 16px 8px; }
         .sidebar table { width: 100%; border-collapse: collapse; table-layout: fixed; font-size: 13px; }
         .sidebar td { padding: 7px 16px; border-top: 1px solid var(--sidebar-border); cursor: pointer; overflow: hidden; text-overflow: ellipsis; }
+        .sidebar tr { background: var(--m-bg-light, var(--neutral-bg)); }
+        html[data-theme="dark"] .sidebar tr { background: var(--m-bg-dark, var(--neutral-bg)); }
         .side-name { width: auto; }
         .sidebar tr:first-child td { border-top: none; }
         .sidebar tr:hover td { box-shadow: inset 0 0 0 999px var(--shadow-hover); }
@@ -425,6 +421,7 @@
 
 {% csrf_token %}
 {{ meters_data|json_script:"meters-data" }}
+{{ class_colors|json_script:"class-colors-data" }}
 
 <script>
 (function () {
@@ -488,6 +485,7 @@
 (function () {
     var meters = JSON.parse(document.getElementById("meters-data").textContent);
     if (!meters.length) return;
+    var classColors = JSON.parse(document.getElementById("class-colors-data").textContent);
 
     var periodId = {{ period.pk|default:"null" }};
     var periodClosed = {{ period_closed|yesno:"true,false" }};
@@ -503,13 +501,11 @@
     var idx = 0;
     var saveTimers = {};
 
-    var typeColors = {
-        "Elektřina": "var(--type-electricity)",
-        "Voda": "var(--type-water)",
-        "Plyn": "var(--type-gas)",
-        "Teplo": "var(--type-heat)",
-        "Jiné": "var(--type-other)"
-    };
+    function applyClassColor(el, meterType) {
+        var c = classColors[meterType];
+        el.style.setProperty("--m-bg-light", c ? c.bg_light : "var(--neutral-bg)");
+        el.style.setProperty("--m-bg-dark", c ? c.bg_dark : "var(--neutral-bg)");
+    }
 
     function fmt(n) {
         return Math.round(n * 100) / 100;
@@ -578,6 +574,7 @@
             d.type = "button";
             d.className = "dot" + (i === idx ? " current" : (mm.existing ? " filled" : ""));
             d.title = mm.name;
+            applyClassColor(d, mm.meter_type);
             d.onclick = function () { switchTo(i); };
             dots.appendChild(d);
         });
@@ -587,7 +584,7 @@
         meters.forEach(function (mm, i) {
             var tr = document.createElement("tr");
             tr.className = (i === idx ? "current" : "") + (mm.existing ? " filled" : "");
-            tr.style.background = typeColors[mm.meter_type_label] || "var(--type-other)";
+            applyClassColor(tr, mm.meter_type);
             tr.onclick = function () { switchTo(i); };
             var tdName = document.createElement("td");
             tdName.className = "side-name";
