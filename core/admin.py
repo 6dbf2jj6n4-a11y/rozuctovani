@@ -3279,6 +3279,12 @@ class MeterAdmin(PodlePronajimatele, DuplicateModelAdminMixin, ModelAdmin):
         used_as_key_meter = AllocationKey.objects.exclude(meter__isnull=True).values_list("meter_id", flat=True)
         used_as_parent = Meter.objects.exclude(parent_meter__isnull=True).values_list("parent_meter_id", flat=True)
         used_as_unit_service_meter = UnitService.objects.exclude(meter__isnull=True).values_list("meter_id", flat=True)
+        # Privodni meridlo Odberneho mista se nikde jinde "nepouziva", ale
+        # stoji na nem cely Prehled spotreb (dodano vs. namereno) i
+        # porovnani s fakturou dodavatele - sestava ho drive nabizela ke
+        # smazani. Viz Daniel 2026-09-05.
+        used_as_supply_main = SupplyPoint.objects.exclude(
+            main_meter__isnull=True).values_list("main_meter_id", flat=True)
 
         # "Pouzito" se zjistuje NAPRIC obema pronajimateli zamerne - kdyby
         # se pouziti hledalo jen v kontextu, vypadalo by cizi pouzite
@@ -3290,6 +3296,7 @@ class MeterAdmin(PodlePronajimatele, DuplicateModelAdminMixin, ModelAdmin):
             .exclude(pk__in=used_as_key_meter)
             .exclude(pk__in=used_as_parent)
             .exclude(pk__in=used_as_unit_service_meter)
+            .exclude(pk__in=used_as_supply_main)
             .order_by("site__name", "code")
         )
         if request is not None:
