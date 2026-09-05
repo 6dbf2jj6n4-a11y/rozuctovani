@@ -1773,7 +1773,8 @@ class ClientCardAdmin(PodlePronajimatele, ModelAdmin):
     warn_unsaved_form = False
     cesta_k_arealu = "card_units__unit__site"
     potrebuje_distinct = True
-    list_display = ("client", "description", "valid_from", "valid_to", "is_active")
+    list_display = ("client", "description", "valid_from", "valid_to", "is_active",
+                    "stav_k_obdobi")
     # Vygeneruje <style> pravidla pro barvy sekci Elektřina/Voda/Teplo/
     # Ostatní podle aktualnich hodnot InvoiceClassColor (Nastavení ->
     # Barvy tříd) - viz key-section-* tridy na
@@ -1959,6 +1960,40 @@ class ClientCardAdmin(PodlePronajimatele, ModelAdmin):
             "opts": self.model._meta,
         }
         return render(request, "admin/core/clientcard/report_plochy_konflikt.html", context)
+
+    @display(description="Stav k období")
+    def stav_k_obdobi(self, obj):
+        """Slovem, jestli se karta v AKTUALNIM obdobi pocita, nebo ne.
+
+        Priznak Aktivni a Platnost od/do jsou dve ruzne veci a nejde je
+        precist jednou: Aktivni je rucni vypinac ("tuhle kartu pouzivej"),
+        cas resi Platnost - vahy se kratí na dny pres
+        active_days_in_period. Karta platna do 31. 8. se v zari zapocita
+        nulou, i kdyz u ni Aktivni zustane svitit, a proto muze byt
+        aktivnich karet vic, kdyz se casove neprekryvaji. Daniel
+        2026-09-05: "nemuzu si zvyknout, ze mame vic aktivnich karet
+        a ony se zapinaji az podle datumu." Tenhle sloupec to slozi
+        dohromady, at se to nemusi domyslet z priznaku a dvou datumu."""
+        from django.utils.html import format_html
+
+        if not obj.is_active:
+            return format_html('<span style="color:#888;">vypnutá</span>')
+        obdobi = getattr(self, "_pamet_obdobi", None)
+        if obdobi is None:
+            obdobi = self._pamet_obdobi = Period.current()
+        if obdobi is None:
+            return "—"
+        zacatek, konec = obdobi.date_range()
+        if obj.valid_to and obj.valid_to < zacatek:
+            return format_html('<span style="color:#888;">skončila {}</span>', obj.valid_to)
+        if obj.valid_from > konec:
+            return format_html('<span style="color:#a70;">budoucí (od {})</span>', obj.valid_from)
+        dnu = obj.active_days_in_period(zacatek, konec)
+        celkem = obdobi.days_in_period
+        if dnu >= celkem:
+            return format_html('<span style="color:#2a7;">platí celé {}</span>', obdobi)
+        return format_html(
+            '<span style="color:#a70;">platí {} z {} dnů</span>', dnu, celkem)
 
     @staticmethod
     def _plocha_se_dani(card_unit, klient):
