@@ -16,18 +16,57 @@ jen na jeden radek a jinak se vypise na stranku.
     vysvetlivek pod tim v nem vubec neni). Vlastni tridu ma jen tlacitko
     (rx-btn z core/static/core/css/buttons.css), ktera je nase.
     {% endcomment %}
+    {% comment %}
+    Kontrola bezi synchronne a na kazdeho klienta se ARESu ptame zvlast,
+    takze u petatriceti a vic klientu stranka dlouho "stoji" a neni poznat,
+    jestli to jeste bezi (Daniel 2026-09-05). Skutecny prubeh po klientech
+    by znamenal streamovanou odpoved nebo dotazovani na stav; tady staci
+    poctive rict, ze se pracuje - kolecko a bezici pocitadlo vterin proti
+    odhadu. Odhad je jen orientacni, proto "~".
+    {% endcomment %}
+    <style>
+        @keyframes rx-rotace { to { transform: rotate(360deg); } }
+        .rx-kolecko {
+            display: inline-block; width: 14px; height: 14px;
+            border: 2px solid currentColor; border-right-color: transparent;
+            border-radius: 50%; animation: rx-rotace 0.7s linear infinite;
+            vertical-align: -2px;
+        }
+    </style>
     <form method="post" action="{% url 'admin:core_client_kontrola_rizik' %}"
           style="display:flex; flex-wrap:wrap; align-items:center; gap:12px; margin-bottom:16px;"
-          onsubmit="var b = this.querySelector('button'); setTimeout(function () { b.disabled = true; b.style.opacity = '0.6'; b.innerHTML = 'Kontroluji v ARES…'; }, 0);">
+          onsubmit="rxKontrolaBezi(this);">
         {% csrf_token %}
         <button type="submit" class="rx-btn">
             <span class="material-symbols-outlined md-18">gpp_maybe</span>
             Zkontrolovat rizika (ARES)
         </button>
-        <span style="color:#999; font-size:13px;">
+        <span id="rx-ares-popis" style="color:#999; font-size:13px;">
             Likvidace a insolvence u všech aktivních klientů s IČO (napříč pronajímateli).
-            Chvíli to trvá – ARES se ptáme na každého zvlášť.
+            Chvíli to trvá – ARES se ptáme na každého zvlášť
+            {% if pocet_klientu_ares %}({{ pocet_klientu_ares }} klientů, zhruba {{ odhad_sekund_ares }} s){% endif %}.
         </span>
     </form>
+    <script>
+        function rxKontrolaBezi(form) {
+            var tlacitko = form.querySelector('button');
+            var popis = document.getElementById('rx-ares-popis');
+            var pocet = {{ pocet_klientu_ares|default:0 }};
+            var odhad = {{ odhad_sekund_ares|default:0 }};
+            // az po odeslani, at prohlizec stihne formular poslat
+            setTimeout(function () {
+                tlacitko.disabled = true;
+                tlacitko.style.opacity = '0.6';
+                tlacitko.innerHTML = '<span class="rx-kolecko"></span> Kontroluji v ARES…';
+                var start = Date.now();
+                setInterval(function () {
+                    var vterin = Math.round((Date.now() - start) / 1000);
+                    popis.textContent = 'Ptáme se ARESu na ' + pocet + ' klientů, jednoho po druhém – '
+                        + vterin + ' s' + (odhad ? ' z odhadovaných ' + odhad + ' s' : '')
+                        + '. Nezavírej stránku, výsledek se ukáže sám.';
+                }, 1000);
+            }, 0);
+        }
+    </script>
 {% endif %}
 {% include "admin/core/client/legenda.html" %}

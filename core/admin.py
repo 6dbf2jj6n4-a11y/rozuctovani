@@ -1288,6 +1288,13 @@ class ClientAdmin(PodlePronajimatele, ModelAdmin):
         # Tlacitko kontroly rizik prepisuje udaje klientu - kdo nema pravo
         # menit, at ho ani nevidi (view samo si to hlida znovu).
         extra_context["muze_menit_klienty"] = self.has_change_permission(request)
+        # Kolik klientu kontrola projde a jak dlouho to zhruba potrva -
+        # tlacitko z toho sklada bezici pocitadlo, aby bylo poznat, ze
+        # stranka nezamrzla. Odhad: jeden dotaz do ARESu vc. povinne pauzy
+        # (rizika.PAUZA) vychazi kolem pul vteriny. Daniel 2026-09-05.
+        pocet = Client.objects.filter(is_active=True).exclude(ico="").count()
+        extra_context["pocet_klientu_ares"] = pocet
+        extra_context["odhad_sekund_ares"] = max(int(pocet * 0.5), 1)
         return super().changelist_view(request, extra_context)
 
     def _is_risky(self, obj):
