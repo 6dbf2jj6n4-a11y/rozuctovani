@@ -1,0 +1,29 @@
+{% comment %}
+Sekce Teplo v Karte klienta + soucet vytapenych ploch pod tabulkou.
+
+Podle tohohle cisla se teplo deli (klic se zapnutym "Vaha = vytapena
+plocha karty" si ho bere z ClientCard.vytapena_plocha), takze ho ma
+uzivatel videt primo u klicu a nemusi ho scitat z Ploch. Daniel
+2026-09-05.
+
+Cislo se pocita na serveru pri vykresleni formulare: vytapena plocha
+zavisi na priznaku Vytapeny a Vytapene plose PROSTORU, ktere v inlinu
+Plochy nejsou, takze zive prepocitat v JS jako soucet vymer nejde.
+Po zmene ploch se srovna po ulozeni Karty.
+{% endcomment %}
+{% include "admin/edit_inline/tabular.html" %}
+{% with karta=inline_admin_formset.formset.instance %}
+    {% if karta.pk %}
+        <div style="margin:-12px 0 24px 0; padding:10px 14px; font-weight:600;
+                    border:1px solid rgba(0,0,0,0.1); border-radius:6px;
+                    background:rgba(0,0,0,0.03);">
+            Součet vytápěných ploch: {{ karta.vytapena_plocha|floatformat:2 }} m²
+            {% if not karta.vytapena_plocha %}
+                <span style="font-weight:400; color:#6b7280;">
+                    &ndash; žádná Plocha karty není označená jako vytápěná
+                    (příznak „Vytápěný“ je na Předmětu nájmu).
+                </span>
+            {% endif %}
+        </div>
+    {% endif %}
+{% endwith %}

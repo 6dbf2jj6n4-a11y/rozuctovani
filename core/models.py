@@ -748,6 +748,18 @@ class ClientCard(models.Model):
         return None
 
     @property
+    def vytapena_plocha(self):
+        """Kolik m2 se na teto karte topi - soucet pres vsechny Plochy.
+
+        Podle tohohle cisla se deli teplo (viz AllocationKey.vaha se
+        zapnutym "Vaha = vytapena plocha karty"), takze ho ma smysl videt
+        i ve formulari Karty pod sekci Teplo - Daniel 2026-09-05."""
+        return sum(
+            (cu.vytapena_plocha for cu in self.card_units.select_related("unit")),
+            Decimal("0"),
+        )
+
+    @property
     def site(self):
         """Areal karty (podle prvni plochy) - kvuli dokladum, ktere potrebuji
         vedet, ke kteremu arealu karta patri."""
@@ -1880,10 +1892,7 @@ class AllocationKey(models.Model):
         že to provede sám model")."""
         if not self.weight_from_heated_area:
             return self.value or Decimal("0")
-        return sum(
-            (cu.vytapena_plocha for cu in self.client_card.card_units.select_related("unit")),
-            Decimal("0"),
-        )
+        return self.client_card.vytapena_plocha
 
     def is_valid_for_period(self, period):
         if not self.client_card.is_active:

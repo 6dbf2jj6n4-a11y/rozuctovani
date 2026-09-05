@@ -708,6 +708,14 @@ def sekce_klicu():
                 # templates/admin/core/clientcard/invoiceclasscolor_style.html
                 # z barev ulozenych u Tridy. Sama barvu nenese.
                 "classes": (f"key-section-{trida.invoice_class}",),
+                # Pod sekci Tepla jde navic soucet vytapenych ploch karty -
+                # cislo, kterym se teplo deli. Ostatni sekce ho nemaji,
+                # protoze se jich netyka. Daniel 2026-09-05.
+                **(
+                    {"template": "admin/core/clientcard/allocationkey_teplo_inline_tabular.html"}
+                    if trida.invoice_class == ServicePoolItem.InvoiceClass.HEAT
+                    else {}
+                ),
                 "__module__": __name__,
             },
         )
