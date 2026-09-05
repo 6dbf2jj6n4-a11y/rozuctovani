@@ -94,3 +94,22 @@ Daniel 2026-08-26.
 .field-podil {
     white-space: nowrap;
 }
+
+/* Sipky nahoru/dolu u ciselnych poli pryc.
+   Vymera, sazba, sjednane najemne i vytapena plocha jsou <input
+   type="number">, takze prohlizec sam prikresli male sipky. Ke krokovani
+   po 0.01 nikdo nesahne, zato snadno prepisou hodnotu omylem kolecem
+   mysi a v uzkem sloupci ubiraji misto textu. Daniel 2026-09-05: "sipky
+   nahoru/dolu, ty jsou na nic."
+   Pole samo zustava type="number" - drzi ciselnou klavesnici na mobilu
+   i kontrolu vstupu. */
+input[type="number"]::-webkit-outer-spin-button,
+input[type="number"]::-webkit-inner-spin-button {
+    -webkit-appearance: none !important;
+    appearance: none !important;
+    margin: 0 !important;
+}
+input[type="number"] {
+    -moz-appearance: textfield;
+    appearance: textfield;
+}

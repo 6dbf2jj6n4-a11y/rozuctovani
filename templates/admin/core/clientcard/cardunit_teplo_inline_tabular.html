@@ -1,14 +1,10 @@
 {% comment %}
-Sekce Teplo v Karte klienta + soucet vytapenych ploch pod tabulkou.
+Vytapene plochy (prvni tabulka sekce Teplo) + jejich soucet.
 
-Podle tohohle cisla se teplo deli (klic se zapnutym "Vaha = vytapena
-plocha karty" si ho bere z ClientCard.vytapena_plocha), takze ho ma
-uzivatel videt primo u klicu a nemusi ho scitat z Ploch. Daniel
-2026-09-05.
-
-Cislo vykresli server podle ulozenych dat; kdyz uzivatel prepne
-zaskrtavatko Vytapena v sekci Plochy a najemne, prepocita ho zive
-core/js/cardunit_autofill.js podle id nize.
+Podle souctu se teplo deli - klic se zapnutym "Vaha = vytapena plocha
+karty" si ho bere z ClientCard.vytapena_plocha. Server ho vykresli
+z ulozenych dat, prepnuti, ktera jeste nejsou ulozena, dopocita podle
+id nize core/js/cardunit_teplo.js.
 {% endcomment %}
 {% include "admin/edit_inline/tabular.html" %}
 {% with karta=inline_admin_formset.formset.instance %}
@@ -20,8 +16,7 @@ core/js/cardunit_autofill.js podle id nize.
             <span id="rx-vytapena-plocha-soucet">{{ karta.vytapena_plocha|floatformat:2 }}</span> m²
             <span id="rx-vytapena-plocha-hint"
                   style="font-weight:400; color:#6b7280;{% if karta.vytapena_plocha %} display:none;{% endif %}">
-                &ndash; žádná Plocha karty není označená jako vytápěná
-                (zaškrtávátko „Vytápěná“ v sekci Plochy a nájemné).
+                &ndash; žádná Plocha karty není označená jako vytápěná, teplo se podle nich dělit nedá.
             </span>
         </div>
     {% endif %}

@@ -15,7 +15,7 @@ except admin.sites.NotRegistered:
     pass
 from django import forms
 from unfold.decorators import display
-from unfold.widgets import UnfoldBooleanSwitchWidget
+from unfold.widgets import UnfoldAdminDecimalFieldWidget, UnfoldBooleanSwitchWidget
 from . import pronajimatele, rizika
 from .admin_mixins import ModelAdmin, TabularInline
 
@@ -686,6 +686,117 @@ class AllocationKeyInlineBase(TabularInline):
         return formfield
 
 
+class CardUnitTeploForm(forms.ModelForm):
+    """Plocha na Karte + dva udaje, ktere ve skutecnosti patri PROSTORU:
+    priznak Vytapeny a Vytapena plocha.
+
+    Bez nich admin v Karte nevidel, podle ceho se deli teplo, a musel to
+    hledat po jednom v Predmetech najmu. Daniel 2026-09-05: "admin musi
+    v karte videt ty vytapene plochy a musi mit moznost je vypinat
+    a zapinat."
+
+    POZOR: zapisuje se do PROSTORU, ne do Karty. Stejny Prostor muze byt
+    na vic Kartach (AB 1.14 ma Aktiv Novostav i Andely), takze zmena
+    plati pro vsechny. Proto se zapisuje jen tehdy, kdyz uzivatel s polem
+    opravdu hnul (changed_data): nova radka zacina s nezaskrtnutym
+    polickem, takze bez teto podminky by pouhe pridani vytapeneho
+    prostoru na Kartu topeni vyplo.
+    """
+
+    # Widgety schvalne z Unfoldu, ne obycejne z Djanga: pole, ktera nejsou
+    # na modelu, si formfield_overrides Unfoldu nevsimne, takze by se
+    # vykreslila jako holy input bez ramecku a odsazeni a v radku by
+    # vypadala jinak nez sousedni Vymera. Stejny prepinac i stejny ramecek
+    # jako u ostatnich sloupcu. Daniel 2026-09-05.
+    unit_is_heated = forms.BooleanField(
+        label="Vytápěná", required=False,
+        widget=UnfoldBooleanSwitchWidget(attrs={
+            "title": "Topí se v tomhle prostoru? Údaj patří Předmětu nájmu, "
+                     "takže se propíše i do ostatních Karet s touto Plochou.",
+        }),
+    )
+    unit_heated_area_m2 = forms.DecimalField(
+        label="Vytápěná m²", required=False, max_digits=10, decimal_places=2,
+        widget=UnfoldAdminDecimalFieldWidget(attrs={
+            "step": "0.01",
+            "title": "Vyplň jen když se vytápěná část liší od výměry - "
+                     "prázdné znamená, že se topí v celé ploše.",
+        }),
+    )
+
+    class Meta:
+        model = CardUnit
+        fields = "__all__"
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        prostor = getattr(self.instance, "unit", None)
+        if prostor is not None:
+            self.fields["unit_is_heated"].initial = prostor.is_heated
+            self.fields["unit_heated_area_m2"].initial = prostor.heated_area_m2
+
+    def save(self, commit=True):
+        radek = super().save(commit=commit)
+        prostor = radek.unit
+        zmenene = [
+            f for f in ("unit_is_heated", "unit_heated_area_m2")
+            if f in self.changed_data
+        ]
+        if prostor is not None and zmenene:
+            prostor.is_heated = self.cleaned_data["unit_is_heated"]
+            prostor.heated_area_m2 = self.cleaned_data["unit_heated_area_m2"]
+            prostor.save(update_fields=["is_heated", "heated_area_m2"])
+        return radek
+
+
+class CardUnitTeploInline(TabularInline):
+    """Vytapene plochy - prvni tabulka sekce Teplo, nad Klici tepla.
+
+    Ukazuje Plochy TEHLE Karty a u kazde, jestli se v ni topi. Radky se
+    odsud nepridavaji ani nemazou (od toho je sekce Plochy a najemne),
+    meni se jen vytapenost - proto max_num=0 a can_delete=False.
+
+    Daniel 2026-09-05: "rozsirime sekci Teplo o dalsi inline a tam budou
+    pouze radky s prostory, kde bude videt, zda jsou vytapene, a pod tim
+    teprve budou klice tepla." Drive to byly dva sloupce primo v sekci
+    Plochy a najemne, kam podle nej nepatri."""
+
+    form = CardUnitTeploForm
+    model = CardUnit
+    extra = 0
+    max_num = 0
+    can_delete = False
+    fields = ("plocha", "vymera", "unit_is_heated", "unit_heated_area_m2")
+    readonly_fields = ("plocha", "vymera")
+    verbose_name = "Vytápěná plocha"
+    verbose_name_plural = "Vytápěné plochy"
+    classes = ("key-section-teplo",)
+    template = "admin/core/clientcard/cardunit_teplo_inline_tabular.html"
+
+    class Media:
+        js = ("core/js/cardunit_teplo.js",)
+
+    def get_queryset(self, request):
+        return super().get_queryset(request).select_related("unit").order_by("unit__name")
+
+    def get_formset(self, request, obj=None, **kwargs):
+        # Vlastni jmeno formulare - jinak by Django druhou sekci nad
+        # stejnym modelem rozlisilo jen poradim ("card_units-2"). Viz
+        # _formset_se_stabilnim_prefixem.
+        formset = super().get_formset(request, obj, **kwargs)
+        return _formset_se_stabilnim_prefixem(
+            formset, ServicePoolItem.InvoiceClass.HEAT
+        )
+
+    @display(description="Plocha")
+    def plocha(self, obj):
+        return obj.unit.name if obj.unit else "—"
+
+    @display(description="Výměra")
+    def vymera(self, obj):
+        return f"{obj.area_m2} m²" if obj.area_m2 is not None else "—"
+
+
 def sekce_klicu():
     """Sekce Klicu v Karte klienta - jedna na kazdou Tridu se zapnutou
     volbou "Vlastni sekce" (Nastaveni -> Tridy).
@@ -695,32 +806,34 @@ def sekce_klicu():
     Poradi je dane Meta.ordering na InvoiceClassColor (sort_order), na
     spravnost ukladani ale nema vliv - o to se stara stabilni prefix
     formulare, viz _formset_se_stabilnim_prefixem."""
-    return [
-        type(
-            f"AllocationKeyInline_{trida.invoice_class}",
-            (AllocationKeyInlineBase,),
-            {
-                "invoice_class": trida.invoice_class,
-                "verbose_name": f"Klíč – {trida.label or trida.invoice_class}",
-                "verbose_name_plural": trida.label or trida.invoice_class,
-                # Stabilni CSS trida pro cilenou barvu pozadi sekce - podle
-                # ni generuje pravidla
-                # templates/admin/core/clientcard/invoiceclasscolor_style.html
-                # z barev ulozenych u Tridy. Sama barvu nenese.
-                "classes": (f"key-section-{trida.invoice_class}",),
-                # Pod sekci Tepla jde navic soucet vytapenych ploch karty -
-                # cislo, kterym se teplo deli. Ostatni sekce ho nemaji,
-                # protoze se jich netyka. Daniel 2026-09-05.
-                **(
-                    {"template": "admin/core/clientcard/allocationkey_teplo_inline_tabular.html"}
-                    if trida.invoice_class == ServicePoolItem.InvoiceClass.HEAT
-                    else {}
-                ),
-                "__module__": __name__,
-            },
-        )
-        for trida in InvoiceClassColor.se_sekci()
-    ]
+    sekce = []
+    for trida in InvoiceClassColor.se_sekci():
+        # Sekce Teplo zacina tabulkou vytapenych ploch - teprve pod ni
+        # jsou Klice tepla. Bez ni neni z Karty poznat, z ceho se bere
+        # vaha "vytapena plocha karty". Daniel 2026-09-05.
+        if trida.invoice_class == ServicePoolItem.InvoiceClass.HEAT:
+            sekce.append(CardUnitTeploInline)
+        sekce.append(_inline_tridy(trida))
+    return sekce
+
+
+def _inline_tridy(trida):
+    """Jedna sekce Klicu - trida inlinu ustrizena na miru jedne Tride."""
+    return type(
+        f"AllocationKeyInline_{trida.invoice_class}",
+        (AllocationKeyInlineBase,),
+        {
+            "invoice_class": trida.invoice_class,
+            "verbose_name": f"Klíč – {trida.label or trida.invoice_class}",
+            "verbose_name_plural": trida.label or trida.invoice_class,
+            # Stabilni CSS trida pro cilenou barvu pozadi sekce - podle
+            # ni generuje pravidla
+            # templates/admin/core/clientcard/invoiceclasscolor_style.html
+            # z barev ulozenych u Tridy. Sama barvu nenese.
+            "classes": (f"key-section-{trida.invoice_class}",),
+            "__module__": __name__,
+        },
+    )
 
 
 class CardOccupantInline(TabularInline):
@@ -770,73 +883,12 @@ class CardUnitInlineFormSet(forms.BaseInlineFormSet):
             )
 
 
-class CardUnitInlineForm(forms.ModelForm):
-    """Plocha na Karte + dva udaje, ktere ve skutecnosti patri PROSTORU:
-    priznak Vytapeny a Vytapena plocha.
-
-    Bez nich admin v Karte nevidel, podle ceho se deli teplo, a musel to
-    hledat po jednom v Predmetech najmu. Daniel 2026-09-05: "admin musi
-    v karte videt ty vytapene plochy a musi mit moznost je vypinat
-    a zapinat."
-
-    POZOR: zapisuje se do PROSTORU, ne do Karty. Stejny Prostor muze byt
-    na vic Kartach (AB 1.14 ma Aktiv Novostav i Andely), takze zmena
-    plati pro vsechny. Proto se zapisuje jen tehdy, kdyz uzivatel s polem
-    opravdu hnul (changed_data): nova radka zacina s nezaskrtnutym
-    polickem, takze bez teto podminky by pouhe pridani vytapeneho
-    prostoru na Kartu topeni vyplo.
-    """
-
-    unit_is_heated = forms.BooleanField(
-        label="Vytápěná", required=False,
-        widget=forms.CheckboxInput(attrs={
-            "title": "Topí se v tomhle prostoru? Údaj patří Předmětu nájmu, "
-                     "takže se propíše i do ostatních Karet s touto Plochou.",
-        }),
-    )
-    unit_heated_area_m2 = forms.DecimalField(
-        label="Vytápěná m²", required=False, max_digits=10, decimal_places=2,
-        widget=forms.NumberInput(attrs={
-            "step": "0.01",
-            "title": "Vyplň jen když se vytápěná část liší od výměry - "
-                     "prázdné znamená, že se topí v celé ploše.",
-        }),
-    )
-
-    class Meta:
-        model = CardUnit
-        fields = "__all__"
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        prostor = getattr(self.instance, "unit", None)
-        if prostor is not None:
-            self.fields["unit_is_heated"].initial = prostor.is_heated
-            self.fields["unit_heated_area_m2"].initial = prostor.heated_area_m2
-
-    def save(self, commit=True):
-        radek = super().save(commit=commit)
-        prostor = radek.unit
-        zmenene = [
-            f for f in ("unit_is_heated", "unit_heated_area_m2")
-            if f in self.changed_data
-        ]
-        if prostor is not None and zmenene:
-            prostor.is_heated = self.cleaned_data["unit_is_heated"]
-            prostor.heated_area_m2 = self.cleaned_data["unit_heated_area_m2"]
-            prostor.save(update_fields=["is_heated", "heated_area_m2"])
-        return radek
-
-
 class CardUnitInline(TabularInline):
-    form = CardUnitInlineForm
     formset = CardUnitInlineFormSet
     model = CardUnit
     extra = 0
     fields = (
-        "unit", "vymera_zasobnik", "area_m2_override",
-        "unit_is_heated", "unit_heated_area_m2",
-        "rate_per_m2",
+        "unit", "vymera_zasobnik", "area_m2_override", "rate_per_m2",
         "monthly_rent_override", "rocni_najem", "mesicni_najem", "rent_not_invoiced",
     )
     readonly_fields = ("vymera_zasobnik", "rocni_najem", "mesicni_najem")
