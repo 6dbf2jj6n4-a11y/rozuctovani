@@ -232,9 +232,18 @@ def generate_client_card_document(card, output_path):
 
     # --- Plochy ---
     elements.append(Paragraph("Pronajaté plochy", _STYLE_H2))
-    rows = [["Plocha", "Výměra", "Cena (Kč/m²/rok)", "Nájemné/rok", "Nájemné/měsíc"]]
+    # Sloupec Vytapeno se tiskne, jen kdyz ma karta aspon jednu vytapenou
+    # plochu - u karet, kde se to neresi (sklady, DV), by jen zabiral misto
+    # a mlcky tvrdil, ze se nikde netopi. Daniel 2026-09-05.
+    ma_vytapene = any(cu.vytapena_plocha for cu in card.card_units.all())
+    zahlavi = ["Plocha", "Výměra"]
+    if ma_vytapene:
+        zahlavi.append("Vytápěno")
+    zahlavi += ["Cena (Kč/m²/rok)", "Nájemné/rok", "Nájemné/měsíc"]
+    rows = [zahlavi]
 
     total_area = Decimal("0")
+    total_heated = Decimal("0")
     total_year = Decimal("0")
     total_month = Decimal("0")
     # Stejne poradi jako sekce Plochy a najemne v adminu (core.admin
@@ -247,22 +256,28 @@ def generate_client_card_document(card, output_path):
         month_rent = cu.monthly_rent
         year_rent = (month_rent * 12) if month_rent is not None else None
 
-        rows.append([
-            str(cu.unit) if cu.unit else "—",
-            _fmt_m2(area),
+        radek = [str(cu.unit) if cu.unit else "—", _fmt_m2(area)]
+        if ma_vytapene:
+            vytapeno = cu.vytapena_plocha
+            # Pomlcka misto "0,00 m2" - u nevytapene plochy je to jasnejsi
+            radek.append(_fmt_m2(vytapeno) if vytapeno else "—")
+            total_heated += vytapeno
+        radek += [
             _fmt_kc(cu.rate_per_m2),
             _fmt_kc(year_rent, whole=True),
             _fmt_kc(month_rent, whole=True),
-        ])
+        ]
+        rows.append(radek)
 
         total_area += area or Decimal("0")
         total_year += year_rent or Decimal("0")
         total_month += month_rent or Decimal("0")
 
-    rows.append([
-        "Celkem", _fmt_m2(total_area), "",
-        _fmt_kc(total_year, whole=True), _fmt_kc(total_month, whole=True),
-    ])
+    celkem = ["Celkem", _fmt_m2(total_area)]
+    if ma_vytapene:
+        celkem.append(_fmt_m2(total_heated))
+    celkem += ["", _fmt_kc(total_year, whole=True), _fmt_kc(total_month, whole=True)]
+    rows.append(celkem)
 
     units_table = Table(rows, repeatRows=1, hAlign="LEFT")
     units_table.setStyle(TableStyle([
