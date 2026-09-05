@@ -4,6 +4,8 @@
 2) Pri zmene vymery nebo ceny zive prepocita "Najemne/rok" a
    "Najemne/mesic" pro dany radek.
 3) Pod tabulkou zobrazi soucet za vsechny radky.
+4) Zive prepocita soucet vytapenych ploch (zaskrtavatko Vytapena
+   a Vytapena m2) a promitne ho i do ramecku pod sekci Teplo.
 
 Pouziva django.jQuery kvuli kompatibilite se select2 (autocomplete).
 Promenna $ je definovana JEDNOU na zacatku a sdilena vsemi funkcemi
@@ -28,6 +30,10 @@ soucet vymer/najemneho, ktery tam nedava smysl.
         }
         var n = parseFloat(String(value).replace(",", "."));
         return isNaN(n) ? null : n;
+    }
+
+    function formatM2(value) {
+        return value.toLocaleString("cs-CZ", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + " m²";
     }
 
     function formatKc(value) {
@@ -65,6 +71,27 @@ soucet vymer/najemneho, ktery tam nedava smysl.
         return null;
     }
 
+    /* Kolik m2 se topi z tohohle radku - presne podle
+       CardUnit.vytapena_plocha na serveru: nevytapeny prostor nic,
+       vyplnena Vytapena m2 ma prednost pred vymerou, jinak plati vymera
+       radku. Kdyby se pravidla rozesla, ukazoval by formular jine cislo
+       nez to, kterym se teplo skutecne deli. */
+    function getRowHeated($row) {
+        var $checkbox = $row.find('input[id$="-unit_is_heated"]');
+        if ($checkbox.length && !$checkbox.is(":checked")) {
+            return 0;
+        }
+        if (!$checkbox.length) {
+            return 0;
+        }
+        var vlastni = parseNum($row.find('input[id$="-unit_heated_area_m2"]').val());
+        if (vlastni !== null) {
+            return vlastni;
+        }
+        var area = getRowArea($row);
+        return area === null ? 0 : area;
+    }
+
     function recalcRow($row) {
         var area = getRowArea($row);
         var $rate = $row.find('input[id$="-rate_per_m2"]');
@@ -84,6 +111,7 @@ soucet vymer/najemneho, ktery tam nedava smysl.
         } else {
             $row.removeAttr("data-area");
         }
+        $row.attr("data-heated", getRowHeated($row));
 
         var rocniVal = null;
         var mesicniVal = null;
@@ -134,6 +162,7 @@ soucet vymer/najemneho, ktery tam nedava smysl.
         var sumRocni = 0;
         var sumMesicni = 0;
         var sumArea = 0;
+        var sumHeated = 0;
         $table.find("tbody tr, tr").each(function () {
             var rocni = parseFloat($(this).attr("data-rocni-najem"));
             var mesicni = parseFloat($(this).attr("data-mesicni-najem"));
@@ -147,15 +176,31 @@ soucet vymer/najemneho, ktery tam nedava smysl.
             if (!isNaN(area)) {
                 sumArea += area;
             }
+            var heated = parseFloat($(this).attr("data-heated"));
+            if (!isNaN(heated)) {
+                sumHeated += heated;
+            }
         });
 
         var $totals = getOrCreateTotals($table);
-        var areaText = sumArea.toLocaleString("cs-CZ", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + " m²";
+        var areaText = formatM2(sumArea);
         $totals.html(
             "Součet výměr: " + areaText +
+            " &nbsp;&nbsp; Součet vytápěných: " + formatM2(sumHeated) +
             " &nbsp;&nbsp; Součet nájemné/rok: " + formatKc(sumRocni) +
             " &nbsp;&nbsp; Součet nájemné/měsíc: " + formatKc(sumMesicni)
         );
+
+        /* Stejne cislo pod sekci Teplo - tam ho uzivatel hleda, protoze
+           podle nej se teplo deli (viz sablonu
+           admin/core/clientcard/allocationkey_teplo_inline_tabular.html).
+           Server ho vykreslil z ulozenych dat, tady se doplni prepnuti,
+           ktere jeste neni ulozene. */
+        var $teplo = $("#rx-vytapena-plocha-soucet");
+        if ($teplo.length) {
+            $teplo.text(formatM2(sumHeated).replace(" m²", ""));
+            $("#rx-vytapena-plocha-hint").toggle(sumHeated === 0);
+        }
     }
 
     // Autofill vymery pri vyberu plochy
@@ -198,7 +243,8 @@ soucet vymer/najemneho, ktery tam nedava smysl.
     // Zivy prepocet pri editaci vymery nebo ceny
     $(document).on(
         "input change",
-        'input[id$="-area_m2_override"], input[id$="-rate_per_m2"], input[id$="-monthly_rent_override"]',
+        'input[id$="-area_m2_override"], input[id$="-rate_per_m2"], input[id$="-monthly_rent_override"], ' +
+        'input[id$="-unit_is_heated"], input[id$="-unit_heated_area_m2"]',
         function () {
             var $input = $(this);
             var $row = $input.closest("tr");
@@ -220,6 +266,7 @@ soucet vymer/najemneho, ktery tam nedava smysl.
             $row.removeAttr("data-rocni-najem");
             $row.removeAttr("data-mesicni-najem");
             $row.removeAttr("data-area");
+            $row.attr("data-heated", 0);
         } else {
             recalcRow($row);
         }

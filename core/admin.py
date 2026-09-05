@@ -770,12 +770,73 @@ class CardUnitInlineFormSet(forms.BaseInlineFormSet):
             )
 
 
+class CardUnitInlineForm(forms.ModelForm):
+    """Plocha na Karte + dva udaje, ktere ve skutecnosti patri PROSTORU:
+    priznak Vytapeny a Vytapena plocha.
+
+    Bez nich admin v Karte nevidel, podle ceho se deli teplo, a musel to
+    hledat po jednom v Predmetech najmu. Daniel 2026-09-05: "admin musi
+    v karte videt ty vytapene plochy a musi mit moznost je vypinat
+    a zapinat."
+
+    POZOR: zapisuje se do PROSTORU, ne do Karty. Stejny Prostor muze byt
+    na vic Kartach (AB 1.14 ma Aktiv Novostav i Andely), takze zmena
+    plati pro vsechny. Proto se zapisuje jen tehdy, kdyz uzivatel s polem
+    opravdu hnul (changed_data): nova radka zacina s nezaskrtnutym
+    polickem, takze bez teto podminky by pouhe pridani vytapeneho
+    prostoru na Kartu topeni vyplo.
+    """
+
+    unit_is_heated = forms.BooleanField(
+        label="Vytápěná", required=False,
+        widget=forms.CheckboxInput(attrs={
+            "title": "Topí se v tomhle prostoru? Údaj patří Předmětu nájmu, "
+                     "takže se propíše i do ostatních Karet s touto Plochou.",
+        }),
+    )
+    unit_heated_area_m2 = forms.DecimalField(
+        label="Vytápěná m²", required=False, max_digits=10, decimal_places=2,
+        widget=forms.NumberInput(attrs={
+            "step": "0.01",
+            "title": "Vyplň jen když se vytápěná část liší od výměry - "
+                     "prázdné znamená, že se topí v celé ploše.",
+        }),
+    )
+
+    class Meta:
+        model = CardUnit
+        fields = "__all__"
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        prostor = getattr(self.instance, "unit", None)
+        if prostor is not None:
+            self.fields["unit_is_heated"].initial = prostor.is_heated
+            self.fields["unit_heated_area_m2"].initial = prostor.heated_area_m2
+
+    def save(self, commit=True):
+        radek = super().save(commit=commit)
+        prostor = radek.unit
+        zmenene = [
+            f for f in ("unit_is_heated", "unit_heated_area_m2")
+            if f in self.changed_data
+        ]
+        if prostor is not None and zmenene:
+            prostor.is_heated = self.cleaned_data["unit_is_heated"]
+            prostor.heated_area_m2 = self.cleaned_data["unit_heated_area_m2"]
+            prostor.save(update_fields=["is_heated", "heated_area_m2"])
+        return radek
+
+
 class CardUnitInline(TabularInline):
+    form = CardUnitInlineForm
     formset = CardUnitInlineFormSet
     model = CardUnit
     extra = 0
     fields = (
-        "unit", "vymera_zasobnik", "area_m2_override", "rate_per_m2",
+        "unit", "vymera_zasobnik", "area_m2_override",
+        "unit_is_heated", "unit_heated_area_m2",
+        "rate_per_m2",
         "monthly_rent_override", "rocni_najem", "mesicni_najem", "rent_not_invoiced",
     )
     readonly_fields = ("vymera_zasobnik", "rocni_najem", "mesicni_najem")
