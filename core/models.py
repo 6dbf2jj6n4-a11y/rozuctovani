@@ -1010,6 +1010,19 @@ class Meter(models.Model):
             "samotný výpočet nemá vliv."
         ),
     )
+    skip_manual_reading = models.BooleanField(
+        "Nezadává se v Odečtech", default=False,
+        help_text=(
+            "Schová měřidlo na obrazovce Zadávání odečtů - správce ho neuvidí "
+            "a nebude ho hlásit jako chybějící. Pro měřidla, jejichž hodnota "
+            "není fyzický odečet, ale dohodnuté číslo, které se skoro nemění "
+            "(T_SPOLECNA = počet osob, T_INDIVIDUALNI = počet radiátorů). "
+            "Do výpočtu to nijak nezasahuje: odečty měřidlo dál má a mění se "
+            "v administraci. NEPLEŤ si to s „Virtuální“ - to měřidlo z výpočtu "
+            "vyřadí, protože virtuální měřidlo bez Vzorce nikdy žádnou "
+            "spotřebu nevrátí."
+        ),
+    )
     display_order = models.PositiveIntegerField(
         "Pořadí při zadávání odečtů", default=0,
         help_text="Určuje pořadí měřidel na obrazovce pro zadávání odečtů. Stejná hodnota (výchozí 0) řadí abecedně podle kódu.",

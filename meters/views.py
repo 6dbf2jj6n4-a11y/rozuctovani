@@ -125,7 +125,7 @@ def readings_entry(request):
     meters_data = []
     if site and period:
         meters = list(
-            Meter.objects.filter(site=site, is_virtual=False)
+            Meter.objects.filter(site=site, is_virtual=False, skip_manual_reading=False)
             .order_by("display_order", "meter_type", "code")
         )
 
@@ -364,9 +364,12 @@ def _meridla_bez_odectu(site, period):
         .values_list("meter_id", flat=True)
     )
     # Virtualni meridla se neodecitaji - jejich hodnota se pocita ze
-    # vzorce z jinych meridel, takze do "chybejicich" nepatri.
+    # vzorce z jinych meridel, takze do "chybejicich" nepatri. Stejne tak
+    # meridla oznacena "Nezadava se v Odectech" - jejich hodnota neni
+    # fyzicky odecet, ale dohodnute cislo (pocet osob, pocet radiatoru).
     return [
-        m for m in Meter.objects.filter(site=site, is_virtual=False).order_by("code")
+        m for m in Meter.objects.filter(
+            site=site, is_virtual=False, skip_manual_reading=False).order_by("code")
         if m.id not in ma_odecet
     ]
 

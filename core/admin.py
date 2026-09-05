@@ -2414,7 +2414,8 @@ class MeterAdmin(PodlePronajimatele, DuplicateModelAdminMixin, ModelAdmin):
 
     list_display = (
         "code_colored", "name", "site", "meter_type", "parent_meter", "supply_point",
-        "reading_mode", "is_virtual", "unit_of_measure", "weight_unit_label",
+        "reading_mode", "is_virtual", "skip_manual_reading", "unit_of_measure",
+        "weight_unit_label",
     )
     list_select_related = ("site", "parent_meter", "supply_point")
     list_filter = ("site", "meter_type", "supply_point", "reading_mode", "is_virtual")
