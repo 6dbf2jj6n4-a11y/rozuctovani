@@ -2562,11 +2562,14 @@ class ClientCardAdmin(PodlePronajimatele, ModelAdmin):
             if platnost is None:
                 return redirect(request.path)
             new_card = original.create_exact_copy(valid_from=platnost)
+            konec = self._ukoncit_original(original, platnost)
             self.message_user(
                 request,
                 "Kopie karty byla vytvořena s platností od %s. Je zatím "
-                "neaktivní – zkontroluj ji a teprve pak zaškrtni Aktivní."
-                % platnost.strftime("%-d. %-m. %Y"),
+                "neaktivní – zkontroluj ji a teprve pak zaškrtni Aktivní.%s"
+                % (platnost.strftime("%-d. %-m. %Y"),
+                   " Původní kartě byla doplněna platnost do %s."
+                   % konec.strftime("%-d. %-m. %Y") if konec else ""),
             )
             return redirect(f"/admin/core/clientcard/{new_card.pk}/change/")
 
@@ -2576,6 +2579,33 @@ class ClientCardAdmin(PodlePronajimatele, ModelAdmin):
             "original": original,
             "opts": self.model._meta,
         })
+
+    @staticmethod
+    def _ukoncit_original(original, platnost_kopie):
+        """Puvodni karte doplni Platnost do na den pred zacatkem kopie.
+
+        Bez toho zustane stara karta bez konce platnosti, automatika ji
+        nikdy nedeaktivuje (deaktivuje jen kartu s platnosti prokazatelne
+        skoncenou) a nova se kvuli kolizi nezapne - jen se nahlasi
+        varovani. Presne to se stalo u Tanecni skupiny Aktiv: obe karty
+        bez konce, nova cekala vypnuta. Daniel 2026-09-05: "kdyz dam
+        platnou kartu zkopirovat, ta stara by se mohla automaticky
+        doplnit, kdy bude koncit."
+
+        Uz vyplneny konec se NEPREPISUJE - kdyz ho nekdo nastavil, vi
+        proc; a nemeni se ani konec pozdejsi nez zacatek kopie, at se
+        omylem nezkrati bezici najem. Vraci datum, ktere doplnilo, nebo
+        None."""
+        from datetime import timedelta
+
+        if original.valid_to is not None:
+            return None
+        konec = platnost_kopie - timedelta(days=1)
+        if konec < original.valid_from:
+            return None
+        original.valid_to = konec
+        original.save(update_fields=["valid_to"])
+        return konec
 
     def _datum_kopie(self, request, original):
         """Datum 'platnost od' z formulare kopie, nebo None pri chybe."""
