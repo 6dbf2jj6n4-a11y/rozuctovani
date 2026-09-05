@@ -349,17 +349,38 @@ def sekce_sluzeb():
 @admin.register(Unit)
 class UnitAdmin(PodlePronajimatele, DuplicateModelAdminMixin, ModelAdmin):
     cesta_k_arealu = "site"
-    list_display = ("name", "site", "purpose", "area_m2", "unit_type", "druh_prostoru")
+    list_display = ("name", "site", "purpose", "area_m2", "unit_type", "druh_prostoru",
+                    "vytapeni")
     list_select_related = ("site",)
-    list_filter = ("site", "is_residential")
+    list_filter = ("site", "is_residential", "is_heated")
     search_fields = ("name",)
-    actions = ["duplicate_selected"]
+    actions = ["duplicate_selected", "zapnout_vytapeni", "vypnout_vytapeni"]
 
     @display(description="Druh", ordering="is_residential")
     def druh_prostoru(self, obj):
         """Slovem, ne zaskrtavatkem - 'Bytový/Nebytový' se v seznamu cte
         lip nez fajfka u sloupce 'Bytový prostor'."""
         return "Bytový" if obj.is_residential else "Nebytový"
+
+    @display(description="Vytápění", ordering="is_heated")
+    def vytapeni(self, obj):
+        """Kolik m2 se v prostoru topi - u vetsiny cela vymera, proto se
+        ukazuje rovnou cislo a ne fajfka."""
+        if not obj.is_heated:
+            return "—"
+        cislo = lambda d: ("%f" % (d or 0)).rstrip("0").rstrip(".").replace(".", ",")
+        cast = " z {}".format(cislo(obj.area_m2)) if obj.heated_area_m2 is not None else ""
+        return "{} m²{}".format(cislo(obj.vytapena_plocha), cast)
+
+    @admin.action(description="Označit jako vytápěné")
+    def zapnout_vytapeni(self, request, queryset):
+        pocet = queryset.update(is_heated=True)
+        self.message_user(request, f"Vytápěných prostorů: {pocet}.", messages.SUCCESS)
+
+    @admin.action(description="Označit jako nevytápěné")
+    def vypnout_vytapeni(self, request, queryset):
+        pocet = queryset.update(is_heated=False)
+        self.message_user(request, f"Nevytápěných prostorů: {pocet}.", messages.SUCCESS)
 
     def get_inlines(self, request, obj=None):
         """Sekce se generuji z Trid (Nastaveni -> Tridy), ne napevno."""

@@ -202,6 +202,25 @@ class Unit(models.Model):
         ),
     )
 
+    is_heated = models.BooleanField(
+        "Vytápěný", default=False,
+        help_text=(
+            "Topí se v tomhle prostoru? Podle vytápěné plochy se dá rozúčtovat "
+            "teplo - spravedlivěji než podle počtu radiátorů, který nebere "
+            "ohled na velikost. Účel prostoru na to nestačí: v NJ jsou "
+            "vytápěné i sklady v budově AB, kdežto plechový sklad vedle ne."
+        ),
+    )
+    heated_area_m2 = models.DecimalField(
+        "Vytápěná plocha (m²)", max_digits=10, decimal_places=2,
+        null=True, blank=True,
+        help_text=(
+            "Vyplň jen když se vytápěná část liší od celkové výměry - třeba "
+            "hala, kde se temperuje jen dílna. Prázdné znamená, že se topí "
+            "v celém prostoru."
+        ),
+    )
+
     class Meta:
         verbose_name = "Předmět nájmu"
         verbose_name_plural = "Předměty nájmu"
@@ -209,6 +228,18 @@ class Unit(models.Model):
 
     def __str__(self):
         return f"{self.site} – {self.name}"
+
+    @property
+    def vytapena_plocha(self):
+        """Kolik m² se v prostoru topí - 0 u nevytápěného.
+
+        Bez vyplněné Vytápěné plochy se bere celá výměra; jedno místo
+        pravdy pro klíče i sestavy, ať se to nepočítá pokaždé jinak."""
+        if not self.is_heated:
+            return Decimal("0")
+        if self.heated_area_m2 is not None:
+            return self.heated_area_m2
+        return self.area_m2 or Decimal("0")
 
 
 def normalizovat_telefon(hodnota):
