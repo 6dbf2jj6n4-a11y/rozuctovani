@@ -1786,6 +1786,17 @@ class AllocationKey(models.Model):
             "dal dohromady 100 %, stačí tedy zadat správný POMĚR mezi kartami."
         ),
     )
+    weight_from_heated_area = models.BooleanField(
+        "Váha = vytápěná plocha karty", default=False,
+        help_text=(
+            "Místo pevné Hodnoty se váha vezme jako součet vytápěných m² "
+            "všech Ploch téhle Karty. Přepočítá se sama při každém "
+            "rozúčtování, takže se nerozejde, když se plocha přidá, ubere "
+            "nebo se opraví výměra - na rozdíl od čísla opsaného do "
+            "Hodnoty. Používá se u tepla, kde se dělí podle velikosti "
+            "vytápěného prostoru."
+        ),
+    )
     unit_price = models.DecimalField(
         "Cena za m²/rok (přebíjí Ceník)", max_digits=12, decimal_places=4, null=True, blank=True,
         help_text=(
@@ -1857,6 +1868,22 @@ class AllocationKey(models.Model):
         if self.meter_id and self.meter.weight_unit_label:
             return self.meter.weight_unit_label
         return self.service_item.weight_unit_label
+
+    @property
+    def vaha(self):
+        """Váha klíče pro dělení - buď zadaná Hodnota, nebo dopočtená.
+
+        Se zapnutým „Váha = vytápěná plocha karty“ se sečtou vytápěná m²
+        Ploch karty. Počítá se až tady, ne při zakládání klíče: číslo
+        opsané do Hodnoty by se rozešlo s realitou při každé změně ploch
+        a nikdo by si toho nevšiml (Daniel 2026-09-05: "musíme zajistit,
+        že to provede sám model")."""
+        if not self.weight_from_heated_area:
+            return self.value or Decimal("0")
+        return sum(
+            (cu.vytapena_plocha for cu in self.client_card.card_units.select_related("unit")),
+            Decimal("0"),
+        )
 
     def is_valid_for_period(self, period):
         if not self.client_card.is_active:

@@ -484,7 +484,7 @@ class AllocationKeyInlineBase(TabularInline):
             aktivni = klic.client_card.active_days_in_period(zacatek, konec)
             if aktivni <= 0:
                 continue
-            vahy[klic.pk] = (klic.value or Decimal("0")) * (Decimal(aktivni) / dnu)
+            vahy[klic.pk] = klic.vaha * (Decimal(aktivni) / dnu)
         celkem = sum(vahy.values())
         muj = vahy.get(obj.pk)
         if not celkem or muj is None:

@@ -25,6 +25,11 @@ Co se NEMENI:
   * Karta bez jedine vytapene plochy klic nedostane a teplo neplati
     (EVUM Motors - zadny radiator uz dnes).
 
+Prikaz je OPAKOVATELNY: vaha je momentka soucтu vytapenych m2, takze po
+kazde zmene ploch (novy najemce, ukonceni najmu, oprava vymery, zmena
+priznaku Vytapeny) se pusti znovu a vahy se prepocitaji. Existujici
+vazene klice polozky nahradi, pevne castky nechava byt.
+
 VYCHOZI je jen NAHLED, zapisuje se az s --provest.
 
 Pouziti:
@@ -76,9 +81,13 @@ class Command(BaseCommand):
                 popis.setdefault(cu.card_id, []).append(
                     "%s %s m²" % (cu.unit.name, _cislo(plocha)))
 
+        # Ke smazani jde VSECHNO krome pevnych castek - jak puvodni klice
+        # na obou "meridlech", tak vazene klice z drivejsiho spusteni
+        # tohohle prikazu. Diky tomu jde prikaz poustet opakovane po kazde
+        # zmene ploch a vahy se prepoctou.
         stare = list(
             polozka.allocation_keys
-            .filter(meter__code__in=STARA_MERIDLA)
+            .exclude(allocation_type="fixed_amount")
             .select_related("client_card__client", "meter")
         )
         # "Fakturovat" se prenese z puvodniho klice - kdyz to mel klient
@@ -110,7 +119,7 @@ class Command(BaseCommand):
         self.stdout.write("   celkem {} m²".format(_cislo(celkem)))
 
         self.stdout.write(self.style.MIGRATE_HEADING(
-            "\nruší se klíče na {} ({})".format(" a ".join(STARA_MERIDLA), len(stare))))
+            "\nruší se dosavadní vážené klíče položky ({})".format(len(stare))))
         pevne = polozka.allocation_keys.filter(allocation_type="fixed_amount").count()
         if pevne:
             self.stdout.write("pevné částky zůstávají beze změny: {}".format(pevne))

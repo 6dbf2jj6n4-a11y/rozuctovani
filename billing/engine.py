@@ -192,7 +192,9 @@ def _weighted_shares(keys, period, by_key_out=None):
         if active_days <= 0:
             continue
 
-        base = key.value or Decimal("0")
+        # Vaha muze byt dopoctena z vytapene plochy karty - viz
+        # AllocationKey.vaha; do vzorce se tim nic dalsiho nemeni.
+        base = key.vaha
         effective_weight = base * (Decimal(active_days) / days_in_period)
         raw_weights[card.id] = raw_weights.get(card.id, Decimal("0")) + effective_weight
         if by_key_out is not None:

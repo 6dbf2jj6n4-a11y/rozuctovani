@@ -136,6 +136,10 @@ def _fmt_key_value(key, sdilene_meridlo=False):
     měřidle" to začalo skrývat váhy i tam, kde nesou celý výpočet - na
     kartě KJO EU vycházelo osm hodnot z deseti jako pomlčka.
     Daniel 2026-08-27."""
+    if key.weight_from_heated_area:
+        # Klic s dopoctenou vahou Hodnotu vyplnenou nema - v Karte se ukaze
+        # to, cim se opravdu deli, tedy vytapena plocha (Daniel 2026-09-05).
+        return f"{_strip_trailing_zeros(key.vaha)} m² vytápěné plochy"
     if key.value is None:
         return "—"
     t = AllocationKey.AllocationType
