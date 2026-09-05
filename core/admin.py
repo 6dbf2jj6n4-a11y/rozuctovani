@@ -362,6 +362,96 @@ class UnitAdmin(PodlePronajimatele, DuplicateModelAdminMixin, ModelAdmin):
         lip nez fajfka u sloupce 'Bytový prostor'."""
         return "Bytový" if obj.is_residential else "Nebytový"
 
+    def report_bez_karty_view(self, request):
+        """Report (Reporty v menu): Plochy, ktere ve vybranem obdobi nedrzi
+        zadna aktivni Karta - jejich dil nakladu dnes potichu nesou ostatni
+        najemci. Prevod na kartu pronajimatele se NABIZI, nedela se sam:
+        system nevi, jestli nahradni najemce nedorazi za tyden.
+        Viz Daniel 2026-09-05."""
+        from datetime import date
+
+        from django.shortcuts import render
+
+        from core import volne_plochy
+
+        obdobi = Period.objects.order_by("-year", "-month")
+        period = None
+        if request.GET.get("period"):
+            period = obdobi.filter(pk=request.GET["period"]).first()
+        period = period or Period.current() or obdobi.first()
+
+        groups = []
+        if period is not None:
+            arealy = pronajimatele.arealy(request)
+            volne = volne_plochy.bez_karty(period, sites=arealy)
+            podle_arealu = {}
+            for u in volne.prefetch_related("card_units__card__client"):
+                podle_arealu.setdefault(u.site, []).append(u)
+            for site, units in sorted(podle_arealu.items(), key=lambda kv: kv[0].name):
+                radky = []
+                for u in units:
+                    # Karta, ktera plochu drzi casove nejbliz vybranemu
+                    # obdobi - bud ta, po ktere plocha zbyla, nebo naopak
+                    # ta, ktera ji teprve prevezme. Puvodne se ukazovala
+                    # jen "naposledy drzel", takze u AB 1.07 svitilo TSC
+                    # Cleaning, ackoliv ji od zari teprve prebiraji.
+                    karty = sorted(
+                        (cu.card for cu in u.card_units.all()),
+                        key=lambda k: k.valid_from,
+                    )
+                    radky.append({"unit": u, "karta": karty[-1] if karty else None})
+                groups.append({
+                    "site": site, "rows": radky,
+                    "karta": volne_plochy.karta_pronajimatele(site, period),
+                })
+
+        context = {
+            **self.admin_site.each_context(request),
+            "title": "Plochy bez karty",
+            "groups": groups,
+            "period": period,
+            "periods": obdobi,
+            "opts": self.model._meta,
+        }
+        return render(request, "admin/core/unit/report_bez_karty.html", context)
+
+    def report_bez_karty_prevest_view(self, request):
+        """Prevede zaskrtnute Plochy na kartu pronajimatele jejich arealu."""
+        from django.shortcuts import redirect
+
+        from core import volne_plochy
+
+        if request.method != "POST":
+            return redirect("admin:core_unit_report_bez_karty")
+        period = Period.objects.filter(pk=request.POST.get("period")).first()
+        units = pronajimatele.omez(
+            Unit.objects.filter(pk__in=request.POST.getlist("unit")), "site", request,
+        ).select_related("site")
+
+        podle_arealu = {}
+        for u in units:
+            podle_arealu.setdefault(u.site, []).append(u)
+        for site, seznam in podle_arealu.items():
+            karta = volne_plochy.karta_pronajimatele(site, period) if period else None
+            if karta is None:
+                self.message_user(
+                    request,
+                    f"{site.name}: areál nemá v {period} platnou kartu pronajímatele - "
+                    f"nepřevedeno ({len(seznam)} ploch).",
+                    messages.ERROR,
+                )
+                continue
+            pridano = volne_plochy.prevest(seznam, karta)
+            self.message_user(
+                request,
+                f"{site.name}: na kartu {karta.client} převedeno {pridano} ploch "
+                f"({', '.join(u.name for u in seznam)}).",
+                messages.SUCCESS,
+            )
+        cil = "admin:core_unit_report_bez_karty"
+        from django.urls import reverse
+        return redirect("{}?period={}".format(reverse(cil), period.pk if period else ""))
+
     @display(description="Vytápění", ordering="is_heated")
     def vytapeni(self, obj):
         """Kolik m2 se v prostoru topi - u vetsiny cela vymera, proto se
@@ -423,6 +513,16 @@ class UnitAdmin(PodlePronajimatele, DuplicateModelAdminMixin, ModelAdmin):
                 "area-lookup/<int:unit_id>/",
                 self.admin_site.admin_view(area_lookup),
                 name="core_unit_area_lookup",
+            ),
+            path(
+                "report/bez-karty/",
+                self.admin_site.admin_view(self.report_bez_karty_view),
+                name="core_unit_report_bez_karty",
+            ),
+            path(
+                "report/bez-karty/prevest/",
+                self.admin_site.admin_view(self.report_bez_karty_prevest_view),
+                name="core_unit_report_bez_karty_prevest",
             ),
         ]
         return custom + urls
@@ -3452,6 +3552,17 @@ class PeriodAdmin(ModelAdmin):
                     request, f"{label}: {text}",
                     level=messages.SUCCESS if level == "success" else messages.WARNING,
                 )
+
+            # Plocha, kterou po odchodu najemce nikdo neprevzal, se nikde
+            # neozve - jen se jeji dil nakladu potichu rozpusti mezi
+            # ostatni. Prevod na pronajimatele se jen NABIDNE, nedela se
+            # sam. Viz Daniel 2026-09-05.
+            from core import volne_plochy
+
+            volne = volne_plochy.hlaseni(
+                period, [site] if site else pronajimatele.arealy(request))
+            if volne:
+                self.message_user(request, f"{label}: {volne}", level=messages.WARNING)
 
             try:
                 result = calculate_period(period, site=site)

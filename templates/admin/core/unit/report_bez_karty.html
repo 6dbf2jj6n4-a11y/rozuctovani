@@ -1,0 +1,95 @@
+{% extends "admin/base_site.html" %}
+
+{% block content %}
+<div>
+    <p style="color:#999; font-size:13px;">
+        Plochy, které ve vybraném období nedrží žádná aktivní Karta. Prázdná plocha
+        nepřestane stát peníze – jen se její díl nákladů rozpustí mezi ostatní nájemce.
+        Pokud za odcházejícího nájemce není náhrada, převeď plochu na kartu pronajímatele,
+        aby náklad nesl on. Rozhoduje překryv platnosti karty s obdobím, ne jen příznak
+        Aktivní.
+    </p>
+
+    <form method="get" style="margin:12px 0;">
+        <label>Období:
+            <select name="period" onchange="this.form.submit()">
+                {% for p in periods %}
+                    <option value="{{ p.pk }}" {% if p.pk == period.pk %}selected{% endif %}>{{ p }}</option>
+                {% endfor %}
+            </select>
+        </label>
+    </form>
+
+    {% if not groups %}
+        <p>V období {{ period }} drží každou plochu nějaká karta.</p>
+    {% else %}
+        <form method="post" action="{% url 'admin:core_unit_report_bez_karty_prevest' %}">
+            {% csrf_token %}
+            <input type="hidden" name="period" value="{{ period.pk }}">
+            <div style="margin-bottom:10px;">
+                <button type="submit" class="rx-btn">
+                    <span class="material-symbols-outlined">move_down</span>
+                    Převést vybrané na kartu pronajímatele
+                </button>
+            </div>
+            {% for group in groups %}
+                <h2 style="margin:18px 0 6px; font-size:15px;">
+                    {{ group.site.name }}
+                    <span style="color:#888; font-weight:400; font-size:13px;">
+                        {% if group.karta %}
+                            – pronajímatel {{ group.karta.client }}, karta platná od {{ group.karta.valid_from }}
+                        {% else %}
+                            – ⚠️ areál nemá platnou kartu pronajímatele, převést nelze
+                        {% endif %}
+                    </span>
+                </h2>
+                <div style="overflow-x:auto;">
+                <table style="width:100%; border-collapse:collapse; font-size:13px;">
+                    <thead>
+                        <tr style="border-bottom:2px solid #666; text-align:left;">
+                            <th style="padding:6px 8px;"><input type="checkbox" class="select-all" data-site="{{ group.site.pk }}"></th>
+                            <th style="padding:6px 8px;">Plocha</th>
+                            <th style="padding:6px 8px;">Účel</th>
+                            <th style="padding:6px 8px; text-align:right;">Výměra</th>
+                            <th style="padding:6px 8px;">Vytápění</th>
+                            <th style="padding:6px 8px;">Nejbližší karta na ploše</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for row in group.rows %}
+                            <tr style="border-bottom:1px solid #2a2a2a;">
+                                <td style="padding:4px 8px;">
+                                    <input type="checkbox" name="unit" value="{{ row.unit.pk }}"
+                                           data-site="{{ group.site.pk }}"
+                                           {% if not group.karta %}disabled{% endif %}>
+                                </td>
+                                <td style="padding:4px 8px;">
+                                    <a href="{% url 'admin:core_unit_change' row.unit.pk %}">{{ row.unit.name }}</a>
+                                </td>
+                                <td style="padding:4px 8px;">{{ row.unit.purpose|default:"—" }}</td>
+                                <td style="padding:4px 8px; text-align:right;">{{ row.unit.area_m2|default:"—" }} m²</td>
+                                <td style="padding:4px 8px;">{% if row.unit.is_heated %}vytápěná{% else %}—{% endif %}</td>
+                                <td style="padding:4px 8px;">
+                                    {% if row.karta %}
+                                        {{ row.karta.client }}
+                                        <span style="color:#888;">({{ row.karta.valid_from }} – {{ row.karta.valid_to|default:"…" }}{% if not row.karta.is_active %}, neaktivní{% endif %})</span>
+                                    {% else %}—{% endif %}
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+                </div>
+            {% endfor %}
+        </form>
+        <script>
+        document.querySelectorAll('.select-all').forEach(function (box) {
+            box.addEventListener('change', function () {
+                document.querySelectorAll('input[name="unit"][data-site="' + box.dataset.site + '"]')
+                    .forEach(function (c) { if (!c.disabled) { c.checked = box.checked; } });
+            });
+        });
+        </script>
+    {% endif %}
+</div>
+{% endblock %}
