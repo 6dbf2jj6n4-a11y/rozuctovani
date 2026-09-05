@@ -2500,12 +2500,16 @@ class MeterAdmin(PodlePronajimatele, DuplicateModelAdminMixin, ModelAdmin):
             )
         }),
         ("Odečty", {
-            "fields": ("reading_mode",),
+            "fields": ("reading_mode", "skip_manual_reading"),
             "description": (
                 "Většina měřidel hlásí kumulativní Stav. Pokud dodavatel hlásí "
                 "rovnou Spotřebu za období (např. hlavní odběrné místo elektro), "
                 "přepni na 'Spotřeba za období' - pak stačí zadávat odečet jen "
-                "za aktuální měsíc, bez nutnosti znát předchozí stav."
+                "za aktuální měsíc, bez nutnosti znát předchozí stav.<br>"
+                "„Nezadává se v Odečtech“ měřidlo schová správci na obrazovce "
+                "Zadávání odečtů - pro hodnoty, které nejsou fyzický odečet, ale "
+                "dohodnuté číslo (počet osob, počet radiátorů). Do výpočtu to "
+                "nezasahuje, na rozdíl od „Virtuální“ níže."
             ),
         }),
         ("Hierarchie", {
