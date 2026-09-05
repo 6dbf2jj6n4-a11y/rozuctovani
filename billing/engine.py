@@ -777,7 +777,14 @@ def calculate_period(period, site=None):
                         f"paušál v měsíci bez spotřeby platit nemá, omez platnost těch klíčů "
                         f"na sezónu (Platí od / Platí do)."
                     )
-                else:
+                elif any(k.allocation_type not in ABSOLUTE_AMOUNT_TYPES for k in valid_keys):
+                    # Hlasi se jen tehdy, kdyz na polozce vubec NEKDO je,
+                    # komu by zbytek pripadl. Kdyz ma polozka same pevne
+                    # castky (internet NONSTOP v NJ), neni komu prebytek
+                    # rozpocitat uz z podstaty a hlaska by chodila kazdy
+                    # mesic bez toho, aby slo cokoliv zmenit - naklad je
+                    # nizsi nez pausaly zamerne, protoze se na sluzbe
+                    # vydelava. Viz Daniel 2026-09-05.
                     warnings.append(
                         f"{service_item} / {period}: pevné částky odečítané ze společného nákladu "
                         f"překračují celkový náklad ({castka}) - přebytek se nerozpočítává "

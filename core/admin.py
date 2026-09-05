@@ -2393,6 +2393,25 @@ class MeterReadingInline(TabularInline):
 @admin.register(Meter)
 class MeterAdmin(PodlePronajimatele, DuplicateModelAdminMixin, ModelAdmin):
     cesta_k_arealu = "site"
+
+    def save_formset(self, request, form, formset, change):
+        """Odecet zalozeny v inline na Meridle taky dostane "Zadal".
+
+        MeterReadingAdmin.save_model to resi u samostatne zadanych odectu
+        a obrazovka Odectu u tech od spravce, ale inline pres save_model
+        neprochazi - odecty zapsane tady zustavaly bez autora. Viz
+        E_O7 08/2026 (Daniel 2026-09-05)."""
+        if formset.model is MeterReading:
+            for obj in formset.save(commit=False):
+                if obj.pk is None and obj.created_by_id is None:
+                    obj.created_by = request.user
+                obj.save()
+            formset.save_m2m()
+            for obj in formset.deleted_objects:
+                obj.delete()
+            return
+        super().save_formset(request, form, formset, change)
+
     list_display = (
         "code_colored", "name", "site", "meter_type", "parent_meter", "supply_point",
         "reading_mode", "is_virtual", "unit_of_measure", "weight_unit_label",
