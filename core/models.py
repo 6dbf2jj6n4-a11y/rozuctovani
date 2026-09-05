@@ -211,6 +211,15 @@ class Unit(models.Model):
             "vytápěné i sklady v budově AB, kdežto plechový sklad vedle ne."
         ),
     )
+    radiator_count = models.PositiveIntegerField(
+        "Počet radiátorů", null=True, blank=True,
+        help_text=(
+            "Kolik je v prostoru radiátorů. Teplo se dnes rozúčtovává podle "
+            "vytápěné plochy, ale kdyby se mělo vrátit k radiátorům, stačí "
+            "přepsat váhu na klíčích - údaj tím zůstává po ruce. Jen "
+            "informativní, sám na výpočet nemá vliv."
+        ),
+    )
     heated_area_m2 = models.DecimalField(
         "Vytápěná plocha (m²)", max_digits=10, decimal_places=2,
         null=True, blank=True,
@@ -2404,6 +2413,20 @@ class CardUnit(models.Model):
         if self.area_m2_override is not None:
             return self.area_m2_override
         return self.unit.area_m2
+
+    @property
+    def vytapena_plocha(self):
+        """Kolik m² se topí z TÉHLE plochy na kartě - 0 u nevytápěné.
+
+        Bere výměru z Karty (Plocha na kartě může mít vlastní výměru -
+        AB 1.14 má 8 m² u Aktiv Novostav a 4 m² u Andělů), ale Vytápěná
+        plocha zadaná na Prostoru má přednost: tam se vysloveně říká,
+        kolik z prostoru se topí."""
+        if not self.unit.is_heated:
+            return Decimal("0")
+        if self.unit.heated_area_m2 is not None:
+            return self.unit.heated_area_m2
+        return self.area_m2 or Decimal("0")
 
     @property
     def monthly_rent(self):
