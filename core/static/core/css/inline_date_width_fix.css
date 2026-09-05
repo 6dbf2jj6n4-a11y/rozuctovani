@@ -113,3 +113,43 @@ input[type="number"] {
     -moz-appearance: textfield;
     appearance: textfield;
 }
+
+/* Tabulka Vytapene plochy v sekci Teplo (Karta klienta).
+   Zamerne lehka, v duchu sestav: jemne radkovani, sirka podle obsahu,
+   podbarveni si nese uz sekce. Barvy pres rgba, aby stejne pravidlo
+   sedelo ve svetlem i tmavem rezimu - pevny odstin by v jednom z nich
+   vzdycky bil do oci. Daniel 2026-09-05. */
+table.rx-vytapene-plochy {
+    border-collapse: collapse;
+    font-size: 13px;
+    width: auto;
+    max-width: 560px;
+}
+table.rx-vytapene-plochy th {
+    border-bottom: 1px solid rgba(128, 128, 128, 0.45);
+    font-weight: 600;
+    padding: 4px 12px 6px;
+    text-align: left;
+    white-space: nowrap;
+}
+table.rx-vytapene-plochy td {
+    border-bottom: 1px solid rgba(128, 128, 128, 0.18);
+    padding: 3px 12px;
+    white-space: nowrap;
+}
+table.rx-vytapene-plochy tfoot td {
+    border-bottom: none;
+    border-top: 1px solid rgba(128, 128, 128, 0.45);
+    font-weight: 600;
+    padding-top: 6px;
+}
+table.rx-vytapene-plochy input.rx-vytapena-vstup {
+    background: transparent;
+    border: 1px solid rgba(128, 128, 128, 0.35);
+    border-radius: 4px;
+    color: inherit;
+    font-size: 13px;
+    padding: 1px 6px;
+    text-align: right;
+    width: 82px;
+}

@@ -32,8 +32,9 @@ cislo, nez kterym se teplo skutecne deli.
         if (vlastni !== null) {
             return vlastni;
         }
-        // Vymera je readonly bunka, tedy text "15.00 m²".
-        var vymera = parseNum($row.find(".field-vymera").first().text().replace("m²", ""));
+        // Vymeru nese radek v data-vymera (sablona ji tam da uz
+        // odlokalizovanou, viz cardunit_teplo_inline_tabular.html).
+        var vymera = parseNum($row.attr("data-vymera"));
         return vymera === null ? 0 : vymera;
     }
 

@@ -1,23 +1,83 @@
+{% load l10n %}
 {% comment %}
-Vytapene plochy (prvni tabulka sekce Teplo) + jejich soucet.
+Vytapene plochy - prvni tabulka sekce Teplo v Karte klienta.
 
-Podle souctu se teplo deli - klic se zapnutym "Vaha = vytapena plocha
-karty" si ho bere z ClientCard.vytapena_plocha. Server ho vykresli
-z ulozenych dat, prepnuti, ktera jeste nejsou ulozena, dopocita podle
-id nize core/js/cardunit_teplo.js.
+Schvalne se NEVYKRESLUJE pres admin/edit_inline/tabular.html: Unfoldova
+tabulka je stavena na siroke inliny s mnoha poli, takze pro ctyri
+sloupce nafoukla ramecky, prepinace i sirku pres celou stranku. Tady je
+misto toho lehka tabulka v duchu sestav (napr. admin/core/unit/
+report_bez_karty.html) - jemne radkovani, sirka podle obsahu, podbarveni
+si nese uz sekce. Daniel 2026-09-05: "ten inline vytapene plochy je
+strasne skaredy... jemne radkovani, jenom pozadi podbarveno, nemusime
+roztahovat na celou sirku stranky."
+
+Obal (div.inline-group, fieldset s tridou sekce, h2 s id konciciho na
+"-heading") zustava stejny jako u ostatnich sekci - drzi na nem
+podbarveni z invoiceclasscolor_style.html i barevny pruh u nadpisu.
+
+Radky se odsud nepridavaji ani nemazou, takze v tabulce nejsou zadna
+prazdna mista navic; hidden pole formulare (id, vazba na kartu) se
+vypisuji rucne, bez nich by se odeslana data neparovala na radky.
 {% endcomment %}
-{% include "admin/edit_inline/tabular.html" %}
-{% with karta=inline_admin_formset.formset.instance %}
-    {% if karta.pk %}
-        <div style="margin:-12px 0 24px 0; padding:10px 14px; font-weight:600;
-                    border:1px solid rgba(0,0,0,0.1); border-radius:6px;
-                    background:rgba(0,0,0,0.03);">
-            Součet vytápěných ploch:
-            <span id="rx-vytapena-plocha-soucet">{{ karta.vytapena_plocha|floatformat:2 }}</span> m²
-            <span id="rx-vytapena-plocha-hint"
-                  style="font-weight:400; color:#6b7280;{% if karta.vytapena_plocha %} display:none;{% endif %}">
-                &ndash; žádná Plocha karty není označená jako vytápěná, teplo se podle nich dělit nedá.
-            </span>
-        </div>
-    {% endif %}
-{% endwith %}
+<div class="js-inline-admin-formset inline-group"
+     id="{{ inline_admin_formset.formset.prefix }}-group"
+     data-inline-type="tabular"
+     data-inline-formset="{{ inline_admin_formset.inline_formset_data }}"
+     x-show="activeTab == 'general'">
+    <div class="tabular inline-related">
+        {{ inline_admin_formset.formset.management_form }}
+
+        <fieldset class="module relative {{ inline_admin_formset.classes }} min-w-0"
+                  aria-labelledby="{{ inline_admin_formset.formset.prefix }}-heading">
+            <h2 id="{{ inline_admin_formset.formset.prefix }}-heading"
+                class="bg-base-100 border border-transparent font-semibold mb-6 px-4 py-3 rounded-default text-font-important-light text-sm @min-[1570px]:-mx-4 dark:bg-white/[.02] dark:text-font-important-dark">
+                {{ inline_admin_formset.opts.verbose_name_plural|capfirst }}
+            </h2>
+
+            {{ inline_admin_formset.formset.non_form_errors }}
+
+            <div style="overflow-x:auto;">
+                <table class="rx-vytapene-plochy">
+                    <thead>
+                        <tr>
+                            <th>Plocha</th>
+                            <th style="text-align:right;">Výměra</th>
+                            <th style="text-align:center;">Vytápěná</th>
+                            <th style="text-align:right;">Vytápěná m²</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for form in inline_admin_formset.formset %}
+                            {# data-vymera cte cardunit_teplo.js pro zivy soucet - unlocalize kvuli #}
+                            {# oddelovacum (USE_THOUSAND_SEPARATOR), parseFloat by "1 250,00" neprecetl #}
+                            <tr data-vymera="{{ form.instance.area_m2|default:0|unlocalize }}">
+                                <td>
+                                    {% for skryte in form.hidden_fields %}{{ skryte }}{% endfor %}
+                                    {{ form.instance.unit.name }}
+                                    {% if form.errors %}
+                                        <span style="color:#dc2626;">{{ form.errors }}</span>
+                                    {% endif %}
+                                </td>
+                                <td style="text-align:right;">{{ form.instance.area_m2|floatformat:2 }} m²</td>
+                                <td style="text-align:center;">{{ form.unit_is_heated }}</td>
+                                <td style="text-align:right;">{{ form.unit_heated_area_m2 }}</td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                    <tfoot>
+                        <tr>
+                            <td colspan="3" style="text-align:right;">Vytápěno celkem</td>
+                            <td style="text-align:right;">
+                                <span id="rx-vytapena-plocha-soucet">{{ inline_admin_formset.formset.instance.vytapena_plocha|floatformat:2 }}</span> m²
+                            </td>
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>
+            <p id="rx-vytapena-plocha-hint" style="font-size:12px; color:#6b7280;
+               {% if inline_admin_formset.formset.instance.vytapena_plocha %}display:none;{% endif %}">
+                Žádná plocha karty není označená jako vytápěná, podle vytápěné plochy se teplo rozdělit nedá.
+            </p>
+        </fieldset>
+    </div>
+</div>

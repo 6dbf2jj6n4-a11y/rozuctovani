@@ -15,7 +15,7 @@ except admin.sites.NotRegistered:
     pass
 from django import forms
 from unfold.decorators import display
-from unfold.widgets import UnfoldAdminDecimalFieldWidget, UnfoldBooleanSwitchWidget
+from unfold.widgets import UnfoldBooleanSwitchWidget
 from . import pronajimatele, rizika
 from .admin_mixins import ModelAdmin, TabularInline
 
@@ -703,22 +703,24 @@ class CardUnitTeploForm(forms.ModelForm):
     prostoru na Kartu topeni vyplo.
     """
 
-    # Widgety schvalne z Unfoldu, ne obycejne z Djanga: pole, ktera nejsou
-    # na modelu, si formfield_overrides Unfoldu nevsimne, takze by se
-    # vykreslila jako holy input bez ramecku a odsazeni a v radku by
-    # vypadala jinak nez sousedni Vymera. Stejny prepinac i stejny ramecek
-    # jako u ostatnich sloupcu. Daniel 2026-09-05.
+    # Obycejne zaskrtavatko a uzke policko, ne velky prepinac a siroky
+    # ramecek z Unfoldu: tabulka Vytapenych ploch se nevykresluje
+    # Unfoldem, ale vlastni sablonou v duchu sestav (jemne radkovani,
+    # sirka podle obsahu). Velky prepinac v ni pusobil jako pest na oko -
+    # Daniel 2026-09-05: "nechceme tam nic s jednim prepinacem".
     unit_is_heated = forms.BooleanField(
         label="Vytápěná", required=False,
-        widget=UnfoldBooleanSwitchWidget(attrs={
+        widget=forms.CheckboxInput(attrs={
             "title": "Topí se v tomhle prostoru? Údaj patří Předmětu nájmu, "
                      "takže se propíše i do ostatních Karet s touto Plochou.",
         }),
     )
     unit_heated_area_m2 = forms.DecimalField(
         label="Vytápěná m²", required=False, max_digits=10, decimal_places=2,
-        widget=UnfoldAdminDecimalFieldWidget(attrs={
+        widget=forms.NumberInput(attrs={
             "step": "0.01",
+            "class": "rx-vytapena-vstup",
+            "placeholder": "celá",
             "title": "Vyplň jen když se vytápěná část liší od výměry - "
                      "prázdné znamená, že se topí v celé ploše.",
         }),
