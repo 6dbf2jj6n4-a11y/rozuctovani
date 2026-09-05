@@ -186,15 +186,27 @@ def _weighted_shares(keys, period, by_key_out=None):
 
     raw_weights = {}
     raw_weights_by_key = {}
+    # Dopoctena plocha se za kartu zapocita jen JEDNOU, i kdyz na polozce
+    # visi takovych klicu vic. Klice se maji doplnovat automaticky ke
+    # kazde Plose, a bez tehle pojistky by karta se tremi plochami platila
+    # trikrat celou svou vymeru (Daniel 2026-09-05). Ve stare aplikaci se
+    # to resilo "konsolidaci karty" - slucovanim klicu do jednoho
+    # souctoveho; tady uz to neni potreba.
+    zapocteno = set()
     for key in keys:
         card = key.client_card
         active_days = card.active_days_in_period(period_start, period_end)
         if active_days <= 0:
             continue
 
-        # Vaha muze byt dopoctena z vytapene plochy karty - viz
-        # AllocationKey.vaha; do vzorce se tim nic dalsiho nemeni.
+        # Vaha muze byt dopoctena z ploch karty - viz AllocationKey.vaha;
+        # do vzorce se tim nic dalsiho nemeni.
         base = key.vaha
+        if key.weight_source:
+            if (card.id, key.weight_source) in zapocteno:
+                base = Decimal("0")
+            else:
+                zapocteno.add((card.id, key.weight_source))
         effective_weight = base * (Decimal(active_days) / days_in_period)
         raw_weights[card.id] = raw_weights.get(card.id, Decimal("0")) + effective_weight
         if by_key_out is not None:

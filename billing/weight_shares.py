@@ -87,7 +87,7 @@ def get_weight_share_data(item, period):
             "type": key.get_allocation_type_display(),
             "meter": key.meter,
             "meter_state": meter_state,
-            "value": key.vaha if key.weight_from_heated_area else key.value,
+            "value": key.vaha if key.weight_source else key.value,
             "weight_unit_label": key.weight_unit_label,
             "share": share,
             "local_share": by_key_local_share.get(key.id),

@@ -748,6 +748,19 @@ class ClientCard(models.Model):
         return None
 
     @property
+    def plocha_celkem(self):
+        """Soucet vymer vsech Ploch karty - vaha pro sluzby placene podle
+        velikosti pronajateho (ostraha, odvoz odpadu, uklid snehu).
+
+        Bere vymeru z Karty, ne z Prostoru: hala se casto deli mezi vic
+        najemcu a kazdy ma na sve karte svuj dil (F 2.01 na FM je 322 m2,
+        z toho Artalo 151, LogicVision 151 a Detektivo 20)."""
+        return sum(
+            (Decimal(str(cu.area_m2 or 0)) for cu in self.card_units.select_related("unit")),
+            Decimal("0"),
+        )
+
+    @property
     def vytapena_plocha(self):
         """Kolik m2 se na teto karte topi - soucet pres vsechny Plochy.
 
@@ -1798,15 +1811,23 @@ class AllocationKey(models.Model):
             "dal dohromady 100 %, stačí tedy zadat správný POMĚR mezi kartami."
         ),
     )
-    weight_from_heated_area = models.BooleanField(
-        "Váha = vytápěná plocha karty", default=False,
+    class ZdrojVahy(models.TextChoices):
+        HODNOTA = "", "Hodnota zadaná ručně"
+        PLOCHA = "plocha", "Celá plocha karty (m²)"
+        VYTAPENA = "vytapena", "Vytápěná plocha karty (m²)"
+
+    weight_source = models.CharField(
+        "Odkud brát váhu", max_length=20, blank=True,
+        choices=ZdrojVahy.choices, default=ZdrojVahy.HODNOTA,
         help_text=(
-            "Místo pevné Hodnoty se váha vezme jako součet vytápěných m² "
-            "všech Ploch téhle Karty. Přepočítá se sama při každém "
-            "rozúčtování, takže se nerozejde, když se plocha přidá, ubere "
-            "nebo se opraví výměra - na rozdíl od čísla opsaného do "
-            "Hodnoty. Používá se u tepla, kde se dělí podle velikosti "
-            "vytápěného prostoru."
+            "Místo pevné Hodnoty se váha spočítá z Ploch téhle Karty a "
+            "přepočítá se sama při každém rozúčtování - nerozejde se, když "
+            "se plocha přidá, ubere nebo se opraví výměra. „Celá plocha“ je "
+            "pro služby placené podle velikosti pronajatého (ostraha, odvoz "
+            "odpadu, úklid sněhu), „Vytápěná plocha“ pro teplo. Když má "
+            "karta na jedné položce takových klíčů víc, plocha se započítá "
+            "jen JEDNOU - klíče doplněné automaticky k plochám tak nemůžou "
+            "nic zdvojit."
         ),
     )
     unit_price = models.DecimalField(
@@ -1890,9 +1911,12 @@ class AllocationKey(models.Model):
         opsané do Hodnoty by se rozešlo s realitou při každé změně ploch
         a nikdo by si toho nevšiml (Daniel 2026-09-05: "musíme zajistit,
         že to provede sám model")."""
-        if not self.weight_from_heated_area:
-            return self.value or Decimal("0")
-        return self.client_card.vytapena_plocha
+        volby = AllocationKey.ZdrojVahy
+        if self.weight_source == volby.PLOCHA:
+            return self.client_card.plocha_celkem
+        if self.weight_source == volby.VYTAPENA:
+            return self.client_card.vytapena_plocha
+        return self.value or Decimal("0")
 
     def is_valid_for_period(self, period):
         if not self.client_card.is_active:
