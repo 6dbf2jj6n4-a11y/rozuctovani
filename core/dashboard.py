@@ -290,11 +290,18 @@ def _graf_nakladu(obdobi, id_arealu):
     datasets = []
     for kod, hodnoty in sorted(data.items(), key=lambda p: -sum(p[1])):
         trida = tridy.get(kod)
+        barva = trida.text_color_light if trida else "#888888"
         datasets.append({
             "label": trida.label if trida else kod,
             "data": hodnoty,
-            "backgroundColor": trida.text_color_light if trida else "#888888",
-            "borderRadius": 3,
+            # Spojnice: barva Tridy na care i na bodech, bez vyplne pod
+            # carou - u ctyr trid pres sebe by se prekryvaly a nebylo by
+            # videt, ktera je ktera.
+            "borderColor": barva,
+            "backgroundColor": barva,
+            "fill": False,
+            "tension": 0.3,
+            "pointRadius": 3,
         })
     return {
         "data": json.dumps({
@@ -305,7 +312,9 @@ def _graf_nakladu(obdobi, id_arealu):
             "responsive": True,
             "maintainAspectRatio": False,
             "plugins": {"legend": {"position": "bottom"}},
-            "scales": {"x": {"stacked": True}, "y": {"stacked": True}},
+            # Zadne stackovani: u spojnic by secteni car znamenalo, ze
+            # zadna z nich neukazuje skutecnou castku sve Tridy.
+            "scales": {"y": {"beginAtZero": True}},
         }),
         "rok": obdobi.year,
         "odkaz": reverse("admin:core_costentry_changelist"),
