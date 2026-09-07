@@ -160,7 +160,7 @@ history.html, ktery ho omezuje na zvoleneho pronajimatele.
                     <div class="mt-6">
                         {% component "unfold/components/card.html" with title="Náklady po měsících" %}
                             <div style="height:260px;">
-                                {% component "unfold/components/chart/line.html" with data=p.graf.data options=p.graf.options %}{% endcomponent %}
+                                {% component "unfold/components/chart/bar.html" with data=p.graf.data options=p.graf.options %}{% endcomponent %}
                             </div>
                             {% component "unfold/components/text.html" %}
                                 Rok {{ p.graf.rok }} po měsících a třídách. Chybějící sloupec neznamená nulu –
