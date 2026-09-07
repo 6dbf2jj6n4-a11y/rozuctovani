@@ -115,3 +115,18 @@ def posledni_akce_v_kontextu(context, pocet=10):
         z for z in zaznamy
         if not z.is_deletion() and z.object_id in povolene.get(z.content_type_id, set())
     ][:pocet]
+
+
+@register.simple_tag(takes_context=True)
+def dashboard_prehled(context):
+    """Cisla pro dlazdice na uvodni strance adminu - viz core/dashboard.py.
+
+    Sablonovy tag, a ne kontext z AdminSite.index: uvodni stranku
+    vykresluje Unfold svym pohledem, takze by se kvuli par cislum musel
+    prepisovat cely admin site."""
+    from core import dashboard
+
+    request = context.get("request")
+    if request is None or not request.user.is_authenticated:
+        return {}
+    return dashboard.prehled(request)

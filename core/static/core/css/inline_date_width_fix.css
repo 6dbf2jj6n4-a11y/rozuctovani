@@ -153,3 +153,22 @@ table.rx-vytapene-plochy input.rx-vytapena-vstup {
     text-align: right;
     width: 82px;
 }
+
+/* Tabulka uvnitr dlazdice na uvodni strance (Naklady po tridach).
+   Stejne jemne radkovani jako u Vytapenych ploch - pres rgba, aby jedno
+   pravidlo sedelo ve svetlem i tmavem rezimu. */
+table.rx-dlazdice-tabulka {
+    border-collapse: collapse;
+    font-size: 13px;
+    width: 100%;
+}
+table.rx-dlazdice-tabulka td {
+    border-bottom: 1px solid rgba(128, 128, 128, 0.18);
+    padding: 4px 0;
+    white-space: nowrap;
+}
+table.rx-dlazdice-tabulka tr:last-child td {
+    border-bottom: none;
+    border-top: 1px solid rgba(128, 128, 128, 0.45);
+    font-weight: 600;
+}

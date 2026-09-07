@@ -1,0 +1,115 @@
+{% extends 'admin/base.html' %}
+{% load i18n unfold core_extras %}
+
+{% comment %}
+Uvodni stranka adminu - dlazdice misto vestavene "Spravy webu".
+
+Seznam modelu, ktery Django ukazuje uprostred, je cely v levem menu,
+takze misto nej zabiralo prvni misto po prihlaseni neco, na co uz nikdo
+neklikal. Dlazdice odpovidaji na to, na co se clovek pri prihlaseni pta:
+kolik mam klientu a za kolik, jestli uz jdou spocitat odecty a naklady,
+a co lezi ladem. Kazda vede na sestavu, kde se to da rozebrat.
+Cisla pocita core/dashboard.py. Daniel 2026-09-07.
+
+Sloupec "Nedavne akce" vpravo zustava - viz templates/unfold/helpers/
+history.html, ktery ho omezuje na zvoleneho pronajimatele.
+{% endcomment %}
+
+{% block title %}{% if subtitle %}{{ subtitle }} | {% endif %}{{ title }} | {{ site_title|default:_('Django site admin') }}{% endblock %}
+
+{% block branding %}
+    {% include "unfold/helpers/site_branding.html" %}
+{% endblock %}
+
+{% block content %}
+    {% dashboard_prehled as p %}
+    <div class="flex flex-col lg:flex-row lg:gap-8">
+        <div class="grow">
+            {% if not p.obdobi %}
+                <p class="text-sm">Zatím není žádné období – přehled se ukáže, jakmile nějaké založíš.</p>
+            {% elif not p.arealy %}
+                <p class="text-sm">Zvolený pronajímatel nemá žádný areál, takže není co shrnout.</p>
+            {% else %}
+                {# Nadpis stranky uz nese horni pruh (admin.site.index_title), #}
+                {# tady staci rict, ceho se cisla tykaji. #}
+                <p class="mb-6 text-sm">Období {{ p.obdobi }}</p>
+
+                <div class="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-4">
+                    {% component "unfold/components/card.html" with href=p.klienti.odkaz icon="groups" %}
+                        {% component "unfold/components/title.html" %}{{ p.klienti.pocet }}{% endcomponent %}
+                        {% component "unfold/components/text.html" %}
+                            Klientů s platnou kartou{% if p.klienti.karet != p.klienti.pocet %} ({{ p.klienti.karet }} karet){% endif %}
+                        {% endcomponent %}
+                    {% endcomponent %}
+
+                    {% component "unfold/components/card.html" with href=p.najemne.odkaz icon="payments" %}
+                        {% component "unfold/components/title.html" %}{{ p.najemne.castka|floatformat:0 }} Kč{% endcomponent %}
+                        {% component "unfold/components/text.html" %}
+                            Nájemné za období, zkrácené podle dnů platnosti karet
+                        {% endcomponent %}
+                    {% endcomponent %}
+
+                    {% component "unfold/components/card.html" with href=p.odecty.odkaz icon="speed" %}
+                        {% component "unfold/components/title.html" %}{{ p.odecty.hotovo }} / {{ p.odecty.celkem }}{% endcomponent %}
+                        {% component "unfold/components/text.html" %}
+                            {% if p.odecty.chybi %}Odečteno měřidel, chybí {{ p.odecty.chybi }}.{% else %}Odečtená měřidla – hotovo.{% endif %}
+                            Správci uzavřeli {{ p.odecty.uzavreno }} z {{ p.odecty.arealu }} areálů.
+                        {% endcomponent %}
+                    {% endcomponent %}
+
+                    {% component "unfold/components/card.html" with href=p.naklady.odkaz icon="receipt_long" %}
+                        {% component "unfold/components/title.html" %}{{ p.naklady.k_doplneni }}{% endcomponent %}
+                        {% component "unfold/components/text.html" %}
+                            {% if p.naklady.k_doplneni %}
+                                Položek z {{ p.naklady.polozek }} čeká na částku – dokud chybí, vyúčtování se spočítat nedá.
+                            {% else %}
+                                Všech {{ p.naklady.polozek }} položek má vyplněnou částku.
+                            {% endif %}
+                        {% endcomponent %}
+                    {% endcomponent %}
+                </div>
+
+                <div class="grid grid-cols-1 gap-6 md:grid-cols-2 mt-6">
+                    {% component "unfold/components/card.html" with title="Náklady po třídách" %}
+                        {% if p.naklady.radky %}
+                            <table class="rx-dlazdice-tabulka">
+                                {% for r in p.naklady.radky %}
+                                    <tr>
+                                        <td class="{{ r.css }}">{{ r.nazev }}</td>
+                                        <td style="text-align:right;">{{ r.castka|floatformat:0 }} Kč</td>
+                                        <td style="text-align:right; opacity:.7;">{{ r.podil|floatformat:0 }} %</td>
+                                    </tr>
+                                {% endfor %}
+                                <tr>
+                                    <td>Celkem</td>
+                                    <td style="text-align:right;">{{ p.naklady.celkem|floatformat:0 }} Kč</td>
+                                    <td></td>
+                                </tr>
+                            </table>
+                        {% else %}
+                            {% component "unfold/components/text.html" %}
+                                Za období {{ p.obdobi }} zatím není zapsaný žádný náklad.
+                            {% endcomponent %}
+                        {% endif %}
+                    {% endcomponent %}
+
+                    {% component "unfold/components/card.html" with title="Plochy bez karty" href=p.volne.odkaz %}
+                        {% if p.volne.pocet %}
+                            {% component "unfold/components/title.html" %}{{ p.volne.pocet }} ({{ p.volne.m2|floatformat:0 }} m²){% endcomponent %}
+                            {% component "unfold/components/text.html" %}
+                                {% for u in p.volne.prvni %}{{ u.site.name }} {{ u.name }}{% if not forloop.last %}, {% endif %}{% endfor %}{% if p.volne.pocet > 6 %} …{% endif %}
+                                <br>Jejich díl nákladů se jinak rozpustí mezi ostatní nájemce místo pronajímatele.
+                            {% endcomponent %}
+                        {% else %}
+                            {% component "unfold/components/text.html" %}
+                                Každou plochu drží v období {{ p.obdobi }} nějaká karta.
+                            {% endcomponent %}
+                        {% endif %}
+                    {% endcomponent %}
+                </div>
+            {% endif %}
+        </div>
+
+        {% include "unfold/helpers/history.html" %}
+    </div>
+{% endblock %}

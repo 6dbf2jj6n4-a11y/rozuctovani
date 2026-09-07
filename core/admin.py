@@ -19,6 +19,11 @@ from unfold.widgets import UnfoldBooleanSwitchWidget
 from . import pronajimatele, rizika
 from .admin_mixins import ModelAdmin, TabularInline
 
+# Nazev uvodni stranky v hornim pruhu. Vychozi "Sprava webu" sedelo,
+# dokud stranka ukazovala seznam modelu; ted na ni jsou dlazdice
+# s prehledem obdobi (templates/admin/index.html). Daniel 2026-09-07.
+admin.site.index_title = "Přehled"
+
 from .models import (
     Client, ClientCard, Contract, Site, Unit, CardUnit, Floorplan,
     Meter, MeterReading, Period, InflationRate, SupplyPoint, InvoiceClassColor,
@@ -532,8 +537,9 @@ class AllocationKeyInlineBase(TabularInline):
     model = AllocationKey
     extra = 0
     collapsible = True
-    fields = ("service_item", "allocation_type", "value", "podil", "unit_price", "meter", "unit", "deduct_from_pool", "is_billed")
-    readonly_fields = ("podil",)
+    fields = ("service_item", "allocation_type", "value", "co_je_vahou", "podil",
+              "unit_price", "meter", "unit", "deduct_from_pool", "is_billed")
+    readonly_fields = ("co_je_vahou", "podil")
     # Jen Plocha zustava naseptavacem - tech je na FM pres sto. Polozka
     # zasobniku a Meridlo jsou obycejny vyber schvalne: naseptavac chodi
     # pres vlastni endpoint, ktery filtr z teto sekce nevidi, takze
@@ -541,6 +547,40 @@ class AllocationKeyInlineBase(TabularInline):
     # uplatni formfield_for_foreignkey nize, ktery omezi na Tridu sekce
     # i na areal Karty - polozek pak zbyde nanejvys deset.
     autocomplete_fields = ("unit",)
+
+    @display(description="Co je váhou")
+    def co_je_vahou(self, obj):
+        """Co ta Hodnota u klice "Podle vahy" vlastne znamena.
+
+        Popisek se drzi na trech ruznych mistech podle toho, cim se deli:
+        u dopoctene vahy plyne ze zdroje (AllocationKey.weight_source),
+        u klice s meridlem z Meter.weight_unit_label (jedna polozka muze
+        mit vic vazenych skupin s ruznym vyznamem - E_SPOL "pocet osob"
+        vedle jineho meridla s "m2") a jinak ze ServicePoolItem
+        .weight_unit_label. Slozit si to rucne pri kazde kontrole je
+        otrava, proto se ukazuje primo v radku. Daniel 2026-09-07.
+
+        U ostatnich typu (Pevna castka, Dle vymery) vaha zadny vyznam
+        nema - tam se tiskne pomlcka."""
+        from django.utils.html import format_html
+
+        if obj is None or obj.allocation_type != AllocationKey.AllocationType.WEIGHTED_COUNT:
+            return "—"
+        volby = AllocationKey.ZdrojVahy
+        if obj.weight_source == volby.PLOCHA:
+            return format_html('<span style="color:#2a7;">celá plocha karty</span>')
+        if obj.weight_source == volby.VYTAPENA:
+            return format_html('<span style="color:#2a7;">vytápěná plocha karty</span>')
+        popis = ""
+        if obj.meter_id and obj.meter.weight_unit_label:
+            popis = obj.meter.weight_unit_label
+        elif obj.service_item_id and obj.service_item.weight_unit_label:
+            popis = obj.service_item.weight_unit_label
+        if not popis:
+            return format_html(
+                '<span style="color:#a70;" title="Doplň „Co je váhou“ u Měřidla '
+                '(když ho klíč má), jinak u Položky zásobníku.">nevyplněno</span>')
+        return popis
 
     @display(description="Podíl")
     def podil(self, obj):
