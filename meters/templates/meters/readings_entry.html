@@ -168,6 +168,7 @@
         .calc-row b { color: var(--text); }
         .hist { display: flex; align-items: flex-end; gap: 6px; margin-bottom: 14px; }
         .hist-col { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 3px; min-width: 0; }
+        .hist-state { font-size: 10px; color: var(--text-faint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
         .hist-val { font-size: 11px; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
         .hist-track { width: 100%; height: 44px; display: flex; align-items: flex-end; }
         .hist-bar { width: 100%; background: var(--hist-bar); border-radius: 2px 2px 0 0; }
@@ -212,7 +213,7 @@
         .uzavrit-hint { font-size: 12px; color: var(--label); }
         .layout { display: flex; gap: 24px; max-width: 1200px; margin: 0 auto; align-items: flex-start; }
         .sidebar {
-            display: none; flex: 1; min-width: 260px; background: var(--surface); border-radius: 12px;
+            display: none; flex: 1; min-width: 200px; background: var(--surface); border-radius: 12px;
             box-shadow: 0 1px 4px var(--shadow); padding: 6px 0; margin-top: 20px;
             position: sticky; top: 20px;
         }
@@ -235,21 +236,29 @@
         }
         .move-btn:hover { color: var(--text); }
         .move-btn:disabled { opacity: 0.25; cursor: default; }
-        @media (min-width: 760px) {
+        /* Prah 700px zaporne testovan proti realnym telefonum na sirku:
+           deklarovany CSS viewport telefonu bezne JE pres 760px (napr.
+           S24 Ultra ~825px), ale trojtlacitkova navigace Androidu v
+           landscapu ubira sirku a Samsung "Zvetseni obrazovky" ji umi
+           zmensit jeste vic - stranka tak na realnem zarizeni skoncila
+           pod 760px a tabulka se vubec nezobrazila. Viz Daniel 2026-09-07.
+           200px min-width na .sidebar snizuje i skutecne potrebne
+           minimum (.wrap 440 + gap 24 + sidebar 200 = 664px). */
+        @media (min-width: 700px) {
             .sidebar { display: block; }
         }
         /* Tabulka meridel je typicky delsi nez karta formulare - bez sticky
            na .wrap by po kliku na radek daleko dole zustal formular nahore
            mimo obrazovku. Viz konverzace s Danielem 2026-08-18.
 
-           Podminka na vysku: telefon polozeny na sirku ma sice pres 760 px
+           Podminka na vysku: telefon polozeny na sirku ma sice pres 700 px
            sirky, ale jen ~375 px vysky. Karta se do nej cela nevejde a
            sticky ji pribije k hornimu okraji - stranka pak roluje jen
            tabulkou vpravo a na pole pro zadani odectu se nedostane vubec.
            Pod 720 px vysky proto sticky vypiname a misto nej po volbe
            meridla odrolujeme na kartu (odrolujNaKartu nize).
            Viz Daniel 2026-08-24. */
-        @media (min-width: 760px) and (min-height: 720px) {
+        @media (min-width: 700px) and (min-height: 720px) {
             .wrap { position: sticky; top: 20px; }
         }
     </style>
@@ -623,6 +632,13 @@
         m.hist.forEach(function (h) {
             var col = document.createElement("div");
             col.className = "hist-col";
+            if (h.state !== null && h.state !== undefined) {
+                var stateSpan = document.createElement("span");
+                stateSpan.className = "hist-state";
+                stateSpan.textContent = "stav " + fmt(h.state);
+                stateSpan.title = "Stav: " + fmt(h.state) + " " + m.unit;
+                col.appendChild(stateSpan);
+            }
             var valSpan = document.createElement("span");
             valSpan.className = "hist-val";
             valSpan.textContent = fmt(h.value);

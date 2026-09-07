@@ -183,7 +183,18 @@ def readings_entry(request):
             for p in earlier_periods:
                 c = consumption_of(m, p)
                 if c is not None:
-                    hist.append({"label": str(p), "value": float(c)})
+                    reading = readings_map.get((m.id, p.id))
+                    # Stav (kumulativni odecet) dava smysl jen u rezimu
+                    # STATE - u CONSUMPTION dodavatel hlasi rovnou
+                    # spotrebu za obdobi, zadny bezici stav se nikde
+                    # nedrzi. Spravci chteli u historie videt nejen
+                    # dopoctenou spotrebu, ale i skutecne zadany stav,
+                    # aby se dal odecet zpetne zkontrolovat. Daniel 2026-09-07.
+                    state = (
+                        float(reading.value)
+                        if reading and m.reading_mode == Meter.ReadingMode.STATE else None
+                    )
+                    hist.append({"label": str(p), "value": float(c), "state": state})
             hist.reverse()
 
             yoy_value = consumption_of(m, yoy_period) if yoy_period else None
