@@ -69,6 +69,54 @@ history.html, ktery ho omezuje na zvoleneho pronajimatele.
                     {% endcomponent %}
                 </div>
 
+                <div class="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-4 mt-6">
+                    {% component "unfold/components/card.html" with href=p.vyuctovani.odkaz icon="calculate" %}
+                        {% component "unfold/components/title.html" %}{{ p.vyuctovani.spocitano }} / {{ p.vyuctovani.celkem }}{% endcomponent %}
+                        {% component "unfold/components/text.html" %}
+                            {% if p.vyuctovani.hotovo %}Karet má spočítané vyúčtování za období.
+                            {% else %}Karet má spočítané vyúčtování – dokud čísla nesedí, období se ještě nepřepočítalo celé.{% endif %}
+                        {% endcomponent %}
+                    {% endcomponent %}
+
+                    {% if p.dph %}
+                        {% component "unfold/components/card.html" with href=p.dph.odkaz icon="percent" %}
+                            {% component "unfold/components/title.html" %}{{ p.dph.procenta }} %{% endcomponent %}
+                            {% component "unfold/components/text.html" %}
+                                Koeficient DPH za rok {{ p.dph.rok }} ({{ p.dph.pocet_obdobi }} měsíců, přesně {{ p.dph.presne }} %).
+                                {% if p.dph.hranice and not p.dph.hranice.staci %}
+                                    Na 95 % by bylo potřeba snížit osvobozený nájem o {{ p.dph.hranice.snizit_osvobozene|floatformat:0 }} Kč.
+                                {% elif p.dph.hranice.staci %}
+                                    Odhad do konce roku hranici 95 % drží, odpočet se nekrátí.
+                                {% endif %}
+                            {% endcomponent %}
+                        {% endcomponent %}
+                    {% endif %}
+
+                    {% component "unfold/components/card.html" with href=p.koncici.odkaz icon="event_busy" %}
+                        {% component "unfold/components/title.html" %}{{ p.koncici.pocet }}{% endcomponent %}
+                        {% component "unfold/components/text.html" %}
+                            {% if p.koncici.pocet %}
+                                Karet skončí do {{ p.koncici.dni }} dnů:
+                                {% for k in p.koncici.karty %}{{ k.client }} ({{ k.valid_to }}){% if not forloop.last %}, {% endif %}{% endfor %}
+                            {% else %}
+                                Žádná karta nekončí do {{ p.koncici.dni }} dnů.
+                            {% endif %}
+                        {% endcomponent %}
+                    {% endcomponent %}
+
+                    {% component "unfold/components/card.html" with href=p.insolvence.odkaz icon="gavel" %}
+                        {% component "unfold/components/title.html" %}{{ p.insolvence.pocet }}{% endcomponent %}
+                        {% component "unfold/components/text.html" %}
+                            {% if p.insolvence.pocet %}
+                                Klientů v insolvenci:
+                                {% for c in p.insolvence.klienti %}{{ c }}{% if not forloop.last %}, {% endif %}{% endfor %}
+                            {% else %}
+                                Nikdo z klientů není v insolvenci (podle poslední měsíční kontroly ARES).
+                            {% endif %}
+                        {% endcomponent %}
+                    {% endcomponent %}
+                </div>
+
                 <div class="grid grid-cols-1 gap-6 md:grid-cols-2 mt-6">
                     {% component "unfold/components/card.html" with title="Náklady po třídách" %}
                         {% if p.naklady.radky %}
@@ -107,6 +155,20 @@ history.html, ktery ho omezuje na zvoleneho pronajimatele.
                         {% endif %}
                     {% endcomponent %}
                 </div>
+
+                {% if p.graf %}
+                    <div class="mt-6">
+                        {% component "unfold/components/card.html" with title="Náklady po měsících" %}
+                            <div style="height:260px;">
+                                {% component "unfold/components/chart/bar.html" with data=p.graf.data options=p.graf.options %}{% endcomponent %}
+                            </div>
+                            {% component "unfold/components/text.html" %}
+                                Rok {{ p.graf.rok }} po měsících a třídách. Chybějící sloupec neznamená nulu –
+                                spíš že se náklad ještě nezapsal.
+                            {% endcomponent %}
+                        {% endcomponent %}
+                    </div>
+                {% endif %}
             {% endif %}
         </div>
 

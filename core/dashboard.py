@@ -13,16 +13,24 @@ Kazda dlazdice ma odkaz na sestavu nebo seznam, kde se to da rozebrat.
 Dotazu je zamerne par a jsou to agregace: pri latenci Railway by se
 kazdy dotaz navic poznal na dobe nacteni prvni stranky po prihlaseni.
 """
+import json
+from datetime import timedelta
 from decimal import Decimal
 
 from django.db.models import Q, Sum
 from django.urls import reverse
+from django.utils import timezone
 
 from core import pronajimatele, volne_plochy
 from core.models import (
-    CardUnit, ClientCard, CostEntry, InvoiceClassColor, Meter, MeterReading,
-    Period, ReadingsClosure, ServicePoolItem, Site, Unit,
+    BillingLine, Client, ClientCard, CostEntry, InvoiceClassColor, Meter,
+    MeterReading, Period, ReadingsClosure, ServicePoolItem,
 )
+
+# Kolik dopredu se hlida konec Karty. Tri mesice je doba, za kterou se
+# jeste da najit nahradnik nebo domluvit prodlouzeni - kratsi varovani
+# uz je jen konstatovani. Daniel 2026-09-07.
+KONEC_KARTY_DNI = 90
 
 
 def prehled(request):
@@ -51,6 +59,11 @@ def prehled(request):
         "odecty": _odecty(obdobi, id_arealu),
         "naklady": _naklady(obdobi, id_arealu),
         "volne": _volne_plochy(obdobi, arealy),
+        "vyuctovani": _vyuctovani(obdobi, karty, id_arealu),
+        "koncici": _koncici_karty(id_arealu),
+        "insolvence": _insolvence(request),
+        "dph": _dph(request, obdobi, arealy),
+        "graf": _graf_nakladu(obdobi, id_arealu),
     }
 
 
@@ -159,4 +172,141 @@ def _volne_plochy(obdobi, arealy):
         "m2": sum((u.area_m2 or Decimal("0")) for u in plochy),
         "prvni": plochy[:6],
         "odkaz": reverse("admin:core_unit_report_bez_karty"),
+    }
+
+
+def _vyuctovani(obdobi, karty, id_arealu):
+    """Kolik Karet uz ma za obdobi spocitane radky vyuctovani.
+
+    Rika, jak daleko je uzaverka: dokud cislo nesedi s poctem platnych
+    karet, vyuctovani se jeste nepocitalo (nebo neproslo cele)."""
+    spocitano = (
+        BillingLine.objects
+        .filter(period=obdobi, service_item__site__in=id_arealu)
+        .values("client_card").distinct().count()
+    )
+    celkem = karty.count()
+    return {
+        "spocitano": spocitano,
+        "celkem": celkem,
+        "hotovo": celkem and spocitano >= celkem,
+        "odkaz": reverse("admin:core_billingline_prehled"),
+    }
+
+
+def _koncici_karty(id_arealu):
+    """Karty, kterym do KONEC_KARTY_DNI dnu skonci platnost.
+
+    Zamerne Karty, ne Smlouvy: rozuctovani i najem visi na Karte a jsou
+    karty bez smlouvy - konec smlouvy by tedy cast pripadu minul."""
+    dnes = timezone.localdate()
+    karty = list(
+        ClientCard.objects
+        .filter(is_active=True, valid_to__isnull=False,
+                valid_to__gte=dnes, valid_to__lte=dnes + timedelta(days=KONEC_KARTY_DNI),
+                card_units__unit__site__in=id_arealu)
+        .select_related("client")
+        .order_by("valid_to")
+        .distinct()[:6]
+    )
+    return {
+        "pocet": len(karty),
+        "karty": karty,
+        "dni": KONEC_KARTY_DNI,
+        "odkaz": reverse("admin:core_clientcard_changelist"),
+    }
+
+
+def _insolvence(request):
+    """Klienti s bezicim insolvencnim rizenim.
+
+    Cte se jen ULOZENY vysledek mesicni kontroly proti ARES
+    (Client.insolvency_status) - na uvodni strance se do rejstriku
+    nechodi, to je dotaz po siti a stranka by na nej cekala."""
+    klienti = pronajimatele.klienti(request).filter(
+        is_active=True, insolvency_status=Client.InsolvencyStatus.ACTIVE
+    )
+    return {
+        "pocet": klienti.count(),
+        "klienti": list(klienti[:5]),
+        "odkaz": reverse("admin:core_client_kontrola_rizik"),
+    }
+
+
+def _dph(request, obdobi, arealy):
+    """Koeficient DPH za rok k vybranemu obdobi - stejny vypocet, jaky
+    ukazuje sestava Prehled najemneho (ClientCardAdmin), aby dlazdice
+    a sestava nerekly kazda neco jineho.
+
+    Pocita se jen u pronajimatele, ktery je platcem DPH - u neplatce
+    (Daniel jako fyzicka osoba u DV) koeficient nedava smysl.
+    """
+    from django.contrib.admin.sites import site as admin_site
+
+    from core.admin import ClientCardAdmin
+
+    pronajimatel = pronajimatele.aktualni(request)
+    if pronajimatel is None or not pronajimatel.vat_payer:
+        return None
+    site_ids = [a.pk for a in arealy]
+    koef = ClientCardAdmin(ClientCard, admin_site)._koeficient_dph_za_rok(
+        obdobi, site_ids
+    )
+    if not koef:
+        return None
+    koef["odkaz"] = reverse("admin:core_clientcard_report_najemne")
+    return koef
+
+
+def _graf_nakladu(obdobi, id_arealu):
+    """Naklady po mesicich a Tridach - data pro sloupcovy graf Unfoldu.
+
+    Jen mesice od ledna do vybraneho obdobi: obdobi se zakladaji dopredu
+    tlacitkem "Generovat pro cely rok", takze prazdne sloupce budoucich
+    mesicu by graf jen natahly. Stejna uvaha jako u koeficientu DPH.
+    """
+    mesice = list(
+        Period.objects.filter(year=obdobi.year, month__lte=obdobi.month)
+        .order_by("month")
+    )
+    if not mesice:
+        return None
+    poradi = {p.pk: i for i, p in enumerate(mesice)}
+
+    tridy = {t.invoice_class: t for t in InvoiceClassColor.objects.all()}
+    data = {}
+    for radek in (CostEntry.objects
+                  .filter(period__in=mesice, service_item__site__in=id_arealu)
+                  .values("period_id", "service_item__invoice_class")
+                  .annotate(castka=Sum("amount_czk"))
+                  .order_by()):
+        kod = radek["service_item__invoice_class"]
+        data.setdefault(kod, [0] * len(mesice))
+        data[kod][poradi[radek["period_id"]]] = float(radek["castka"] or 0)
+
+    if not any(any(hodnoty) for hodnoty in data.values()):
+        return None
+
+    datasets = []
+    for kod, hodnoty in sorted(data.items(), key=lambda p: -sum(p[1])):
+        trida = tridy.get(kod)
+        datasets.append({
+            "label": trida.label if trida else kod,
+            "data": hodnoty,
+            "backgroundColor": trida.text_color_light if trida else "#888888",
+            "borderRadius": 3,
+        })
+    return {
+        "data": json.dumps({
+            "labels": ["%02d" % p.month for p in mesice],
+            "datasets": datasets,
+        }),
+        "options": json.dumps({
+            "responsive": True,
+            "maintainAspectRatio": False,
+            "plugins": {"legend": {"position": "bottom"}},
+            "scales": {"x": {"stacked": True}, "y": {"stacked": True}},
+        }),
+        "rok": obdobi.year,
+        "odkaz": reverse("admin:core_costentry_changelist"),
     }
