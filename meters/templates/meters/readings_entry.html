@@ -168,7 +168,11 @@
         .calc-row b { color: var(--text); }
         .hist { display: flex; align-items: flex-end; gap: 6px; margin-bottom: 14px; }
         .hist-col { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 3px; min-width: 0; }
-        .hist-state { font-size: 10px; color: var(--text-faint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+        .hist-state {
+            font-size: 10px; color: var(--text-faint); white-space: nowrap; overflow: hidden;
+            text-overflow: ellipsis; max-width: 100%; width: 100%; text-align: center;
+            border-bottom: 1px solid var(--border); padding-bottom: 4px; margin-bottom: 2px;
+        }
         .hist-val { font-size: 11px; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
         .hist-track { width: 100%; height: 44px; display: flex; align-items: flex-end; }
         .hist-bar { width: 100%; background: var(--hist-bar); border-radius: 2px 2px 0 0; }
