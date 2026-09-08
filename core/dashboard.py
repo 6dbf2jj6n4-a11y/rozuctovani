@@ -114,17 +114,29 @@ def _odecty(obdobi, id_arealu):
 def _naklady(obdobi, id_arealu):
     """Naklady za obdobi po Tridach + kolik polozek jeste ceka na castku.
 
-    "K doplneni" jsou polozky zasobniku bez vyplnene castky za tohle
-    obdobi - at uz zaznam o nakladu vubec nemaji, nebo ho maji prazdny.
-    Prazdne pole a nula nejsou totez (viz CostEntry): nula znamena
-    "nestalo nic", prazdne "jeste nevim", a prave to brani spocitat
-    vyuctovani."""
+    "K doplneni" jsou polozky zasobniku, u kterych billing/engine.py
+    polozku pri prepoctu preskoci (viz calculate_period - bez CostEntry
+    A bez Vychozi mesicni castky). Puvodni verze kontrolovala jen
+    CostEntry.amount_czk, coz falesne hlasilo jako chybejici:
+    - polozky se zadanim "Jen mnozstvi" (vodne/stocne, pelety), kde se
+      Kc zamerne NEVYPLNUJE - dopocita se z Ceniku (viz CostEntry
+      "Castka se nezadava, aby nešlo omylem přebít sjednanou cenu"),
+    - polozky s vyplnenou Vychozi mesicni castkou (pausaly jako ostraha,
+      uklid) - ty zadny Naklad za obdobi vubec nepotrebuji.
+    Viz konverzace s Danielem 2026-09-08 (18 z 26 "chybi", pritom
+    vetsina byla v poradku) a core.admin.zkontrolovat_co_zadat, ktera
+    stejnou logiku uz mela spravne."""
     polozky = ServicePoolItem.objects.filter(site__in=id_arealu)
     vyplnene = set(
         CostEntry.objects
-        .filter(period=obdobi, service_item__in=polozky, amount_czk__isnull=False)
+        .filter(period=obdobi, service_item__in=polozky)
+        .filter(Q(amount_czk__isnull=False) | Q(amount_units__isnull=False))
         .values_list("service_item_id", flat=True)
     )
+    ma_vychozi = set(
+        polozky.filter(default_amount_czk__isnull=False).values_list("pk", flat=True)
+    )
+    hotovo = vyplnene | ma_vychozi
     soucty = (
         CostEntry.objects
         .filter(period=obdobi, service_item__in=polozky)
@@ -156,7 +168,7 @@ def _naklady(obdobi, id_arealu):
     return {
         "radky": radky,
         "celkem": celkem,
-        "k_doplneni": polozky.exclude(pk__in=vyplnene).count(),
+        "k_doplneni": polozky.exclude(pk__in=hotovo).count(),
         "polozek": polozky.count(),
         "odkaz": reverse("admin:core_costentry_changelist"),
     }
