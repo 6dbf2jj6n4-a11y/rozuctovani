@@ -24,7 +24,7 @@ from django.utils import timezone
 from core import pronajimatele, volne_plochy
 from core.models import (
     BillingLine, Client, ClientCard, CostEntry, InvoiceClassColor, Meter,
-    MeterReading, Period, ReadingsClosure, ServicePoolItem,
+    MeterReading, Period, PriceList, ReadingsClosure, ServicePoolItem,
 )
 
 # Kolik dopredu se hlida konec Karty. Tri mesice je doba, za kterou se
@@ -115,61 +115,78 @@ def _naklady(obdobi, id_arealu):
     """Naklady za obdobi po Tridach + kolik polozek jeste ceka na castku.
 
     "K doplneni" jsou polozky zasobniku, u kterych billing/engine.py
-    polozku pri prepoctu preskoci (viz calculate_period - bez CostEntry
-    A bez Vychozi mesicni castky). Puvodni verze kontrolovala jen
-    CostEntry.amount_czk, coz falesne hlasilo jako chybejici:
-    - polozky se zadanim "Jen mnozstvi" (vodne/stocne, pelety), kde se
-      Kc zamerne NEVYPLNUJE - dopocita se z Ceniku (viz CostEntry
-      "Castka se nezadava, aby nešlo omylem přebít sjednanou cenu"),
-    - polozky s vyplnenou Vychozi mesicni castkou (pausaly jako ostraha,
-      uklid) - ty zadny Naklad za obdobi vubec nepotrebuji.
-    Viz konverzace s Danielem 2026-09-08 (18 z 26 "chybi", pritom
-    vetsina byla v poradku) a core.admin.zkontrolovat_co_zadat, ktera
-    stejnou logiku uz mela spravne."""
-    polozky = ServicePoolItem.objects.filter(site__in=id_arealu)
-    vyplnene = set(
-        CostEntry.objects
-        .filter(period=obdobi, service_item__in=polozky)
-        .filter(Q(amount_czk__isnull=False) | Q(amount_units__isnull=False))
-        .values_list("service_item_id", flat=True)
-    )
-    ma_vychozi = set(
-        polozky.filter(default_amount_czk__isnull=False).values_list("pk", flat=True)
-    )
-    hotovo = vyplnene | ma_vychozi
-    soucty = (
-        CostEntry.objects
-        .filter(period=obdobi, service_item__in=polozky)
-        .values("service_item__invoice_class")
-        .annotate(castka=Sum("amount_czk"))
-        .order_by()
-    )
-    popisky = {
-        t.invoice_class: t for t in InvoiceClassColor.objects.all()
-    }
-    radky = []
+    polozku pri prepoctu preskoci - bez CostEntry, ktery se da prevest
+    na Kc (CostEntry.get_amount_czk - primo, nebo mnozstvi x cena z
+    Ceniku/klice), A bez Vychozi mesicni castky.
+
+    Puvodni verze kontrolovala jen CostEntry.amount_czk, coz falesne
+    hlasilo jako chybejici polozky se zadanim "Jen mnozstvi" (vodne/
+    stocne, pelety) - tam se Kc zamerne NEVYPLNUJE, dopocita se z
+    Ceniku. Dalsi verze pridala "nebo ma vyplnene mnozstvi", coz zase
+    falesne hlasilo jako HOTOVE polozky typu "Mnozstvi i castka"
+    (elektrina, teplo) se zadanym mnozstvim, ale BEZ ceny (faktura jeste
+    nedosla) - tam zadna Kc castka nejde dopocitat vubec (viz elektrina
+    FM, konverzace s Danielem 2026-09-08). Pouziva se proto rovnou
+    stejna metoda jako v enginu (CostEntry.get_amount_czk), aby dlazdice
+    hlasila presne to, co billing/engine.py skutecne prepocita nebo
+    preskoci - zadna vlastni duplicitni logika."""
+    polozky = list(ServicePoolItem.objects.filter(site__in=id_arealu))
+
+    entries_by_item = {}
+    for ce in CostEntry.objects.filter(period=obdobi, service_item__in=polozky):
+        entries_by_item.setdefault(ce.service_item_id, []).append(ce)
+
+    # Hromadne nacteny Cenik pro vsechny polozky najednou (stejny vzor
+    # jako price_cache v billing/engine.py calculate_period) - misto
+    # dotazu na Cenik zvlast pro kazdou polozku v cyklu nize.
+    price_cache = {}
+    for pl in (
+        PriceList.objects.filter(service_item__in=polozky)
+        .order_by("service_item_id", "-period__year", "-period__month")
+    ):
+        price_cache.setdefault(pl.service_item_id, []).append(pl)
+
+    popisky = {t.invoice_class: t for t in InvoiceClassColor.objects.all()}
+    castka_by_trida = {}
     celkem = Decimal("0")
-    for s in soucty:
-        castka = s["castka"] or Decimal("0")
-        if not castka:
-            continue
-        kod = s["service_item__invoice_class"]
+    hotovo = set()
+    for item in polozky:
+        # Stejna prednost jako v enginu: kdyz ma polozka za obdobi
+        # CostEntry (i kdyby se nepodarilo dopocitat Kc), Vychozi castka
+        # se nepouzije - jen kdyz CostEntry chybi uplne.
+        item_entries = entries_by_item.get(item.id, [])
+        castka = None
+        if item_entries:
+            for ce in item_entries:
+                resolved = ce.get_amount_czk(obdobi, price_cache=price_cache)
+                if resolved is not None:
+                    castka = (castka or Decimal("0")) + resolved
+            if castka is not None:
+                hotovo.add(item.id)
+        elif item.default_amount_czk is not None:
+            castka = item.default_amount_czk
+            hotovo.add(item.id)
+        if castka:
+            castka_by_trida[item.invoice_class] = castka_by_trida.get(item.invoice_class, Decimal("0")) + castka
+            celkem += castka
+
+    radky = []
+    for kod, castka in castka_by_trida.items():
         trida = popisky.get(kod)
         radky.append({
             "kod": kod,
             "nazev": trida.label if trida else kod,
             "css": InvoiceClassColor.css_class_for(kod),
             "castka": castka,
+            "podil": (castka / celkem * 100) if celkem else 0,
         })
-        celkem += castka
-    for r in radky:
-        r["podil"] = (r["castka"] / celkem * 100) if celkem else 0
     radky.sort(key=lambda r: r["castka"], reverse=True)
+
     return {
         "radky": radky,
         "celkem": celkem,
-        "k_doplneni": polozky.exclude(pk__in=hotovo).count(),
-        "polozek": polozky.count(),
+        "k_doplneni": len(polozky) - len(hotovo),
+        "polozek": len(polozky),
         "odkaz": reverse("admin:core_costentry_changelist"),
     }
 
