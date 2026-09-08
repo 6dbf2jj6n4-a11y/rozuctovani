@@ -126,10 +126,15 @@ def _naklady(obdobi, id_arealu):
     falesne hlasilo jako HOTOVE polozky typu "Mnozstvi i castka"
     (elektrina, teplo) se zadanym mnozstvim, ale BEZ ceny (faktura jeste
     nedosla) - tam zadna Kc castka nejde dopocitat vubec (viz elektrina
-    FM, konverzace s Danielem 2026-09-08). Pouziva se proto rovnou
-    stejna metoda jako v enginu (CostEntry.get_amount_czk), aby dlazdice
-    hlasila presne to, co billing/engine.py skutecne prepocita nebo
-    preskoci - zadna vlastni duplicitni logika."""
+    FM, konverzace s Danielem 2026-09-08).
+
+    Cena z Ceniku oznacena jako "Predbezna cena" (odhad) se tu NEPOCITA
+    za hotovy udaj, i kdyz billing/engine.py (CostEntry.get_amount_czk)
+    ji na skutecny vypocet klidne pouzije - "s odhadem nemuzeme
+    pracovat" (Daniel 2026-09-08): tenhle prehled ma ukazovat, co je
+    OPRAVDU podlozene, ne provizorium do prichodu faktury. Proto se
+    nepouziva rovnou CostEntry.get_amount_czk, ale _amount_bez_odhadu
+    nize."""
     polozky = list(ServicePoolItem.objects.filter(site__in=id_arealu))
 
     entries_by_item = {}
@@ -146,6 +151,20 @@ def _naklady(obdobi, id_arealu):
     ):
         price_cache.setdefault(pl.service_item_id, []).append(pl)
 
+    def _amount_bez_odhadu(ce):
+        """Jako CostEntry.get_amount_czk, ale cenu z Ceniku pouzije jen
+        kdyz NENI oznacena jako Predbezna cena."""
+        if ce.amount_czk is not None:
+            return ce.amount_czk
+        if ce.amount_units is None:
+            return None
+        if ce.price_per_unit is not None:
+            return (ce.amount_units * ce.price_per_unit).quantize(Decimal("0.01"))
+        radek = PriceList.radek_pro_obdobi(ce.service_item, obdobi, price_cache=price_cache)
+        if radek is None or radek.is_estimate:
+            return None
+        return (ce.amount_units * radek.price_per_unit).quantize(Decimal("0.01"))
+
     popisky = {t.invoice_class: t for t in InvoiceClassColor.objects.all()}
     castka_by_trida = {}
     celkem = Decimal("0")
@@ -158,7 +177,7 @@ def _naklady(obdobi, id_arealu):
         castka = None
         if item_entries:
             for ce in item_entries:
-                resolved = ce.get_amount_czk(obdobi, price_cache=price_cache)
+                resolved = _amount_bez_odhadu(ce)
                 if resolved is not None:
                     castka = (castka or Decimal("0")) + resolved
             if castka is not None:
