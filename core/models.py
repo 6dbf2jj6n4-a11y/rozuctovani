@@ -1420,6 +1420,16 @@ class MeterReading(models.Model):
         help_text="Podle nastavení měřidla: buď kumulativní stav, nebo rovnou spotřeba za období.",
     )
     note = models.CharField("Poznámka", max_length=300, blank=True)
+    confirmed_warning = models.CharField(
+        "Potvrzené varování", max_length=300, blank=True,
+        help_text=(
+            "Když Zadávání odečtů hlásilo nevěrohodnou spotřebu a správce ji "
+            "přesto potvrdil, zůstane tu důvod, který systém ukázal. Slouží "
+            "ke kontrole po kole odečtů - potvrzené varování je přesně to, "
+            "co má admin projít. Vyplňuje se samo, ručně se nezadává; při "
+            "opravě hodnoty na věrohodnou se smaže."
+        ),
+    )
     created_by = models.ForeignKey(
         "accounts.User", null=True, blank=True, on_delete=models.SET_NULL,
         related_name="zapsane_odecty", verbose_name="Zadal",

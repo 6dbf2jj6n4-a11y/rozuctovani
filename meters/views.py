@@ -328,10 +328,14 @@ def readings_save(request):
     # Varovani, ne zakaz: klimatizace v lete nebo naskok noveho najemce
     # muze spotrebu legitimne zvednout. Musi se ale POTVRDIT - dosud to
     # byl jen odznak v prohlizeci, ktery nikoho nezastavil.
-    if not payload.get("potvrzeno"):
-        duvod = _podezrela_spotreba(meter, period, consumption)
-        if duvod:
-            return JsonResponse({"ok": False, "warning": duvod}, status=409)
+    # Duvod se zjistuje VZDYCKY, i kdyz uz je potvrzeny - pri potvrzeni se
+    # ulozi k odectu, aby po nem zustala stopa. Driv se potvrzene varovani
+    # nikde neprojevilo a odecet vypadal jako kazdy jiny: u E_C1Z tak
+    # prosel stav 1605 misto 605 (osm mesicu nulova spotreba, pak 1000 kWh)
+    # a nasel se az nahodou okem. Viz Daniel 2026-09-09.
+    duvod = _podezrela_spotreba(meter, period, consumption)
+    if duvod and not payload.get("potvrzeno"):
+        return JsonResponse({"ok": False, "warning": duvod}, status=409)
 
     MeterReading.objects.update_or_create(
         meter=meter, period=period,
@@ -342,6 +346,8 @@ def readings_save(request):
             "reading_date": timezone.localdate(),
             # kdo stav odecetl - pri nesrovnalosti se ma kdo doptat
             "created_by": user,
+            # prazdne, kdyz uz hodnota podezrela neni - oprava tim znacku smaze
+            "confirmed_warning": (duvod or "")[:300],
         },
     )
     return JsonResponse({

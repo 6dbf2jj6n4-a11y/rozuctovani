@@ -4268,14 +4268,34 @@ class ReadingsClosureAdmin(PodlePronajimatele, ModelAdmin):
     readonly_fields = ("closed_at", "closed_by")
 
 
+class _PotvrzeneVarovaniFilter(admin.SimpleListFilter):
+    """Odecty, u kterych spravce potvrdil neverohodnou spotrebu.
+
+    Po kole odectu je to prvni misto, kam se podivat - varovani je
+    zamerne jen varovani, ne zakaz, takze se pres nej da projit
+    a chyba pak vypada jako kazdy jiny odecet. Viz Daniel 2026-09-09."""
+    title = "Potvrzené varování"
+    parameter_name = "varovani"
+
+    def lookups(self, request, model_admin):
+        return (("ano", "jen s potvrzeným varováním"), ("ne", "bez varování"))
+
+    def queryset(self, request, queryset):
+        if self.value() == "ano":
+            return queryset.exclude(confirmed_warning="")
+        if self.value() == "ne":
+            return queryset.filter(confirmed_warning="")
+        return queryset
+
+
 @admin.register(MeterReading)
 class MeterReadingAdmin(PodlePronajimatele, DefaultToCurrentPeriodMixin, ModelAdmin):
     cesta_k_arealu = "meter__site"
     list_display = ("meter_colored", "period", "reading_date", "value", "reset_from_value",
-                    "ma_foto", "created_by")
-    list_select_related = ("meter", "period")
+                    "ma_foto", "created_by", "varovani")
+    list_select_related = ("meter", "period", "created_by")
     list_filter = ("meter__site", "meter__meter_type", "period", _PeriodDefaultMarkerFilter,
-                   _MaFotoFilter)
+                   _MaFotoFilter, _PotvrzeneVarovaniFilter)
     search_fields = ("meter__code", "meter__name")
     autocomplete_fields = ("meter",)
     readonly_fields = ("created_by",)
@@ -4364,6 +4384,21 @@ class MeterReadingAdmin(PodlePronajimatele, DefaultToCurrentPeriodMixin, ModelAd
             period.month, period.year)
         wb.save(odpoved)
         return odpoved
+
+    @display(description="Varování", ordering="confirmed_warning")
+    def varovani(self, obj):
+        """Odecet, u ktereho spravce potvrdil nevěrohodnou spotrebu.
+
+        Cely duvod je v title, at sloupec nerozhodi sirku tabulky -
+        v seznamu staci, ze je videt, kam se podivat. Viz Daniel
+        2026-09-09."""
+        from django.utils.html import format_html
+
+        if not obj.confirmed_warning:
+            return ""
+        return format_html(
+            '<span style="color:#a70;" title="{}">⚠️ potvrzeno správcem</span>',
+            obj.confirmed_warning)
 
     @display(description="Foto", boolean=True, ordering="photo")
     def ma_foto(self, obj):
