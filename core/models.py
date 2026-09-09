@@ -879,6 +879,14 @@ class ClientCard(models.Model):
                 service_item=key.service_item,
                 allocation_type=key.allocation_type,
                 value=key.value,
+                # Bez weight_source by kopie klice s dopoctenou vahou mela
+                # Hodnotu prazdnou a zadny zdroj, tedy vahu 0 - novou kartu
+                # by to tise vyradilo z deleni. Prave to potkalo novou kartu
+                # Tanecni skupiny u ostrahy, odvozu odpadu a snehu.
+                # Viz Daniel 2026-09-07.
+                weight_source=key.weight_source,
+                unit_price=key.unit_price,
+                is_billed=key.is_billed,
                 meter=key.meter,
                 unit=key.unit,
                 deduct_from_pool=key.deduct_from_pool,
@@ -2459,13 +2467,26 @@ class CardUnit(models.Model):
                 value = self.area_m2
             else:
                 value = unit_service.value
+            # Kdyz uz karta u te polozky klic s dopoctenou vahou ma, prevezme
+            # ho i novy klic. Jinak by k dopoctene plose pribyla jeste rucni
+            # hodnota z Vychozi sluzby a secetly by se - kdezto dopoctene
+            # vahy engine za kartu zapocita jen jednou. Viz Daniel 2026-09-07
+            # a billing/engine._weighted_shares.
+            zdroj = (
+                AllocationKey.objects
+                .filter(client_card=self.card, service_item=unit_service.service_item)
+                .exclude(weight_source="")
+                .values_list("weight_source", flat=True)
+                .first()
+            ) or ""
             AllocationKey.objects.create(
                 client_card=self.card,
                 service_item=unit_service.service_item,
                 meter=unit_service.meter,
                 unit=self.unit,
                 allocation_type=unit_service.allocation_type,
-                value=value,
+                value=None if zdroj else value,
+                weight_source=zdroj,
             )
 
     @property
