@@ -4279,6 +4279,91 @@ class MeterReadingAdmin(PodlePronajimatele, DefaultToCurrentPeriodMixin, ModelAd
     search_fields = ("meter__code", "meter__name")
     autocomplete_fields = ("meter",)
     readonly_fields = ("created_by",)
+    list_before_template = "admin/core/meterreading/nad_seznamem.html"
+
+    def changelist_view(self, request, extra_context=None):
+        """Preda pruhu nad tabulkou seznam Obdobi pro tlacitko exportu."""
+        extra_context = extra_context or {}
+        extra_context["obdobi_exportu"] = Period.objects.order_by("-year", "-month")
+        vybrane = request.GET.get(self.default_period_filter_param)
+        extra_context["vybrane_obdobi"] = int(vybrane) if (vybrane or "").isdigit() else (
+            Period.current().pk if Period.current() else None)
+        return super().changelist_view(request, extra_context)
+
+    def get_urls(self):
+        from django.urls import path
+
+        urls = super().get_urls()
+        custom = [
+            path(
+                "export/",
+                self.admin_site.admin_view(self.export_view),
+                name="core_meterreading_export",
+            ),
+        ]
+        return custom + urls
+
+    def export_view(self, request):
+        """Odecty za jedno Obdobi do XLSX - Areal, Meridlo, Stav, Jednotka,
+        Datum odectu.
+
+        Jednotka je ta, ve ktere se odecet fyzicky CTE z displeje
+        (Meter.reading_unit_of_measure), ne ta vykazovana - u tepla se cte
+        v kWh, ale vykazuje v GJ, a v exportu ma stat to, co spravce videl
+        na meridle. Prazdna znamena "stejna jako merna jednotka".
+        Viz Daniel 2026-09-09."""
+        from django.http import HttpResponse
+        from openpyxl import Workbook
+        from openpyxl.styles import Border, Font, PatternFill, Side
+
+        period = Period.objects.filter(pk=request.GET.get("period")).first() or Period.current()
+        if period is None:
+            self.message_user(request, "Není z čeho vybrat období.", messages.ERROR)
+            from django.shortcuts import redirect
+            return redirect("admin:core_meterreading_changelist")
+
+        # get_queryset drzi kontext pronajimatele (PodlePronajimatele) -
+        # export tak nikdy nevytahne odecty druhe osoby.
+        radky = (
+            self.get_queryset(request)
+            .filter(period=period)
+            .select_related("meter", "meter__site")
+            .order_by("meter__site__name", "meter__code")
+        )
+
+        wb = Workbook()
+        ws = wb.active
+        ws.title = "Odečty {:02d}-{}".format(period.month, period.year)
+        ws.append(["Areál", "Měřidlo", "Stav", "Jednotka", "Datum odečtu"])
+        for bunka in ws[1]:
+            bunka.font = Font(bold=True)
+            bunka.fill = PatternFill("solid", fgColor="DDDDDD")
+            bunka.border = Border(bottom=Side(style="thin"))
+        for r in radky:
+            m = r.meter
+            ws.append([
+                m.site.name if m.site_id else "",
+                m.code or m.name,
+                float(r.value) if r.value is not None else None,
+                m.reading_unit_of_measure or m.unit_of_measure or "",
+                r.reading_date,
+            ])
+        for sloupec, sirka in zip("ABCDE", (10, 20, 14, 12, 15)):
+            ws.column_dimensions[sloupec].width = sirka
+        for radek in ws.iter_rows(min_row=2, min_col=3, max_col=3):
+            for bunka in radek:
+                bunka.number_format = "#,##0.000"
+        for radek in ws.iter_rows(min_row=2, min_col=5, max_col=5):
+            for bunka in radek:
+                bunka.number_format = "DD.MM.YYYY"
+        ws.freeze_panes = "A2"
+
+        odpoved = HttpResponse(
+            content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+        odpoved["Content-Disposition"] = 'attachment; filename="odecty_{:02d}_{}.xlsx"'.format(
+            period.month, period.year)
+        wb.save(odpoved)
+        return odpoved
 
     @display(description="Foto", boolean=True, ordering="photo")
     def ma_foto(self, obj):

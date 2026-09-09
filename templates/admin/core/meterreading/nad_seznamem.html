@@ -1,0 +1,30 @@
+{% comment %}
+Pruh nad tabulkou Odečtů (MeterReadingAdmin.list_before_template): výběr
+období a export do XLSX.
+
+Unfold tuhle šablonu vkládá JEŠTĚ PŘED <form id="changelist-form">, takže
+zdejší <form> nekončí vnořený v hromadných akcích (to byla past u Období,
+kde vnořený formulář odesílal hromadnou akci včetně mazání).
+
+Pozor: víceřádkový komentář MUSÍ být {% comment %}, ne {# #} - to platí
+jen na jeden řádek a jinak se vypíše na stránku.
+{% endcomment %}
+<form method="get" action="{% url 'admin:core_meterreading_export' %}"
+      style="display:flex; flex-wrap:wrap; align-items:center; gap:12px; margin-bottom:16px;">
+    <label style="font-size:13px;">
+        Období:
+        <select name="period">
+            {% for p in obdobi_exportu %}
+                <option value="{{ p.pk }}" {% if p.pk == vybrane_obdobi %}selected{% endif %}>{{ p }}</option>
+            {% endfor %}
+        </select>
+    </label>
+    <button type="submit" class="rx-btn">
+        <span class="material-symbols-outlined md-18">download</span>
+        Exportovat do Excelu
+    </button>
+    <span style="color:#999; font-size:13px;">
+        Areál, měřidlo, stav, jednotka a datum odečtu za vybrané období.
+        Jednotka je ta z displeje měřidla – teplo se čte v kWh, i když se vykazuje v GJ.
+    </span>
+</form>
