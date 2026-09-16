@@ -1,10 +1,12 @@
 """
-NJ: klic na "revize hasicich pristroju" pro kazdou Kartu.
+Klic na "revize hasicich pristroju" pro kazdou Kartu v arealu.
 
-Daniel 2026-09-16: polozku mela jedina Karta (CALAMARI, a jeste s vahou
-223 opsanou z vymery, coz s revizemi nesouvisi). Spravedlive se to deli
-podle POCTU HASICICH PRISTROJU - ty se doplni rucne, tenhle prikaz jen
-zalozi radky, kam je zapsat.
+Daniel 2026-09-16: polozku mely jen jednotlive Karty, a jeste s vahou
+opsanou z vymery, coz s revizemi nesouvisi (NJ: CALAMARI 223; FM: MEON
+168 a TENAUR 941). Spravedlive se to deli podle POCTU HASICICH
+PRISTROJU - ty se doplni rucne, tenhle prikaz jen zalozi radky, kam je
+zapsat. Na FM je to zaroven protejsek stareho POZ_OCHR ("pult ochrany"),
+ktery Daniel potvrdil jako tutez sluzbu.
 
 Klice vznikaji s PRAZDNOU vahou (value = None), takze dokud se pocty
 nedoplni, nikdo nic neplati a vypocet na to upozorni sam. Priznaky
@@ -16,11 +18,13 @@ Karty, ktere skoncily pred 08/2026, se vynechavaji - drivejsi obdobi uz
 jsou vyfakturovana a nemaji se menit.
 
 Prikaz je OPAKOVATELNY - druhe spusteni uz nema co zalozit a existujici
-vahy nikdy neprepisuje.
+POCTY (vahy zadane rucne po prvnim behu) nikdy neprepisuje: vyprazdni se
+jen vaha, ktera je opsana z vymery Karty, tj. rovna se jeji plose nebo
+prisla z weight_source.
 
 Pouziti:
-  python manage.py klice_revize_hasicich_nj            # jen ukaze
-  python manage.py klice_revize_hasicich_nj --provest  # zapise
+  python manage.py klice_revize_hasicich NJ            # jen ukaze
+  python manage.py klice_revize_hasicich FM --provest  # zapise
 """
 import datetime
 
@@ -36,18 +40,22 @@ class Command(BaseCommand):
     help = "NJ: založí klíč „revize hasících přístrojů“ všem kartám (váha = počet přístrojů, doplní se ručně)."
 
     def add_arguments(self, parser):
+        parser.add_argument("areal", type=str, help="Areál, např. NJ nebo FM.")
         parser.add_argument("--provest", action="store_true", help="Skutečně zapsat.")
 
     def handle(self, *args, **volby):
         zapsat = volby["provest"]
-        site = Site.objects.filter(name="NJ").first()
+        site = Site.objects.filter(name=volby["areal"]).first()
         if site is None:
-            raise CommandError("Areál NJ neexistuje.")
+            raise CommandError(f"Areál „{volby['areal']}“ neexistuje.")
         revize = ServicePoolItem.objects.filter(site=site, name="revize hasících přístrojů").first()
-        uklid = ServicePoolItem.objects.filter(
-            site=site, name="úklidové služby společných prostor NJ").first()
-        if revize is None or uklid is None:
-            raise CommandError("Položky „revize hasících přístrojů“ / „úklidové služby…“ neexistují.")
+        # Vzor priznaku Fakturovat/Odecist: ostraha arealu ji ma na kazde
+        # Karte a je to stejny druh arealove sluzby. (Uklid ne - na FM je
+        # rozepsany po budovach, takze ho nema kazda Karta.)
+        vzorova = ServicePoolItem.objects.filter(
+            site=site, name__istartswith="ostraha areálu").first()
+        if revize is None or vzorova is None:
+            raise CommandError("Položky „revize hasících přístrojů“ / „ostraha areálu…“ neexistují.")
 
         if not zapsat:
             self.stdout.write(self.style.WARNING("NÁHLED - nic se nezapisuje, spusť s --provest.\n"))
@@ -56,7 +64,7 @@ class Command(BaseCommand):
         zalozit, upravit = [], []
 
         for vzor in AllocationKey.objects.filter(
-            service_item=uklid
+            service_item=vzorova
         ).select_related("client_card__client"):
             karta = vzor.client_card
             if karta.valid_to and karta.valid_to < OD_OBDOBI:
@@ -72,7 +80,11 @@ class Command(BaseCommand):
         ).select_related("client_card__client"):
             if klic.client_card.valid_to and klic.client_card.valid_to < OD_OBDOBI:
                 continue
-            if klic.value is not None or klic.weight_source:
+            # Pocty, ktere uz nekdo doplnil rucne, se nesmi prepsat -
+            # vyprazdni se jen vaha opsana z vymery Karty.
+            if klic.weight_source or (
+                klic.value is not None and klic.value == klic.client_card.plocha_celkem
+            ):
                 upravit.append(klic)
 
         typ = AllocationKey.AllocationType.WEIGHTED_COUNT

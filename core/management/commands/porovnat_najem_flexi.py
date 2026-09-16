@@ -12,6 +12,7 @@ DPH, ta se podle smlouvy připočítává až na faktuře.
 
 Použití:
   python manage.py porovnat_najem_flexi 06/2026
+  python manage.py porovnat_najem_flexi 06/2026 --vynechat-areal DV
 """
 import unicodedata
 from decimal import Decimal
@@ -19,7 +20,7 @@ from decimal import Decimal
 from django.core.management.base import BaseCommand, CommandError
 
 from core.flexi_client import FlexiAPIError, FlexiClient
-from core.models import ClientCard, Period
+from core.models import ClientCard, Period, Site
 
 
 def _normalize(name):
@@ -56,6 +57,10 @@ class Command(BaseCommand):
 
     def add_arguments(self, parser):
         parser.add_argument("period", type=str, help="MM/YYYY, např. 06/2026")
+        parser.add_argument(
+            "--vynechat-areal", type=str, default=None,
+            help="Vynechat karty v daném areálu (např. DV - tam se nájem nefakturuje samostatně)",
+        )
 
     def handle(self, *args, **options):
         try:
@@ -67,6 +72,13 @@ class Command(BaseCommand):
         period = Period.objects.filter(year=year, month=month).first()
         if not period:
             raise CommandError(f"Období {options['period']} v naší appce neexistuje.")
+
+        vynechat_areal = options["vynechat_areal"]
+        vynechany_site = None
+        if vynechat_areal:
+            vynechany_site = Site.objects.filter(name__icontains=vynechat_areal).first()
+            if not vynechany_site:
+                raise CommandError(f"Areál '{vynechat_areal}' v naší appce nenalezen.")
 
         popis = f"nájem {month:02d}/{year}"
 
@@ -91,9 +103,11 @@ class Command(BaseCommand):
             entry["vc_dph"] += float(inv.get("sumCelkem") or 0)
             entry["count"] += 1
 
-        cards = ClientCard.objects.select_related("client").prefetch_related("card_units")
+        cards = ClientCard.objects.select_related("client").prefetch_related("card_units__unit__site")
         our_by_client = {}
         for card in cards:
+            if vynechany_site and any(cu.unit.site_id == vynechany_site.id for cu in card.card_units.all()):
+                continue
             rent = _card_rent_for_period(card, period)
             if rent == 0:
                 continue
@@ -106,7 +120,8 @@ class Command(BaseCommand):
             key=lambda k: (our_by_client.get(k) or flexi_by_client.get(k))["name"],
         )
 
-        self.stdout.write(f"Srovnání nájemného za {period} - Flexi (popis '{popis}', {len(invoices)} faktur) vs. vyúčtování\n")
+        vynechano_info = f", vynechán areál {vynechany_site.name}" if vynechany_site else ""
+        self.stdout.write(f"Srovnání nájemného za {period} - Flexi (popis '{popis}', {len(invoices)} faktur){vynechano_info} vs. vyúčtování\n")
         self.stdout.write(
             f"{'Klient':<40}{'Naše (Kč)':>14}{'Flexi bez DPH':>16}{'Flexi vč. DPH':>16}{'Rozdíl':>14}"
         )
