@@ -522,8 +522,16 @@ def _consumption_shares(
 
 
 def surcharge_split(share, units, remaining_cost, reported_units, total_consumption):
-    """Rozpad spotrebni casti castky na "vlastni spotreba" a "spolecne
-    prostory + ztraty" - JEN pro zobrazeni, na vypocet nema zadny vliv.
+    """Rozpad spotrebni casti castky na "vlastni spotreba" a rozdil proti
+    fakturovanemu mnozstvi - JEN pro zobrazeni, na vypocet nema zadny vliv.
+
+    Rozdil ma obe znamenka a kazde znamena neco jineho:
+      - namerili jsme MIN nez dodavatel fakturoval (+) = spotreba
+        spolecnych prostor a ztraty v rozvodech, klient je doplaci,
+      - namerili jsme VIC (-) = rozdil mereni ve prospech odberatelu,
+        cely naklad se deli vice jednotkami a cena za jednotku klesne.
+    Popisek ve vyuctovani se proto ridi znamenkem - viz
+    billing/statement_generator.py. Viz Daniel 2026-09-16.
 
     Klient plati sve namerene jednotky, jenze cena za jednotku, kterou
     vidi ve vyuctovani (total_cost / namerena spotreba), je vyssi nez ta
@@ -554,6 +562,7 @@ def surcharge_split(share, units, remaining_cost, reported_units, total_consumpt
     share_amount = (remaining_cost * share).quantize(Decimal("0.01"))
     return {
         "reported_units": reported_units,
+        "measured_units": total_consumption,
         "base_price_per_unit": base_price_per_unit,
         "own_amount": own_amount,
         "surcharge_units": (share * (reported_units - total_consumption)).quantize(Decimal("0.001")),
@@ -755,6 +764,16 @@ def calculate_period(period, site=None):
                 cost_source = "vychozi_castka_polozky"
             else:
                 continue  # napr. sezonni sluzba bez nakladu v tomto mesici a bez vychozi castky
+
+            # Zakonna ztrata odberneho mista (typicky 4 % u velkoodberu) -
+            # dodavatel ji pripocitava k fakturovanemu mnozstvi, takze uz je
+            # v cene za jednotku z faktury. Ve vyuctovani se to musi rict
+            # nahlas, jinak si ji klient pricte podruhe. Viz Daniel 2026-09-16.
+            legal_loss_pct = next(
+                (sp.legal_loss_pct for sp in service_item.supplies_as_cost_source.all()
+                 if sp.legal_loss_pct),
+                None,
+            )
 
             all_keys = list(
                 service_item.allocation_keys.select_related("client_card", "client_card__unit", "meter")
@@ -965,10 +984,18 @@ def calculate_period(period, site=None):
                         "unit_of_measure": unit_of_measure,
                         **({
                             "reported_units": str(split["reported_units"]),
+                            "measured_units": str(split["measured_units"]),
                             "base_price_per_unit": str(split["base_price_per_unit"]),
                             "own_amount": str(split["own_amount"]),
                             "surcharge_units": str(split["surcharge_units"]),
                             "surcharge_amount": str(split["surcharge_amount"]),
+                            # Zakonna ztrata se uklada k radku (ne dohledava az
+                            # pri tisku) - klientske PDF cte vyhradne ulozene
+                            # hodnoty, aby se stare vyuctovani nemenilo, kdyz
+                            # se procento na Odbernem miste pozdeji upravi.
+                            "legal_loss_pct": (
+                                str(legal_loss_pct) if legal_loss_pct else None
+                            ),
                         } if split else {}),
                     },
                 ))

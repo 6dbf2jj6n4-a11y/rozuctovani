@@ -29,6 +29,47 @@ _STYLE_TOTAL = ParagraphStyle("StatementTotal", fontName=FONT_BOLD, fontSize=13,
 _STYLE_EMPTY = ParagraphStyle("StatementEmpty", fontName=FONT_REGULAR, fontSize=10, spaceBefore=4 * mm)
 
 
+_STYLE_BASIS = ParagraphStyle(
+    "StatementBasis", fontName=FONT_REGULAR, fontSize=8, leading=11,
+    spaceBefore=2 * mm, spaceAfter=3 * mm, textColor=colors.HexColor("#4b5563"),
+)
+
+
+def price_basis_text(zaklad):
+    """Odkud se vzala cena za jednotku, po řádcích - aby si ji klient mohl
+    ověřit proti faktuře dodavatele, kterou zná, a nedopočítával si
+    zákonnou ztrátu podruhé. Stejný text v PDF i v klientském portálu,
+    proto bez značkování. Viz Daniel 2026-09-16."""
+    mj = zaklad["unit_of_measure"] or "j."
+    radky = [
+        f"Náklad dle faktury dodavatele: {_fmt_czk(zaklad['cost'])} "
+        f"za {format_units(zaklad['reported_units'], mj)} = "
+        f"{format_price_per_unit(zaklad['base_price_per_unit'], mj, decimals=4)}"
+    ]
+    if zaklad["legal_loss_pct"]:
+        pct = f"{zaklad['legal_loss_pct']:.2f}".rstrip("0").rstrip(".")
+        radky.append(
+            f"Fakturované množství už obsahuje zákonnou ztrátu {pct} %, kterou "
+            f"dodavatel připočítává - samostatně se neúčtuje."
+        )
+    if zaklad["measured_units"] is not None and zaklad["difference_units"] is not None:
+        rozdil = zaklad["difference_units"]
+        smer = "více" if rozdil > 0 else "méně"
+        pct = zaklad["difference_pct"]
+        pct_text = f", {pct:+.1f} %" if pct is not None else ""
+        radky.append(
+            f"Součet spotřeb naměřených v areálu: "
+            f"{format_units(zaklad['measured_units'], mj)} "
+            f"(o {format_units(abs(rozdil), mj)} {smer}{pct_text})"
+        )
+        radky.append(
+            f"Rozúčtovací cena: {_fmt_czk(zaklad['cost'])} ÷ "
+            f"{format_units(zaklad['measured_units'], mj)} = "
+            f"{format_price_per_unit(zaklad['price_per_unit'], mj, decimals=4)}"
+        )
+    return radky
+
+
 def _card_label(card):
     return card.description or f"Karta {card.client}"
 
@@ -48,13 +89,30 @@ def format_units(units, unit_of_measure):
     return f"{units:,.2f} {label}".replace(",", " ").strip()
 
 
-def format_price_per_unit(price, unit_of_measure):
+def format_price_per_unit(price, unit_of_measure, decimals=2):
     """Cena za jednotku, např. '10.00 Kč/kWh'. U m² jde vždy o roční sazbu
-    (Kč/m²/rok) - stejná konvence jako v core/client_card_generator.py."""
+    (Kč/m²/rok) - stejná konvence jako v core/client_card_generator.py.
+
+    `decimals`: v odvození ceny se tiskne na 4 místa - klient si má umět
+    svou částku ověřit vynásobením, a při 6.47 Kč/kWh místo 6.4651 mu
+    vyjde o procento jiné číslo. Viz Daniel 2026-09-16."""
     if price is None:
         return "—"
     label = "m²/rok" if unit_of_measure == "m²" else (unit_of_measure or "j.")
-    return f"{price:,.2f} Kč/{label}".replace(",", " ")
+    return f"{price:,.{decimals}f} Kč/{label}".replace(",", " ")
+
+
+def surcharge_label(surcharge_amount):
+    """Popisek rozpadoveho radku podle znamenka rozdilu - viz
+    billing/engine.py surcharge_split. Kladny rozdil klient doplaci
+    (spolecne prostory a ztraty), zaporny dostava zpatky (namerili jsme
+    vic, nez dodavatel fakturoval). Jedno jmeno pro oba smery by lhalo
+    v jednom z nich. Viz Daniel 2026-09-16."""
+    if surcharge_amount is None:
+        return ""
+    if surcharge_amount < 0:
+        return "z toho vyrovnání rozdílu měření"
+    return "z toho společné prostory a ztráty"
 
 
 def build_statement_data(client, period):
@@ -78,6 +136,43 @@ def build_statement_data(client, period):
         raw = calc_detail.get(field)
         return Decimal(raw) if raw is not None else None
 
+    def _cena_odvozena(class_lines):
+        """Odvozeni ceny za jednotku pro tridu - jeden zaznam za kazdou
+        polozku zasobniku, ktera se delila podle namerene spotreby.
+        Klient musi videt obe cisla: cenu z faktury dodavatele (tu si
+        umi overit na dokladu) i rozuctovaci cenu (tou nasobime jeho
+        kWh). Vsechno se cte z calc_detail ulozeneho pri vypoctu."""
+        zaznamy = []
+        videno = set()
+        for line in class_lines:
+            cd = line.calc_detail or {}
+            if not cd.get("reported_units") or not cd.get("base_price_per_unit"):
+                continue
+            if line.service_item_id in videno:
+                continue
+            videno.add(line.service_item_id)
+            fakturovano = Decimal(cd["reported_units"])
+            namereno = _dec(cd, "measured_units")
+            rozdil = (namereno - fakturovano) if namereno is not None else None
+            zaznamy.append({
+                "item": line.service_item.name,
+                "unit_of_measure": cd.get("unit_of_measure") or "",
+                "cost": _dec(cd, "remaining_cost"),
+                "reported_units": fakturovano,
+                "base_price_per_unit": _dec(cd, "base_price_per_unit"),
+                "measured_units": namereno,
+                "difference_units": rozdil,
+                "difference_pct": (
+                    (rozdil / fakturovano * 100).quantize(Decimal("0.1"))
+                    if rozdil is not None and fakturovano else None
+                ),
+                "price_per_unit": _dec(cd, "price_per_unit"),
+                "legal_loss_pct": _dec(cd, "legal_loss_pct"),
+            })
+        for zaznam in zaznamy:
+            zaznam["text"] = price_basis_text(zaznam)
+        return zaznamy
+
     classes = []
     grand_total = Decimal("0")
     any_unbilled = False
@@ -96,6 +191,7 @@ def build_statement_data(client, period):
             any_surcharge = True
         classes.append({
             "label": class_labels[class_code],
+            "price_basis": _cena_odvozena(class_lines),
             "lines": [
                 {
                     "item": line.service_item.name,
@@ -117,6 +213,8 @@ def build_statement_data(client, period):
                     "own_amount": _dec(line.calc_detail, "own_amount"),
                     "surcharge_units": _dec(line.calc_detail, "surcharge_units"),
                     "surcharge_amount": _dec(line.calc_detail, "surcharge_amount"),
+                    "surcharge_label": surcharge_label(
+                        _dec(line.calc_detail, "surcharge_amount")),
                 }
                 for line in class_lines
             ],
@@ -175,7 +273,7 @@ def generate_client_statement_pdf(client, period, output_path):
             if line["surcharge_amount"]:
                 breakdown = (
                     ("z toho vlastní naměřená spotřeba", line["units"], line["own_amount"]),
-                    ("z toho společné prostory a ztráty", line["surcharge_units"], line["surcharge_amount"]),
+                    (line["surcharge_label"], line["surcharge_units"], line["surcharge_amount"]),
                 )
                 for label, sub_units, sub_amount in breakdown:
                     detail_row_indexes.append(len(rows))
@@ -216,6 +314,12 @@ def generate_client_statement_pdf(client, period, output_path):
             ],
         ]))
         elements.append(table)
+        for zaklad in cls["price_basis"]:
+            elements.append(Paragraph(
+                "<br/>".join([f"<b>Jak jsme došli k ceně – {escape(zaklad['item'])}</b>"]
+                             + [escape(radek) for radek in zaklad["text"]]),
+                _STYLE_BASIS,
+            ))
 
     elements.append(Paragraph(f"Celkem k úhradě: {_fmt_czk(data['grand_total'])}", _STYLE_TOTAL))
     if data["any_unbilled"]:
@@ -227,9 +331,12 @@ def generate_client_statement_pdf(client, period, output_path):
     if data["any_surcharge"]:
         elements.append(Paragraph(
             "Řádky „z toho“ jsou jen rozpis částky nad nimi, nepřičítají se k ní. "
-            "Dodavatel fakturuje více, než kolik naměří jednotlivá podružná měřidla - "
-            "rozdíl je spotřeba společných prostor a ztráty v rozvodech, které se dělí "
-            "mezi odběratele v poměru jejich naměřené spotřeby.",
+            "Cena za jednotku v tomto vyúčtování se liší od ceny na faktuře dodavatele "
+            "proto, že celý fakturovaný náklad dělíme spotřebou skutečně naměřenou "
+            "podružnými měřidly. Naměří-li se méně, než dodavatel fakturoval, je "
+            "v rozdílu spotřeba společných prostor a ztráty v rozvodech a dělí se mezi "
+            "odběratele v poměru jejich naměřené spotřeby. Naměří-li se více, vrací se "
+            "rozdíl odběratelům jako vyrovnání rozdílu měření.",
             _STYLE_EMPTY,
         ))
 

@@ -95,9 +95,12 @@
                     {% endfor %}
                     {% comment %}
                        Rozpad castky: kolik klient plati za svou namerenou spotrebu
-                       a kolik je priplatek za spolecne prostory + ztraty, ktery je
-                       jinak schovany ve vyssi cene za jednotku. Viz
-                       billing/engine.py surcharge_split.
+                       a kolik je rozdil proti fakturovanemu mnozstvi, ktery je
+                       jinak schovany v cene za jednotku. Popisek se ridi
+                       znamenkem - kladny rozdil klient doplaci (spolecne prostory
+                       a ztraty), zaporny dostava zpatky (namerili jsme vic, nez
+                       dodavatel fakturoval). Viz billing/engine.py surcharge_split
+                       a billing/statement_generator.py surcharge_label.
                     {% endcomment %}
                     {% if row.surcharge_amount %}
                         <tr style="color:#7c9; border-bottom:1px solid #333;">
@@ -107,7 +110,7 @@
                             <td style="padding:2px 8px; text-align:right;">{{ row.own_amount|floatformat:2 }} Kč</td>
                         </tr>
                         <tr style="color:#7c9; border-bottom:1px solid #333;">
-                            <td colspan="8" style="padding:2px 8px 8px 24px;">↳ z toho společné prostory a ztráty</td>
+                            <td colspan="8" style="padding:2px 8px 8px 24px;">↳ {% if row.surcharge_amount < 0 %}z toho vyrovnání rozdílu měření{% else %}z toho společné prostory a ztráty{% endif %}</td>
                             <td style="padding:2px 8px 8px; text-align:right;">{{ row.surcharge_units|floatformat:3 }} {{ row.unit_of_measure }}</td>
                             <td style="padding:2px 8px 8px; text-align:right;">{{ row.base_price_per_unit|floatformat:4 }} Kč</td>
                             <td style="padding:2px 8px 8px; text-align:right;">{{ row.surcharge_amount|floatformat:2 }} Kč</td>
