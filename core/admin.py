@@ -537,8 +537,8 @@ class AllocationKeyInlineBase(TabularInline):
     model = AllocationKey
     extra = 0
     collapsible = True
-    fields = ("service_item", "allocation_type", "value", "co_je_vahou", "podil",
-              "unit_price", "meter", "unit", "deduct_from_pool", "is_billed")
+    fields = ("service_item", "allocation_type", "value", "weight_source", "co_je_vahou",
+              "podil", "unit_price", "meter", "unit", "deduct_from_pool", "is_billed")
     readonly_fields = ("co_je_vahou", "podil")
     # Jen Plocha zustava naseptavacem - tech je na FM pres sto. Polozka
     # zasobniku a Meridlo jsou obycejny vyber schvalne: naseptavac chodi
