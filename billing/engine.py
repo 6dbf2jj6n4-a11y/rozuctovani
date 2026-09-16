@@ -142,7 +142,11 @@ def _fixed_amount_for(key, service_item, period, warnings, price_cache=None):
                 f"období - karta vynechána."
             )
             return None
-        zaklad = (key.value or Decimal("0")) * price / 12
+        # key.vaha, ne key.value - vymera muze byt odvozena primo z Ploch
+        # Karty (AllocationKey.weight_source). Rucne zadane cislo se jinak
+        # rozejde s Kartou pokazde, kdyz se plochy prehodi mezi najemci -
+        # CALAMARI melo 248 m2 proti 261 na Karte. Viz Daniel 2026-09-16.
+        zaklad = (key.vaha or Decimal("0")) * price / 12
     else:
         zaklad = key.value or Decimal("0")
     return _kraceno_dny(zaklad, key.client_card, period)
@@ -830,9 +834,17 @@ def calculate_period(period, site=None):
             # fyzikalni jednotka nedava smysl, tam units/price_per_unit zustanou prazdne.
             fixed_units = {}
             fixed_price_per_unit = {}
+            # Odvozena vaha (z Ploch Karty) se zapocita jednou za Kartu
+            # a polozku - stejna pojistka jako u vazenych podilu, jinak by
+            # Karta se tremi Plochami zaplatila trikrat celou svou vymeru.
+            zapocteno_fixed = set()
             for key in fixed_keys:
                 if key.client_card.active_days_in_period(period_start, period_end) <= 0:
                     continue
+                if key.weight_source:
+                    if (key.client_card_id, key.weight_source) in zapocteno_fixed:
+                        continue
+                    zapocteno_fixed.add((key.client_card_id, key.weight_source))
                 amount = _fixed_amount_for(key, service_item, period, warnings, price_cache=price_cache)
                 if amount is None:
                     continue
@@ -846,7 +858,7 @@ def calculate_period(period, site=None):
                         price = PriceList.get_price_for_period(service_item, period, price_cache=price_cache)
                     if price is not None:
                         fixed_units[key.client_card_id] = (
-                            fixed_units.get(key.client_card_id, Decimal("0")) + (key.value or Decimal("0"))
+                            fixed_units.get(key.client_card_id, Decimal("0")) + (key.vaha or Decimal("0"))
                         )
                         fixed_price_per_unit[key.client_card_id] = price
                 # Odecist lze jen kdyz to dovoli TRIDA i klic - prepinac
