@@ -1618,6 +1618,51 @@ class ServicePoolItem(models.Model):
         return InvoiceClassColor.label_map().get(self.invoice_class, self.invoice_class)
 
 
+class NastaveniRozuctovani(models.Model):
+    """Obecna nastaveni rozuctovani - jediny zaznam pro celou aplikaci.
+
+    Sem patri prepinace, ktere plati napric arealy i tridami. Co se lisi
+    po tridach, zustava na InvoiceClassColor (napr. odecitani pausalu).
+    """
+
+    kladne_ztraty_pronajimateli = models.BooleanField(
+        "Kladné ztráty si nechává pronajímatel", default=False,
+        help_text=(
+            "Kladná ztráta = naše podměry naměřily VÍC, než fakturoval "
+            "dodavatel.\n"
+            "Vypnuto (výchozí): rozdělí se celá faktura mezi naměřené podíly, "
+            "takže cena za jednotku klesne a rozdíl je bonusem nájemců.\n"
+            "Zapnuto: nájemce platí své naměřené jednotky × cenu z faktury "
+            "(částka ÷ fakturované množství). Vybere se víc, než přišlo na "
+            "faktuře, a přebytek zůstává pronajímateli jako výnos - vidíš ho "
+            "v přehledu Náklad/Výnos.\n"
+            "ZÁPORNÝCH ztrát (naměřili jsme míň, typicky voda a teplo) se "
+            "přepínač netýká - ty nesou nájemci jako dosud."
+        ),
+    )
+
+    class Meta:
+        verbose_name = "Nastavení rozúčtování"
+        verbose_name_plural = "Nastavení rozúčtování"
+
+    def __str__(self):
+        return "Nastavení rozúčtování"
+
+    def save(self, *args, **kwargs):
+        """Jediny zaznam - druhy by se tise ignoroval a nikdo by nevedel,
+        ktery plati."""
+        self.pk = 1
+        super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        """Nastaveni se nemaze - bez nej by nebylo podle ceho pocitat."""
+
+    @classmethod
+    def nacti(cls):
+        """Ulozene nastaveni, nebo vychozi (vse vypnute), kdyz jeste neni."""
+        return cls.objects.first() or cls()
+
+
 class InvoiceClassColor(models.Model):
     """Trida (Elektrina/Voda/Teplo/Ostatni/Najemne) - JEDINY seznam, do
     ktereho se radi jak polozky zasobniku sluzeb, tak Meridla a Odberna

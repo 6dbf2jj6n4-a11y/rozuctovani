@@ -28,7 +28,7 @@ from .models import (
     Client, ClientCard, Contract, Site, Unit, CardUnit, Floorplan,
     Meter, MeterReading, Period, InflationRate, SupplyPoint, InvoiceClassColor,
     ServicePoolItem, AllocationKey, PriceList, CostEntry, BillingLine, UnitService,
-    CardOccupant, ReadingsClosure,
+    CardOccupant, ReadingsClosure, NastaveniRozuctovani,
     normalizovat_telefon,
 )
 
@@ -4006,6 +4006,27 @@ class PeriodAdmin(ModelAdmin):
         self.message_user(
             request, f"Znovu otevřeno {updated} období - rozúčtování teď jde přepočítat.", level=messages.WARNING
         )
+
+
+@admin.register(NastaveniRozuctovani)
+class NastaveniRozuctovaniAdmin(ModelAdmin):
+    """Jediny zaznam - proto se nepridava ani nemaze, jen upravuje."""
+
+    def has_add_permission(self, request):
+        return not NastaveniRozuctovani.objects.exists()
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+    def changelist_view(self, request, extra_context=None):
+        """Seznam s jednim radkem nema smysl - rovnou na formular."""
+        from django.shortcuts import redirect
+        from django.urls import reverse
+
+        zaznam = NastaveniRozuctovani.objects.first()
+        if zaznam is None:
+            return redirect(reverse("admin:core_nastavenirozuctovani_add"))
+        return redirect(reverse("admin:core_nastavenirozuctovani_change", args=[zaznam.pk]))
 
 
 @admin.register(InvoiceClassColor)

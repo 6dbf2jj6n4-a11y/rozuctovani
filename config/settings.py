@@ -170,7 +170,7 @@ SESSION_SAVE_EVERY_REQUEST = True
 # 2027.0), i kdyby se nekdo zapomnel APP_VERSION_YEAR rucne prepsat -
 # dohoda s Danielem 2026-08-15.
 APP_VERSION_YEAR = 2026
-APP_VERSION_SEQUENCE = 283
+APP_VERSION_SEQUENCE = 284
 APP_VERSION = (
     f"{APP_VERSION_YEAR}.{APP_VERSION_SEQUENCE}"
     if date.today().year == APP_VERSION_YEAR
@@ -277,6 +277,11 @@ UNFOLD = {
                         "title": _("Kontrola plánků"),
                         "icon": "rule",
                         "link": reverse_lazy("admin:core_floorplan_kontrola"),
+                    },
+                    {
+                        "title": _("Nastavení rozúčtování"),
+                        "icon": "tune",
+                        "link": reverse_lazy("admin:core_nastavenirozuctovani_changelist"),
                     },
                     {
                         "title": _("Třídy"),

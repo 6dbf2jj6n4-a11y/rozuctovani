@@ -56,7 +56,7 @@ from django.db import transaction
 
 from core.models import (
     AllocationKey, BillingLine, ClientCard, CostEntry, InvoiceClassColor, MeterReading, Period,
-    PriceList, ServicePoolItem,
+    NastaveniRozuctovani, PriceList, ServicePoolItem,
 )
 
 
@@ -678,6 +678,8 @@ def calculate_period(period, site=None):
         # Prepinac "odecitat pausaly z celkoveho nakladu" po Tridach
         # (Nastavení -> Třídy) - nactene jednou pro cely vypocet.
         deduct_fixed_by_class = InvoiceClassColor.deduct_fixed_map()
+        # Obecna nastaveni - nacist jednou, ne u kazde polozky zvlast.
+        nastaveni = NastaveniRozuctovani.nacti()
 
         for service_item in service_items:
             deduct_fixed_allowed = deduct_fixed_by_class.get(service_item.invoice_class, True)
@@ -839,13 +841,37 @@ def calculate_period(period, site=None):
                 if not shares and remaining_cost != 0 and not fixed_amounts:
                     warnings.append(f"{service_item} / {period}: žádné klíče pro rozpočítání zbylé částky.")
 
+            # KLADNA ZTRATA: podmery namerily VIC, nez fakturoval dodavatel.
+            # Bez zasahu se rozdeli cela faktura mezi namerene podily, cena za
+            # jednotku tim klesne a rozdil dostanou najemci - jenze klient si
+            # to cislo neumi overit: na fakture vidi jednu cenu za kWh a na
+            # vyuctovani jinou, nizsi. Se zapnutym prepinacem plati kazdy sve
+            # namerene jednotky x cenu z faktury a prebytek zustava
+            # pronajimateli. Cena i mnozstvi pak pochazeji z teze faktury,
+            # takze si to klient dopocita na korunu. Zakonna ztrata se
+            # nepripocitava - fakturovane mnozstvi ji uz obsahuje, takze je
+            # schovana v cene. Viz Daniel 2026-09-16.
+            #
+            # ZAPORNE ztraty (namerili jsme min, typicky voda a teplo) se tim
+            # neridi - tam se dal deli cela faktura a rozdil nesou najemci.
+            prebytek_pronajimatele = None
+            fakturovane_jednotky = cost_totals["units"] if cost_source == "naklad_za_obdobi" else None
+            if (nastaveni.kladne_ztraty_pronajimateli and total_consumption
+                    and fakturovane_jednotky and total_consumption > fakturovane_jednotky
+                    and remaining_cost > 0):
+                cena_z_faktury = total_cost / fakturovane_jednotky
+                k_rozdeleni = (total_consumption * cena_z_faktury).quantize(Decimal("0.01"))
+                prebytek_pronajimatele = k_rozdeleni - remaining_cost
+                remaining_cost = k_rozdeleni
+
             # Prumerna cena za jednotku namerene spotreby (celkovy naklad polozky /
             # celkova namerena spotreba) - ulozi se u kazde karty s podilem na
             # spotrebe, aby bylo v klientskem vyuctovani videt, jak se k castce
             # doslo (jednotky x cena/jednotku), i kdyz se obdobi pozdeji uzavre.
             share_price_per_unit = None
             if total_consumption:
-                share_price_per_unit = (total_cost / total_consumption).quantize(Decimal("0.0001"))
+                zaklad = remaining_cost if prebytek_pronajimatele is not None else total_cost
+                share_price_per_unit = (zaklad / total_consumption).quantize(Decimal("0.0001"))
 
             # 3) sestaveni vysledku
             results = dict(fixed_amounts)
