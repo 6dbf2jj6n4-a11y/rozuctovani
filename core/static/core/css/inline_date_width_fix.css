@@ -172,3 +172,24 @@ table.rx-dlazdice-tabulka tr:last-child td {
     border-top: 1px solid rgba(128, 128, 128, 0.45);
     font-weight: 600;
 }
+
+/* Tabulka Podrizena meridla v sekci Hierarchie na Meridle - stejne
+   jemne radkovani jako u Vytapenych ploch. */
+table.rx-podrizena {
+    border-collapse: collapse;
+    font-size: 13px;
+    width: auto;
+    max-width: 760px;
+}
+table.rx-podrizena th {
+    border-bottom: 1px solid rgba(128, 128, 128, 0.45);
+    font-weight: 600;
+    padding: 4px 14px 6px 0;
+    text-align: left;
+    white-space: nowrap;
+}
+table.rx-podrizena td {
+    border-bottom: 1px solid rgba(128, 128, 128, 0.18);
+    padding: 3px 14px 3px 0;
+    white-space: nowrap;
+}

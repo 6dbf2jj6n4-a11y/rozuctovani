@@ -2755,72 +2755,6 @@ class MeterReadingInline(TabularInline):
     hide_title = True
 
 
-class PodrizenaMeridlaInline(TabularInline):
-    """Meridla, ktera maji tohle meridlo jako Nadrazene.
-
-    Vazba je jen jednosmerna - z podruzneho meridla je videt, pod co
-    patri, ale z hlavniho nebylo poznat, co vsechno pod nim visi, a to
-    je prave otazka, ktera zajima pri kontrole spotreb (kolik hlavni
-    meridlo ukazalo a kolik z toho maji podruzna). Daniel 2026-09-16.
-
-    Sekce je jen na cteni: meridlo ma povinny areal, kod, tridu
-    i jednotku, takze zakladat ho v uzkem inlinu nedava smysl - a mazani
-    by tady znamenalo smazat cele meridlo vcetne jeho odectu, ne ho jen
-    odpojit. Nove meridlo se prida u sebe (pole Nadrazene meridlo),
-    odkaz na zalozeni je pod tabulkou.
-    """
-
-    model = Meter
-    fk_name = "parent_meter"
-    verbose_name = "Podřízené měřidlo"
-    verbose_name_plural = "Podřízená měřidla"
-    extra = 0
-    max_num = 0
-    can_delete = False
-    show_change_link = True
-    hide_title = True
-    # Zpusob odectu se schvalne neukazuje - jeho popisek je cela veta
-    # ("Stavy (kumulativni odecet, spotreba = rozdil mezi obdobimi)")
-    # a roztahl by tabulku pres celou stranku.
-    fields = ("kod", "nazev", "trida", "virtualni", "jednotka", "odberne_misto")
-    readonly_fields = fields
-    ordering = ("code",)
-
-    def get_queryset(self, request):
-        return super().get_queryset(request).select_related("site", "supply_point")
-
-    def has_add_permission(self, request, obj=None):
-        return False
-
-    @display(description="Kód")
-    def kod(self, obj):
-        return colored_by_meter_type(obj.code, obj.meter_type)
-
-    @display(description="Název")
-    def nazev(self, obj):
-        return obj.name
-
-    @display(description="Třída")
-    def trida(self, obj):
-        # label_map je jeden dotaz na vsechny Tridy - bez zapamatovani by
-        # se volal na kazde podruzne meridlo zvlast.
-        if not hasattr(self, "_pamet_trid"):
-            self._pamet_trid = InvoiceClassColor.label_map()
-        return self._pamet_trid.get(obj.meter_type, obj.meter_type)
-
-    @display(description="Virtuální", boolean=True)
-    def virtualni(self, obj):
-        return obj.is_virtual
-
-    @display(description="Jednotka")
-    def jednotka(self, obj):
-        return obj.unit_of_measure
-
-    @display(description="Odběrné místo")
-    def odberne_misto(self, obj):
-        return obj.supply_point or "—"
-
-
 @admin.register(Meter)
 class MeterAdmin(PodlePronajimatele, DuplicateModelAdminMixin, ModelAdmin):
     cesta_k_arealu = "site"
@@ -2853,17 +2787,10 @@ class MeterAdmin(PodlePronajimatele, DuplicateModelAdminMixin, ModelAdmin):
     search_fields = ("name", "code", "serial_number")
     autocomplete_fields = ("parent_meter", "supply_point")
     actions = ["duplicate_selected", "assign_supply_point"]
-    inlines = [PodrizenaMeridlaInline, MeterReadingInline]
-
-    def get_inlines(self, request, obj=None):
-        """Sekce Podrizena meridla jen u meridla, ktere nejaka ma.
-
-        Vetsina meridel je v hierarchii dole, takze by u nich jinak
-        svitila prazdna tabulka a jen by odvadela pozornost od odectu."""
-        inlines = list(super().get_inlines(request, obj))
-        if obj is None or not obj.children.exists():
-            inlines = [i for i in inlines if i is not PodrizenaMeridlaInline]
-        return inlines
+    inlines = [MeterReadingInline]
+    # Tabulka podrizenych meridel v sekci Hierarchie - neni to pole modelu,
+    # takze by ho formular jinak nepustil (viz podrizena_meridla nize).
+    readonly_fields = ("podrizena_meridla",)
 
     def autocomplete_label(self, obj):
         """Popisek polozky v naseptavaci - pripisuje se areal.
@@ -2885,6 +2812,57 @@ class MeterAdmin(PodlePronajimatele, DuplicateModelAdminMixin, ModelAdmin):
     @display(description="Kód", ordering="code")
     def code_colored(self, obj):
         return colored_by_meter_type(obj.code, obj.meter_type)
+
+    @display(description="Podřízená měřidla")
+    def podrizena_meridla(self, obj):
+        """Meridla, ktera maji tohle jako Nadrazene - opacny smer teze vazby.
+
+        Z podruzneho meridla bylo vzdycky videt, pod co patri, ale
+        z hlavniho ne, co vsechno pod nim visi. Daniel 2026-09-16.
+
+        Jen na cteni, a schvalne: zakladat meridlo (povinny areal, kod,
+        trida, jednotka) v uzke tabulce nedava smysl a mazani radku by
+        znamenalo smazat cele meridlo i s odecty, ne ho jen odpojit.
+        Spotreby tu nejsou taky schvalne - porovnani "kolik ukazalo hlavni
+        a kolik z toho podruzna" dela sestava Spotreby dle hierarchie
+        a pocitat je pri kazdem otevreni meridla by stranku zdrzelo."""
+        from django.urls import reverse
+        from django.utils.html import format_html, format_html_join
+
+        if obj is None or not obj.pk:
+            return "—"
+        deti = list(
+            obj.children.select_related("supply_point").order_by("code")
+        )
+        if not deti:
+            return format_html(
+                '<span style="color:#888;">Žádné měřidlo nemá tohle jako '
+                'nadřazené.</span>'
+            )
+        popisky = InvoiceClassColor.label_map()
+        radky = format_html_join(
+            "",
+            '<tr><td><a href="{}">{}</a></td><td>{}</td><td>{}</td>'
+            '<td>{}</td><td>{}</td><td>{}</td></tr>',
+            (
+                (
+                    reverse("admin:core_meter_change", args=[d.pk]),
+                    colored_by_meter_type(d.code, d.meter_type),
+                    d.name,
+                    popisky.get(d.meter_type, d.meter_type),
+                    "virtuální" if d.is_virtual else "",
+                    d.unit_of_measure,
+                    d.supply_point or "—",
+                )
+                for d in deti
+            ),
+        )
+        return format_html(
+            '<table class="rx-podrizena"><thead><tr><th>Kód</th><th>Název</th>'
+            '<th>Třída</th><th></th><th>Jednotka</th><th>Odběrné místo</th>'
+            '</tr></thead><tbody>{}</tbody></table>',
+            radky,
+        )
 
     @admin.action(description="Přiřadit vybraná měřidla k odběrnému místu…")
     def assign_supply_point(self, request, queryset):
@@ -2954,7 +2932,12 @@ class MeterAdmin(PodlePronajimatele, DuplicateModelAdminMixin, ModelAdmin):
             ),
         }),
         ("Hierarchie", {
-            "fields": ("parent_meter",)
+            "fields": ("parent_meter", "podrizena_meridla"),
+            "description": (
+                "Nadřazené měřidlo říká, pod co patří tohle; tabulka pod ním "
+                "ukazuje opačný směr - která měřidla mají jako nadřazené tohle. "
+                "Podřízené měřidlo se přidá u sebe, vyplněním pole Nadřazené měřidlo."
+            ),
         }),
         ("Odběrné místo", {
             "fields": ("supply_point",),
