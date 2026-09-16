@@ -211,6 +211,16 @@ class Unit(models.Model):
             "vytápěné i sklady v budově AB, kdežto plechový sklad vedle ne."
         ),
     )
+    is_common = models.BooleanField(
+        "Společná plocha", default=False,
+        help_text=(
+            "Prostor, který užívají všichni - šatny, sprchy, chodby, kotelna. "
+            "Nepronajímá se, takže nepatří na žádnou Kartu: jeho náklad se "
+            "rozpustí mezi nájemce poměrem jejich ploch, protože se do vah "
+            "nezapočítá. V sestavě „Plochy bez karty“ se proto nehlásí jako "
+            "chybějící."
+        ),
+    )
     radiator_count = models.PositiveIntegerField(
         "Počet radiátorů", null=True, blank=True,
         help_text=(

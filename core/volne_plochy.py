@@ -24,7 +24,11 @@ def bez_karty(period, site=None, sites=None):
     Aktivní - karta, která skončila loni, plochu nedrží, i když u ní
     příznak zůstal viset."""
     zacatek, konec = period.date_range()
-    units = Unit.objects.select_related("site")
+    # Spolecne plochy (satny, sprchy, chodby) na zadne Karte byt nemaji -
+    # uzivaji je vsichni a jejich naklad se rozpusti mezi najemce tim, ze
+    # se do vah nezapocitaji. Hlasit je jako "bez karty" by byl trvaly
+    # planny poplach. Viz Daniel 2026-09-16.
+    units = Unit.objects.select_related("site").exclude(is_common=True)
     if site is not None:
         units = units.filter(site=site)
     elif sites is not None:

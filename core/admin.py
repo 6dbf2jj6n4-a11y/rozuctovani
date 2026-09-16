@@ -355,9 +355,9 @@ def sekce_sluzeb():
 class UnitAdmin(PodlePronajimatele, DuplicateModelAdminMixin, ModelAdmin):
     cesta_k_arealu = "site"
     list_display = ("name", "site", "purpose", "area_m2", "unit_type", "druh_prostoru",
-                    "vytapeni")
+                    "vytapeni", "is_common")
     list_select_related = ("site",)
-    list_filter = ("site", "is_residential", "is_heated")
+    list_filter = ("site", "is_residential", "is_heated", "is_common")
     search_fields = ("name",)
     actions = ["duplicate_selected", "zapnout_vytapeni", "vypnout_vytapeni"]
 
