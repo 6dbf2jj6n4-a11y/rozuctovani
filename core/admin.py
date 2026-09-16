@@ -2031,10 +2031,19 @@ class ClientCardAdmin(PodlePronajimatele, ModelAdmin):
         if obdobi is None:
             return "—"
         zacatek, konec = obdobi.date_range()
+        # Datum se formatuje rucne: format_html by na objektu date zavolal
+        # str(), a to je ISO tvar "2026-09-01". Stejny zapis jako jinde
+        # v adminu - Daniel 2026-09-16.
         if obj.valid_to and obj.valid_to < zacatek:
-            return format_html('<span style="color:#888;">skončila {}</span>', obj.valid_to)
+            return format_html(
+                '<span style="color:#888;">skončila {}</span>',
+                obj.valid_to.strftime("%-d. %-m. %Y"),
+            )
         if obj.valid_from > konec:
-            return format_html('<span style="color:#a70;">budoucí (od {})</span>', obj.valid_from)
+            return format_html(
+                '<span style="color:#a70;">budoucí (od {})</span>',
+                obj.valid_from.strftime("%-d. %-m. %Y"),
+            )
         dnu = obj.active_days_in_period(zacatek, konec)
         celkem = obdobi.days_in_period
         if dnu >= celkem:
