@@ -346,10 +346,23 @@ def _consumption_shares(
     main_meter.consumption_for a _owned_consumption. Bez vlivu na
     vysledek, jen na pocet DB dotazu.
     """
-    keys = [
-        k for k in service_item.allocation_keys.select_related("client_card", "client_card__unit", "meter")
-        if k.is_valid_for_period(period) and k.allocation_type not in ABSOLUTE_AMOUNT_TYPES
-    ]
+    period_start, period_end = period.date_range()
+
+    # Karta, ktera v obdobi neplati, neplati ani kdyz ma klic na meridle.
+    # Vazene podily (_weighted_shares) i pevne castky to hlidaly vzdycky,
+    # tady se na to zapomnelo - TSC Cleaning s Kartou od 1. 9. 2026 tak
+    # dostalo celou srpnovou spotrebu meridla E_AB1 (200 kWh, 1 293 Kc).
+    # Viz Daniel 2026-09-16.
+    keys = []
+    meridla_neaktivnich = {}  # meter -> [karty, ktere v obdobi neplati]
+    for k in service_item.allocation_keys.select_related("client_card", "client_card__unit", "meter"):
+        if not k.is_valid_for_period(period) or k.allocation_type in ABSOLUTE_AMOUNT_TYPES:
+            continue
+        if k.client_card.active_days_in_period(period_start, period_end) <= 0:
+            if k.meter_id is not None:
+                meridla_neaktivnich.setdefault(k.meter_id, (k.meter, []))[1].append(k.client_card)
+            continue
+        keys.append(k)
 
     # Klice seskupene podle konkretniho meridla - bez ohledu na typ klice
     # (jak "Podružné měřidlo", tak "Podle váhy" klic muze mit meridlo
@@ -386,6 +399,27 @@ def _consumption_shares(
     else:
         total_consumption = None  # dopocita se nize jako soucet skupin
         implicit_total = True
+
+    # Meridlo, jehoz jedina Karta v obdobi neplati, zustalo bez majitele -
+    # jeho spotreba spadne do spolecne casti a rozpocita se podle vahy
+    # ostatnim. Kdyz prostor v tom obdobi drzel pronajimatel, patri klic
+    # na jeho Kartu (stejne jako u E_O2) - a to se z cisel samo nepozna,
+    # proto hlaska.
+    for meter_id, (meter, karty) in meridla_neaktivnich.items():
+        if meter_id in keys_by_meter:
+            continue  # meridlo ma i jinou, platnou kartu
+        if not _meter_provides_consumption(meter, cache=meter_provides_cache):
+            continue
+        spotreba = meter.consumption_for(period, readings_cache=readings_cache)
+        if not spotreba:
+            continue
+        kdo = ", ".join(str(c) for c in karty)
+        warnings.append(
+            f"{service_item}: měřidlo {meter} nameřilo {spotreba} - jediné karty na něm "
+            f"({kdo}) v období {period} neplatí, spotřeba se rozpočítala jako společná "
+            f"část podle váhy. Pokud prostor v tomto období patřil pronajímateli, přidej "
+            f"klíč na jeho Kartu."
+        )
 
     shares = {}
     sum_groups = Decimal("0")
