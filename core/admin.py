@@ -540,13 +540,13 @@ class AllocationKeyInlineBase(TabularInline):
     fields = ("service_item", "allocation_type", "value", "weight_source", "co_je_vahou",
               "podil", "unit_price", "meter", "unit", "deduct_from_pool", "is_billed")
     readonly_fields = ("co_je_vahou", "podil")
-    # Jen Plocha zustava naseptavacem - tech je na FM pres sto. Polozka
-    # zasobniku a Meridlo jsou obycejny vyber schvalne: naseptavac chodi
-    # pres vlastni endpoint, ktery filtr z teto sekce nevidi, takze
-    # nabizel polozky VSECH Trid (Daniel 2026-09-08). Ve vyberu se
+    # Zadne naseptavace: chodi pres vlastni endpoint, ktery filtr z teto
+    # sekce nevidi, takze nabizely polozky VSECH Trid a plochy VSECH
+    # arealu - v karte pro NJ se tak dala vybrat plocha z FM (Daniel
+    # 2026-09-16, u Polozky a Meridla uz 2026-09-08). Ve vyberu se
     # uplatni formfield_for_foreignkey nize, ktery omezi na Tridu sekce
-    # i na areal Karty - polozek pak zbyde nanejvys deset.
-    autocomplete_fields = ("unit",)
+    # i na areal Karty. Ploch je pak nanejvys tolik, kolik jich ma areal.
+    autocomplete_fields = ()
 
     @display(description="Co je váhou")
     def co_je_vahou(self, obj):
@@ -718,6 +718,14 @@ class AllocationKeyInlineBase(TabularInline):
             if arealy:
                 qs = qs.filter(site__in=arealy)
             kwargs["queryset"] = qs.order_by("site__name", "code")
+        elif db_field.name == "unit":
+            # Plocha musi byt z arealu Karty - klic na plochu z jineho
+            # arealu je nesmysl a v rozuctovani by se projevil az jako
+            # divne cislo v sestave. Viz Daniel 2026-09-16.
+            qs = pronajimatele.omez(Unit.objects, "site", request)
+            if arealy:
+                qs = qs.filter(site__in=arealy)
+            kwargs["queryset"] = qs.order_by("site__name", "name")
         formfield = super().formfield_for_foreignkey(db_field, request, **kwargs)
         if db_field.name in ("meter", "unit") and hasattr(formfield.widget, "can_delete_related"):
             formfield.widget.can_delete_related = False
