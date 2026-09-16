@@ -278,6 +278,21 @@ def _owned_consumption(meter, period, billed_meter_ids, cache, readings_cache=No
     return result
 
 
+def _nadrazene_v_rozpoctu(meter, keys_by_meter):
+    """Meridlo, ktere spotrebu `meter` pohlti, kdyz na nem samotnem nikdo
+    neni - bud primo nadrazene (Meter.parent_meter), nebo virtualni
+    meridlo, v jehoz vzorci je uvedene (E_SPOL = E_OSV1+E_OSV2+E_AB1+...).
+    Bere v uvahu jen meridla, ktera se v teto polozce opravdu rozpocitavaji;
+    jinak vraci None. Slouzi jen k presnejsimu zneni hlasky."""
+    if meter.parent_meter_id and meter.parent_meter_id in keys_by_meter:
+        return keys_by_meter[meter.parent_meter_id][0].meter
+    for group_keys in keys_by_meter.values():
+        kandidat = group_keys[0].meter
+        if kandidat.is_virtual and meter.code in (kandidat.formula or ""):
+            return kandidat
+    return None
+
+
 def _consumption_shares(
     service_item, period, warnings, by_key_out=None, by_key_local_out=None, by_meter_out=None,
     meter_provides_cache=None, readings_cache=None,
@@ -400,11 +415,14 @@ def _consumption_shares(
         total_consumption = None  # dopocita se nize jako soucet skupin
         implicit_total = True
 
-    # Meridlo, jehoz jedina Karta v obdobi neplati, zustalo bez majitele -
-    # jeho spotreba spadne do spolecne casti a rozpocita se podle vahy
-    # ostatnim. Kdyz prostor v tom obdobi drzel pronajimatel, patri klic
-    # na jeho Kartu (stejne jako u E_O2) - a to se z cisel samo nepozna,
-    # proto hlaska.
+    # Meridlo, jehoz jedina Karta v obdobi neplati, zustalo bez majitele.
+    # Kde konci jeho spotreba, zalezi na hierarchii: kdyz visi pod jinym
+    # meridlem, ktere se rozpocitava (E_AB1 je soucast virtualniho E_SPOL),
+    # zustane proste v nem a rozdeli se podle vahy mezi karty na nem - to
+    # je spravne a nic se s tim nedela. Kdyz nad nim nikdo neni, rozpusti
+    # se do spolecne casti a je otazka, jestli tam patri: prostor mohl
+    # v tom obdobi drzet pronajimatel a pak klic patri na jeho Kartu
+    # (jako E_O2). Viz Daniel 2026-09-16.
     for meter_id, (meter, karty) in meridla_neaktivnich.items():
         if meter_id in keys_by_meter:
             continue  # meridlo ma i jinou, platnou kartu
@@ -414,12 +432,20 @@ def _consumption_shares(
         if not spotreba:
             continue
         kdo = ", ".join(str(c) for c in karty)
-        warnings.append(
-            f"{service_item}: měřidlo {meter} nameřilo {spotreba} - jediné karty na něm "
-            f"({kdo}) v období {period} neplatí, spotřeba se rozpočítala jako společná "
-            f"část podle váhy. Pokud prostor v tomto období patřil pronajímateli, přidej "
-            f"klíč na jeho Kartu."
-        )
+        nadrazene = _nadrazene_v_rozpoctu(meter, keys_by_meter)
+        if nadrazene is not None:
+            warnings.append(
+                f"{service_item}: měřidlo {meter} naměřilo {spotreba} - jediné karty na něm "
+                f"({kdo}) v období {period} neplatí, spotřeba proto zůstala v nadřazeném "
+                f"měřidle {nadrazene} a rozdělila se podle váhy mezi karty na něm."
+            )
+        else:
+            warnings.append(
+                f"{service_item}: měřidlo {meter} naměřilo {spotreba} - jediné karty na něm "
+                f"({kdo}) v období {period} neplatí a měřidlo nemá nadřazené, spotřeba se "
+                f"rozpočítala jako společná část podle váhy. Pokud prostor v tomto období "
+                f"patřil pronajímateli, přidej klíč na jeho Kartu."
+            )
 
     shares = {}
     sum_groups = Decimal("0")
