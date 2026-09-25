@@ -1,0 +1,82 @@
+{% comment %}
+Ukazatel, ze pomala hromadna akce u Obdobi bezi (Daniel 2026-09-25: pri
+dotahovani vice faktur neni poznat, jestli to nezamrzlo). Stejny princip
+jako tlacitko kontroly rizik ARES u Klientu (client/nad_seznamem.html):
+akce bezi synchronne, skutecny prubeh by vyzadoval dotazovani na stav,
+tak se poctive rekne, ze se pracuje - kolecko, bezici vteriny a orientacni
+odhad.
+
+Hromadne akce nemaji vlastni tlacitko, proto se chyta odeslani formulare
+changelist-form a podle vybrane akce v rozbalovatku se rozhodne, jestli
+okno ukazat. Ostatni akce (mazani, uzavreni...) ho nevyvolaji. Po dokonceni
+akce se stranka nacte znovu a okno zmizi samo.
+
+Pozor: viceradkovy komentar MUSI byt {% comment %}, ne {# #}.
+{% endcomment %}
+<style>
+    @keyframes rx-rotace { to { transform: rotate(360deg); } }
+    .rx-kolecko {
+        display: inline-block; width: 16px; height: 16px; flex: none;
+        border: 2px solid currentColor; border-right-color: transparent;
+        border-radius: 50%; animation: rx-rotace 0.7s linear infinite;
+    }
+    #rx-prubeh {
+        display: none; position: fixed; inset: 0; z-index: 1000;
+        background: rgba(0, 0, 0, 0.45); align-items: center; justify-content: center;
+    }
+    #rx-prubeh .rx-karta {
+        background: #fff; color: #111827; border-radius: 10px; padding: 20px 24px;
+        max-width: 440px; margin: 0 16px; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25);
+    }
+    .dark #rx-prubeh .rx-karta { background: #1f2937; color: #e5e7eb; }
+    #rx-prubeh .rx-nadpis { display: flex; align-items: center; gap: 10px; font-weight: 600; font-size: 15px; }
+    #rx-prubeh .rx-text { margin-top: 10px; font-size: 13px; line-height: 1.5; opacity: 0.8; }
+</style>
+
+<div id="rx-prubeh" role="status" aria-live="polite">
+    <div class="rx-karta">
+        <div class="rx-nadpis"><span class="rx-kolecko"></span><span id="rx-prubeh-nadpis"></span></div>
+        <div class="rx-text" id="rx-prubeh-text"></div>
+    </div>
+</div>
+
+<script>
+    (function () {
+        // Pomale akce: nadpis a orientacni odhad v sekundach na jedno obdobi.
+        var POMALE = {
+            "propojit_podkladove_faktury": {
+                nadpis: "Dotahuji podkladové faktury z ABRA…",
+                popis: "Hledám faktury v ABRA a kopíruji jejich PDF do úložiště. "
+                    + "Poprvé to trvá déle, opakované dotažení je rychlé.",
+                sekund: 20
+            }
+        };
+
+        document.addEventListener("submit", function (e) {
+            var form = e.target;
+            if (form.id !== "changelist-form") return;
+            var vyber = form.querySelector('select[name="action"]');
+            var akce = vyber && POMALE[vyber.value];
+            if (!akce) return;
+            var pocet = form.querySelectorAll('input[name="_selected_action"]:checked').length;
+            if (!pocet) return;  // Django stejne vrati hlasku "vyber polozky"
+
+            var odhad = pocet * akce.sekund;
+            var okno = document.getElementById("rx-prubeh");
+            var text = document.getElementById("rx-prubeh-text");
+            document.getElementById("rx-prubeh-nadpis").textContent = akce.nadpis;
+            // az po odeslani, at prohlizec stihne formular poslat
+            setTimeout(function () {
+                okno.style.display = "flex";
+                var start = Date.now();
+                var obnov = function () {
+                    var vterin = Math.round((Date.now() - start) / 1000);
+                    text.textContent = akce.popis + " Období: " + pocet + ", běží " + vterin + " s"
+                        + " (odhad ~" + odhad + " s). Nezavírej stránku, výsledek se ukáže sám.";
+                };
+                obnov();
+                setInterval(obnov, 1000);
+            }, 0);
+        }, true);
+    })();
+</script>
