@@ -2227,13 +2227,25 @@ class CostEntry(models.Model):
             if castka is not None:
                 czk = (czk or Decimal("0")) + castka
 
-        jednotky = {(ce.unit_of_measure or "").strip() for ce in entries}
+        # Prazdna jednotka = "neuvedeno", ne "jina jednotka": prevezme
+        # vychozi jednotku Tridy (elektro kWh, teplo GJ, voda m3) a velikost
+        # pismen nehraje roli. Bez toho TEDOM (prazdne) + SZYPKA ("kwh") na
+        # FM 08/2026 vypadaly jako dve ruzne jednotky, fakturovane mnozstvi
+        # vyslo None a klientske vyuctovani elektriny prislo o rozpad i o
+        # "Jak jsme dosli k cene". Pelety v kg proti prazdnemu zaznamu u
+        # tepla (vychozi GJ) se dal secist nedaji. Viz Daniel 2026-09-25.
+        vychozi = InvoiceClassColor.default_unit_map().get(service_item.invoice_class, "")
+
+        def _jednotka(ce):
+            return (ce.unit_of_measure or "").strip() or vychozi
+
+        jednotky = {_jednotka(ce).casefold() for ce in entries}
         units = None
         if len(jednotky) == 1 and all(ce.amount_units is not None for ce in entries):
             units = sum((ce.amount_units for ce in entries), Decimal("0"))
         return {
             "czk": czk, "units": units,
-            "unit": jednotky.pop() if len(jednotky) == 1 else "",
+            "unit": _jednotka(entries[0]) if len(jednotky) == 1 else "",
             "count": len(entries),
         }
 
