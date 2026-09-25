@@ -3564,11 +3564,11 @@ class MeterAdmin(PodlePronajimatele, DuplicateModelAdminMixin, ModelAdmin):
 
 @admin.register(Period)
 class PeriodAdmin(ModelAdmin):
+    # Sazba DPH se tyka jen najemneho - v tabulce Obdobi ji Daniel nechce
+    # videt (2026-09-25). Zustava v detailu Obdobi.
     list_display = (
-        "__str__", "current_badge", "status_badge", "days_in_period",
-        "vat_rate", "period_actions",
+        "__str__", "current_badge", "status_badge", "days_in_period", "period_actions",
     )
-    list_editable = ("vat_rate",)
     list_filter = ("status", "is_current")
     ordering = ("-year", "-month")
     actions = [
