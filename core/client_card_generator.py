@@ -238,11 +238,11 @@ def generate_client_card_document(card, output_path):
     ]
     if card.valid_to:
         info_lines.append(f"Platnost do: {format_date_cz(card.valid_to)}")
-    # Pocet osob - klice na vodu, TUV a dalsi z nej berou vahu, takze musi
-    # byt na Karte videt (Daniel 2026-09-25). TUV jen kdyz se lisi.
+    # Pocty osob - klice na vodu, TUV a dalsi z nich berou vahu, takze musi
+    # byt na Karte videt (Daniel 2026-09-25). Jsou to dve samostatna pole.
     if card.pocet_osob is not None:
         info_lines.append(f"Počet osob: {card.pocet_osob}")
-    if card.pocet_osob_tuv is not None and card.pocet_osob_tuv != card.pocet_osob:
+    if card.pocet_osob_tuv is not None:
         info_lines.append(f"Počet osob pro TUV: {card.pocet_osob_tuv}")
     elements.append(Paragraph("<br/>".join(info_lines), _STYLE_INFO))
 

@@ -571,9 +571,14 @@ class AllocationKeyInlineBase(TabularInline):
             return format_html('<span style="color:#2a7;">celá plocha karty</span>')
         if obj.weight_source == volby.VYTAPENA:
             return format_html('<span style="color:#2a7;">vytápěná plocha karty</span>')
+        # Prazdne pole na Karte = vaha 0, klient by tise neplatil nic.
         if obj.weight_source == volby.OSOBY:
+            if obj.client_card_id and obj.client_card.pocet_osob is None:
+                return format_html('<span style="color:#dc2626;">počet osob – na kartě NEVYPLNĚNO</span>')
             return format_html('<span style="color:#2a7;">počet osob z karty</span>')
         if obj.weight_source == volby.OSOBY_TUV:
+            if obj.client_card_id and obj.client_card.pocet_osob_tuv is None:
+                return format_html('<span style="color:#dc2626;">počet osob pro TUV – na kartě NEVYPLNĚNO</span>')
             return format_html('<span style="color:#2a7;">počet osob pro TUV z karty</span>')
         popis = ""
         if obj.meter_id and obj.meter.weight_unit_label:

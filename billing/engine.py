@@ -902,6 +902,24 @@ def calculate_period(period, site=None):
             )
             valid_keys = [k for k in all_keys if k.is_valid_for_period(period)]
 
+            # Vaha z Poctu osob / Poctu osob pro TUV bere JEN pole na Karte -
+            # kdyz je prazdne, vaha je 0 a klient by tise neplatil nic.
+            # Viz Daniel 2026-09-25.
+            _zdroje = AllocationKey.ZdrojVahy
+            _pole = {_zdroje.OSOBY: ("pocet_osob", "Počet osob"),
+                     _zdroje.OSOBY_TUV: ("pocet_osob_tuv", "Počet osob pro TUV")}
+            _chybi = {}
+            for key in valid_keys:
+                if key.weight_source in _pole:
+                    atr, popis = _pole[key.weight_source]
+                    if getattr(key.client_card, atr) is None:
+                        _chybi.setdefault(popis, set()).add(str(key.client_card))
+            for popis, karty in _chybi.items():
+                warnings.append(
+                    f"{service_item} / {period}: karty ({', '.join(sorted(karty))}) mají klíč "
+                    f"s vahou „{popis}“, ale pole na kartě je prázdné - váha je 0. Doplň ho."
+                )
+
             fixed_keys = [k for k in valid_keys if k.allocation_type in ABSOLUTE_AMOUNT_TYPES]
 
             # Fakturovat = vsechny platne klice karty pro tuto polozku maji
