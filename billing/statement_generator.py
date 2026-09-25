@@ -74,7 +74,8 @@ def meridlo_text(radek):
     if podil is not None and podil != 1:
         if not radek.get("virtualni") and not radek.get("odecteno"):
             text += f" = {_cislo(radek['spotreba'])} {mj}"
-        text += f", váš podíl {podil * 100:.2f} %"
+        # nezlomitelna mezera - "%" nesmi pri zalomeni zustat samo na radku
+        text += f", váš podíl {podil * 100:.2f}\u00a0%"
     return text.strip()
 
 
@@ -359,14 +360,23 @@ def generate_client_statement_pdf(client, period, output_path):
         filler = [""] * (2 + (1 if show_card_column else 0))
         rows.append(["Mezisoučet"] + filler + [_fmt_czk(cls["subtotal"])])
 
-        table = Table(rows, repeatRows=1)
+        # Vsechny tabulky na celou sirku stranky se stejnymi sloupci - jinak
+        # si kazda pocita sirku podle obsahu a pravé okraje trid pod sebou
+        # nelicuji (Ostatni byla uzsi). Ciselne sloupce (Spotreba,
+        # Cena/jednotku, Castka) jsou zarovnane doprava, i v zahlavi.
+        # Viz Daniel 2026-09-25.
+        ciselne = [26 * mm, 30 * mm, 30 * mm]
+        karta = [30 * mm] if show_card_column else []
+        prvni_ciselny = 1 + len(karta)
+        sirky = [doc.width - sum(ciselne) - sum(karta)] + karta + ciselne
+        table = Table(rows, repeatRows=1, colWidths=sirky)
         table.setStyle(TableStyle([
             ("FONTNAME", (0, 0), (-1, -1), FONT_REGULAR),
             ("FONTNAME", (0, 0), (-1, 0), FONT_BOLD),
             ("FONTNAME", (0, -1), (-1, -1), FONT_BOLD),
             ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#e5e7eb")),
             ("BACKGROUND", (0, -1), (-1, -1), colors.HexColor("#f3f4f6")),
-            ("ALIGN", (-1, 0), (-1, -1), "RIGHT"),
+            ("ALIGN", (prvni_ciselny, 0), (-1, -1), "RIGHT"),
             ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#9ca3af")),
             # Zalomeny popis meridla je vyssi nez jeden radek - jednotky
             # a castky at stoji nahore u zacatku textu, ne u jeho konce.
