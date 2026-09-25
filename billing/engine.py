@@ -1100,6 +1100,14 @@ def calculate_period(period, site=None):
                         share, units, remaining_cost,
                         cost_totals["units"], total_consumption,
                     )
+                    if prebytek_pronajimatele is not None:
+                        # Prepinac "Kladne ztraty si nechava pronajimatel":
+                        # klient plati sve namerene jednotky x cenu z faktury,
+                        # neni co rozepisovat. Rozpad by pocital s navysenou
+                        # castkou a klientovi by ukazal nepravdivy "naklad
+                        # dle faktury" i prebytek pronajimatele, ktery videt
+                        # nesmi. Viz Daniel 2026-09-25.
+                        split = None
                     if by_meter:
                         meridla = _rozpad_po_meridlech(
                             [k for k in valid_keys if k.client_card_id == card_id],
@@ -1139,6 +1147,17 @@ def calculate_period(period, site=None):
                             ),
                         } if split else {}),
                         **({"meridla": meridla} if meridla else {}),
+                        # Se zapnutym prepinacem kladnych ztrat ukaze
+                        # vyuctovani jen skutecnou fakturu dodavatele (castka,
+                        # mnozstvi, cena) - pravdive a overitelne, bez
+                        # namerenych mnozstvi, ze kterych by byl videt
+                        # prebytek pronajimatele.
+                        **({"cena_z_faktury": {
+                            "naklad": str(total_cost),
+                            "mnozstvi": str(fakturovane_jednotky),
+                            "cena": str((total_cost / fakturovane_jednotky).quantize(Decimal("0.0001"))),
+                            "legal_loss_pct": str(legal_loss_pct) if legal_loss_pct else None,
+                        }} if prebytek_pronajimatele is not None and share is not None else {}),
                     },
                 ))
 

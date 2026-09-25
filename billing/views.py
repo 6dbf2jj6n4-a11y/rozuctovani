@@ -15,7 +15,9 @@ from django.utils.text import slugify
 
 from accounts.models import User
 from core.models import BillingLine, Client, Period, PodkladovaFaktura
-from billing.statement_generator import build_statement_data, generate_client_statement_pdf
+from billing.statement_generator import (
+    build_statement_data, generate_client_statement_pdf, poznamka_k_rozpadu,
+)
 
 
 def _resolve_client(request):
@@ -108,6 +110,7 @@ def period_detail(request, period_id):
         "grand_total": data["grand_total"],
         "any_unbilled": data["any_unbilled"],
         "any_surcharge": data["any_surcharge"],
+        "poznamka_k_rozpadu": poznamka_k_rozpadu(data["any_vyrovnani"]),
         "show_card_column": len(all_cards) > 1,
         # Seznam obdobi vlevo - rychle prepinani mezi mesici bez vraceni
         # na prehled. Viz Daniel 2026-09-25.

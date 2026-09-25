@@ -169,15 +169,8 @@
             </div>
         {% endif %}
         {% if any_surcharge %}
-            <p class="empty" style="margin-top:10px;">
-                Řádky „z toho“ jsou jen rozpis částky nad nimi, nepřičítají se k ní.
-                Cena za jednotku se liší od ceny na faktuře dodavatele proto, že celý
-                fakturovaný náklad dělíme spotřebou skutečně naměřenou podružnými
-                měřidly. Naměří-li se méně, než dodavatel fakturoval, je v rozdílu
-                spotřeba společných prostor a ztráty v rozvodech a dělí se mezi
-                odběratele v poměru jejich naměřené spotřeby. Naměří-li se více,
-                vrací se rozdíl odběratelům jako vyrovnání rozdílu měření.
-            </p>
+            {# Text je spolecny s PDF (statement_generator.poznamka_k_rozpadu). #}
+            <p class="empty" style="margin-top:10px;">{{ poznamka_k_rozpadu }}</p>
         {% endif %}
         {% if any_unbilled %}
             <p class="empty" style="margin-top:10px;">

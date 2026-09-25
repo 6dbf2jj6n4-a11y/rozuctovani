@@ -79,12 +79,45 @@ def meridlo_text(radek):
     return text.strip()
 
 
+def poznamka_k_rozpadu(s_vyrovnanim):
+    """Poznamka pod carou k radkum "z toho". Veta o vyrovnani rozdilu
+    mereni jen tehdy, kdyz nejaky takovy radek ve vyuctovani je - se
+    zapnutym prepinacem kladnych ztrat se namereny prebytek klientum
+    nevraci a veta by lhala."""
+    text = (
+        "Řádky „z toho“ jsou jen rozpis částky nad nimi, nepřičítají se k ní. "
+        "Cena za jednotku v tomto vyúčtování se liší od ceny na faktuře dodavatele "
+        "proto, že celý fakturovaný náklad dělíme spotřebou skutečně naměřenou "
+        "podružnými měřidly. Naměří-li se méně, než dodavatel fakturoval, je "
+        "v rozdílu spotřeba společných prostor a ztráty v rozvodech a dělí se mezi "
+        "odběratele v poměru jejich naměřené spotřeby."
+    )
+    if s_vyrovnanim:
+        text += " Naměří-li se více, vrací se rozdíl odběratelům jako vyrovnání rozdílu měření."
+    return text
+
+
 def price_basis_text(zaklad):
     """Odkud se vzala cena za jednotku, po řádcích - aby si ji klient mohl
     ověřit proti faktuře dodavatele, kterou zná, a nedopočítával si
     zákonnou ztrátu podruhé. Stejný text v PDF i v klientském portálu,
     proto bez značkování. Viz Daniel 2026-09-16."""
     mj = zaklad["unit_of_measure"] or "j."
+    if zaklad.get("jen_faktura"):
+        # Klient plati namerene jednotky x cenu z faktury - staci ukazat
+        # fakturu. Viz billing/engine.py (prepinac kladnych ztrat).
+        radky = [
+            f"Cena dle faktury dodavatele: {_fmt_czk(zaklad['cost'])} "
+            f"za {format_units(zaklad['reported_units'], mj)} = "
+            f"{format_price_per_unit(zaklad['base_price_per_unit'], mj, decimals=4)}"
+        ]
+        if zaklad["legal_loss_pct"]:
+            pct = f"{zaklad['legal_loss_pct']:.2f}".rstrip("0").rstrip(".")
+            radky.append(
+                f"Fakturované množství už obsahuje zákonnou ztrátu {pct} %, kterou "
+                f"dodavatel připočítává - samostatně se neúčtuje."
+            )
+        return radky
     radky = [
         f"Náklad dle faktury dodavatele: {_fmt_czk(zaklad['cost'])} "
         f"za {format_units(zaklad['reported_units'], mj)} = "
@@ -190,6 +223,23 @@ def build_statement_data(client, period):
         videno = set()
         for line in class_lines:
             cd = line.calc_detail or {}
+            fa = cd.get("cena_z_faktury")
+            if fa and line.service_item_id not in videno:
+                # Prepinac kladnych ztrat: jen skutecna faktura, zadna
+                # namerena mnozstvi (prozradila by prebytek pronajimatele).
+                videno.add(line.service_item_id)
+                zaznam = {
+                    "item": line.service_item.name,
+                    "unit_of_measure": cd.get("unit_of_measure") or "",
+                    "jen_faktura": True,
+                    "cost": Decimal(fa["naklad"]),
+                    "reported_units": Decimal(fa["mnozstvi"]),
+                    "base_price_per_unit": Decimal(fa["cena"]),
+                    "legal_loss_pct": Decimal(fa["legal_loss_pct"]) if fa.get("legal_loss_pct") else None,
+                }
+                zaznam["text"] = price_basis_text(zaznam)
+                zaznamy.append(zaznam)
+                continue
             if not cd.get("reported_units") or not cd.get("base_price_per_unit"):
                 continue
             if line.service_item_id in videno:
@@ -221,6 +271,7 @@ def build_statement_data(client, period):
     grand_total = Decimal("0")
     any_unbilled = False
     any_surcharge = False
+    any_vyrovnani = False
     for class_code in class_order:
         class_lines = [line for line in lines if line.service_item.invoice_class == class_code]
         if not class_lines:
@@ -233,6 +284,9 @@ def build_statement_data(client, period):
             any_unbilled = True
         if any(line.calc_detail.get("surcharge_amount") for line in class_lines):
             any_surcharge = True
+        if any(Decimal(line.calc_detail["surcharge_amount"]) < 0
+               for line in class_lines if line.calc_detail.get("surcharge_amount")):
+            any_vyrovnani = True
         classes.append({
             "label": class_labels[class_code],
             "price_basis": _cena_odvozena(class_lines),
@@ -285,6 +339,7 @@ def build_statement_data(client, period):
     return {
         "classes": classes, "grand_total": grand_total,
         "any_unbilled": any_unbilled, "any_surcharge": any_surcharge,
+        "any_vyrovnani": any_vyrovnani,
     }
 
 
@@ -411,16 +466,7 @@ def generate_client_statement_pdf(client, period, output_path):
             _STYLE_EMPTY,
         ))
     if data["any_surcharge"]:
-        elements.append(Paragraph(
-            "Řádky „z toho“ jsou jen rozpis částky nad nimi, nepřičítají se k ní. "
-            "Cena za jednotku v tomto vyúčtování se liší od ceny na faktuře dodavatele "
-            "proto, že celý fakturovaný náklad dělíme spotřebou skutečně naměřenou "
-            "podružnými měřidly. Naměří-li se méně, než dodavatel fakturoval, je "
-            "v rozdílu spotřeba společných prostor a ztráty v rozvodech a dělí se mezi "
-            "odběratele v poměru jejich naměřené spotřeby. Naměří-li se více, vrací se "
-            "rozdíl odběratelům jako vyrovnání rozdílu měření.",
-            _STYLE_EMPTY,
-        ))
+        elements.append(Paragraph(poznamka_k_rozpadu(data["any_vyrovnani"]), _STYLE_EMPTY))
 
     doc.build(elements)
     return output_path
