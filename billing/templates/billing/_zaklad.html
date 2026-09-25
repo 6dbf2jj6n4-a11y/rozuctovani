@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{% block title %}Moje vyúčtování{% endblock %}</title>
+    {% comment %}
+        Zvolene tema se nastavi jeste pred vykreslenim stranky, jinak by
+        pri tmavem rezimu stranka na okamzik problikla svetle. Bez ulozene
+        volby se ridi nastavenim systemu (prefers-color-scheme).
+        Viz Daniel 2026-09-25.
+    {% endcomment %}
+    <script>
+        (function () {
+            try {
+                var t = localStorage.getItem("rx-tema");
+                if (t) document.documentElement.setAttribute("data-theme", t);
+            } catch (e) {}
+        })();
+    </script>
+    <style>
+        :root {
+            --bg: #f3f4f6; --card: #ffffff; --text: #111827; --muted: #6b7280;
+            --faint: #9ca3af; --line: #f3f4f6; --hover: #f9fafb; --border: #d1d5db;
+            --accent: #2563eb; --accent-bg: #eff6ff; --basis: #4b5563;
+            --total-bg: #111827; --total-text: #ffffff; --shadow: rgba(0, 0, 0, 0.08);
+        }
+        @media (prefers-color-scheme: dark) {
+            :root:not([data-theme="light"]) {
+                --bg: #0f1115; --card: #1a1d23; --text: #e5e7eb; --muted: #9ca3af;
+                --faint: #6b7280; --line: #2a2e36; --hover: #22262e; --border: #3a3f48;
+                --accent: #60a5fa; --accent-bg: #1e293b; --basis: #cbd5e1;
+                --total-bg: #e5e7eb; --total-text: #111827; --shadow: rgba(0, 0, 0, 0.4);
+            }
+        }
+        :root[data-theme="dark"] {
+            --bg: #0f1115; --card: #1a1d23; --text: #e5e7eb; --muted: #9ca3af;
+            --faint: #6b7280; --line: #2a2e36; --hover: #22262e; --border: #3a3f48;
+            --accent: #60a5fa; --accent-bg: #1e293b; --basis: #cbd5e1;
+            --total-bg: #e5e7eb; --total-text: #111827; --shadow: rgba(0, 0, 0, 0.4);
+        }
+        body {
+            font-family: -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+            background: var(--bg); color: var(--text); margin: 0;
+        }
+        a { color: var(--accent); }
+        .card { background: var(--card); border-radius: 10px; box-shadow: 0 1px 4px var(--shadow); }
+        .tlacitko {
+            display: inline-flex; align-items: center; gap: 6px;
+            font: inherit; font-size: 13px; padding: 6px 12px; border-radius: 6px;
+            border: 1px solid var(--border); background: var(--card); color: var(--text);
+            cursor: pointer; text-decoration: none; white-space: nowrap;
+        }
+        .tlacitko:hover { background: var(--hover); }
+        .tema .svetle { display: none; }
+        :root[data-theme="dark"] .tema .svetle { display: inline; }
+        :root[data-theme="dark"] .tema .tmave { display: none; }
+        @media (prefers-color-scheme: dark) {
+            :root:not([data-theme]) .tema .svetle { display: inline; }
+            :root:not([data-theme]) .tema .tmave { display: none; }
+        }
+        {% block styles %}{% endblock %}
+    </style>
+</head>
+<body>
+{% block body %}{% endblock %}
+<script>
+    function prepniTema() {
+        var root = document.documentElement;
+        var ted = root.getAttribute("data-theme")
+            || (window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+        var nove = ted === "dark" ? "light" : "dark";
+        root.setAttribute("data-theme", nove);
+        try { localStorage.setItem("rx-tema", nove); } catch (e) {}
+    }
+</script>
+</body>
+</html>

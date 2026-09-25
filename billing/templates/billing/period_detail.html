@@ -1,131 +1,168 @@
+{% extends "billing/_zaklad.html" %}
 {% load billing_extras %}
-<!DOCTYPE html>
-<html lang="cs">
-<head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Vyúčtování — {{ period }}</title>
-    <style>
-        body {
-            font-family: -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
-            background: #f3f4f6;
-            margin: 0;
-            color: #111827;
-        }
-        .wrap { max-width: 640px; margin: 0 auto; padding: 32px 20px; }
-        .topbar { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 4px; }
-        h1 { font-size: 20px; margin: 0; }
-        .back { font-size: 13px; color: #2563eb; text-decoration: none; }
-        .back:hover { text-decoration: underline; }
-        .sub { color: #6b7280; font-size: 14px; margin: 0 0 20px; }
-        .card { background: #fff; border-radius: 10px; box-shadow: 0 1px 4px rgba(0,0,0,0.08); padding: 4px 18px 18px; margin-bottom: 16px; }
-        .card h2 { font-size: 15px; margin: 16px 0 8px; color: #111827; }
-        table { width: 100%; border-collapse: collapse; font-size: 14px; }
-        td { padding: 6px 0; border-bottom: 1px solid #f3f4f6; vertical-align: top; }
-        td.amount { text-align: right; white-space: nowrap; }
-        .meta { display: block; color: #9ca3af; font-size: 12px; margin-top: 2px; }
-        tr.subtotal td { font-weight: 600; border-bottom: none; padding-top: 8px; }
-        .grand-total {
-            background: #111827;
-            color: #fff;
-            border-radius: 10px;
-            padding: 16px 18px;
-            display: flex;
-            justify-content: space-between;
-            font-size: 16px;
-            font-weight: 600;
-        }
-        .empty { color: #6b7280; font-size: 14px; }
-        tr.rozpad td { color: #6b7280; font-size: 12px; border-bottom: none; padding: 1px 0 1px 16px; }
-        .zaklad { color: #4b5563; font-size: 12px; line-height: 1.5; margin-top: 10px; }
-    </style>
-</head>
-<body>
+
+{% block title %}Vyúčtování — {{ period }}{% endblock %}
+
+{% block styles %}
+    .wrap { max-width: 980px; margin: 0 auto; padding: 32px 20px; }
+    .rozlozeni { display: grid; grid-template-columns: 150px minmax(0, 1fr); gap: 24px; align-items: start; }
+
+    /* Seznam obdobi vlevo - rychle prepinani mezi mesici. */
+    .obdobi { position: sticky; top: 20px; padding: 8px 0; }
+    .obdobi .rok { font-size: 12px; font-weight: 600; color: var(--muted); padding: 10px 14px 4px; }
+    .obdobi a {
+        display: block; padding: 6px 14px; font-size: 14px;
+        color: var(--text); text-decoration: none; border-left: 3px solid transparent;
+    }
+    .obdobi a:hover { background: var(--hover); }
+    .obdobi a.aktivni { background: var(--accent-bg); border-left-color: var(--accent); color: var(--accent); font-weight: 600; }
+
+    .topbar { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 4px; }
+    .akce { display: flex; gap: 8px; }
+    h1 { font-size: 20px; margin: 0; }
+    .sub { color: var(--muted); font-size: 14px; margin: 4px 0 20px; }
+    .odkazy { font-size: 13px; margin: -12px 0 20px; }
+    .odkazy a { text-decoration: none; }
+    .odkazy a:hover { text-decoration: underline; }
+
+    .card { padding: 4px 18px 18px; margin-bottom: 16px; }
+    .card h2 { font-size: 15px; margin: 16px 0 8px; }
+    table { width: 100%; border-collapse: collapse; font-size: 14px; }
+    td { padding: 6px 0; border-bottom: 1px solid var(--line); vertical-align: top; }
+    td.amount { text-align: right; white-space: nowrap; padding-left: 12px; }
+    .meta { display: block; color: var(--faint); font-size: 12px; margin-top: 2px; }
+    tr.subtotal td { font-weight: 600; border-bottom: none; padding-top: 8px; }
+    tr.rozpad td { color: var(--muted); font-size: 12px; border-bottom: none; padding: 1px 0 1px 16px; }
+    tr.rozpad td.amount { padding-left: 12px; }
+    .zaklad { color: var(--basis); font-size: 12px; line-height: 1.5; margin-top: 10px; }
+    .grand-total {
+        background: var(--total-bg); color: var(--total-text); border-radius: 10px;
+        padding: 16px 18px; display: flex; justify-content: space-between;
+        font-size: 16px; font-weight: 600;
+    }
+    .empty { color: var(--muted); font-size: 14px; }
+
+    /* Na telefonu se seznam obdobi presune nahoru jako vodorovny pruh. */
+    @media (max-width: 720px) {
+        .rozlozeni { grid-template-columns: 1fr; }
+        .obdobi { position: static; display: flex; overflow-x: auto; gap: 2px; padding: 6px; }
+        .obdobi .rok { display: none; }
+        .obdobi a { border-left: none; border-radius: 6px; white-space: nowrap; }
+    }
+    @media print {
+        .obdobi, .akce, .odkazy { display: none; }
+        .rozlozeni { grid-template-columns: 1fr; }
+    }
+{% endblock %}
+
+{% block body %}
 <div class="wrap">
-    <div class="topbar">
-        <h1>Vyúčtování</h1>
-        <a class="back" href="{% url 'moje-vyuctovani' %}{% if request.GET.client %}?client={{ request.GET.client }}{% endif %}">&larr; zpět na období</a>
-    </div>
-    <p class="sub">{{ client.name }} — {{ period }}</p>
+<div class="rozlozeni">
 
-    {% if request.user.role != "klient" %}
-        <p class="sub" style="margin-top:-12px;">
-            <a class="back" href="{% url 'admin:index' %}">&larr; zpět do adminu</a>
-            &nbsp;·&nbsp;
-            <a class="back" href="{% url 'admin:core_billingline_detail_client' client.pk %}?period={{ period.pk }}">detail po měřidlech (interní)</a>
-        </p>
-    {% endif %}
-
-    {% for cls in classes %}
-        <div class="card">
-            <h2>{{ cls.label }}</h2>
-            <table>
-                {% for line in cls.lines %}
-                    <tr>
-                        <td>
-                            {{ line.item }}{% if show_card_column %} <span style="color:#9ca3af;">({{ line.card }})</span>{% endif %}
-                            {% if line.units is not None %}
-                                <span class="meta">{{ line|units_display }} × {{ line|price_per_unit_display }}</span>
-                            {% endif %}
-                        </td>
-                        <td class="amount">{{ line.amount|kc }}{% if not line.is_billed %} <span class="meta" style="display:inline;">(v paušálu)</span>{% endif %}</td>
-                    </tr>
-                    {% for meridlo in line.meridla %}
-                        {# Z jakych meridel se jednotky skladaji - klient si je overi na svem meridle. #}
-                        <tr class="rozpad">
-                            <td>↳ {{ meridlo.text }}</td>
-                            <td class="amount">{% if meridlo.units is not None %}{{ meridlo.units_text }}{% endif %}</td>
-                        </tr>
-                    {% endfor %}
-                    {% if line.surcharge_amount %}
-                        {# Rozpad castky - jen vysvetleni radku nad nim, do mezisouctu nevstupuje. #}
-                        <tr class="rozpad">
-                            <td>↳ z toho vlastní naměřená spotřeba</td>
-                            <td class="amount">{{ line.own_amount|kc }}</td>
-                        </tr>
-                        <tr class="rozpad">
-                            <td>↳ {{ line.surcharge_label }}</td>
-                            <td class="amount">{{ line.surcharge_amount|kc }}</td>
-                        </tr>
-                    {% endif %}
-                {% endfor %}
-                <tr class="subtotal">
-                    <td>Mezisoučet</td>
-                    <td class="amount">{{ cls.subtotal|kc }}</td>
-                </tr>
-            </table>
-            {% for zaklad in cls.price_basis %}
-                <div class="zaklad">
-                    <strong>Jak jsme došli k ceně – {{ zaklad.item }}</strong>
-                    {% for radek in zaklad.text %}<br>{{ radek }}{% endfor %}
-                </div>
+    <nav class="card obdobi" aria-label="Období">
+        {% regroup obdobi by year as podle_roku %}
+        {% for skupina in podle_roku %}
+            <div class="rok">{{ skupina.grouper|stringformat:"d" }}</div>
+            {% for o in skupina.list %}
+                <a href="{% url 'moje-vyuctovani-detail' o.pk %}{{ dotaz }}"{% if o.pk == period.pk %} class="aktivni" aria-current="page"{% endif %}>{{ o }}</a>
             {% endfor %}
-        </div>
-    {% empty %}
-        <p class="empty">Pro toto období nejsou k dispozici žádné vyúčtované položky.</p>
-    {% endfor %}
+        {% endfor %}
+    </nav>
 
-    <div class="grand-total">
-        <span>Celkem k úhradě</span>
-        <span>{{ grand_total|kc }}</span>
-    </div>
-    {% if any_surcharge %}
-        <p class="empty" style="margin-top:10px;">
-            Řádky „z toho“ jsou jen rozpis částky nad nimi, nepřičítají se k ní.
-            Cena za jednotku se liší od ceny na faktuře dodavatele proto, že celý
-            fakturovaný náklad dělíme spotřebou skutečně naměřenou podružnými
-            měřidly. Naměří-li se méně, než dodavatel fakturoval, je v rozdílu
-            spotřeba společných prostor a ztráty v rozvodech a dělí se mezi
-            odběratele v poměru jejich naměřené spotřeby. Naměří-li se více,
-            vrací se rozdíl odběratelům jako vyrovnání rozdílu měření.
-        </p>
-    {% endif %}
-    {% if any_unbilled %}
-        <p class="empty" style="margin-top:10px;">
-            Položky označené „(v paušálu)“ jsou zde jen pro přehlednost - máte je
-            již zahrnuté v paušální platbě, proto nejsou v částce k úhradě.
-        </p>
-    {% endif %}
+    <main>
+        <div class="topbar">
+            <h1>Vyúčtování {{ period }}</h1>
+            <div class="akce">
+                <a class="tlacitko" href="{% url 'moje-vyuctovani-pdf' period.pk %}{{ dotaz }}">⤓ Stáhnout PDF</a>
+                <button type="button" class="tlacitko tema" onclick="prepniTema()" title="Přepnout světlý / tmavý režim">
+                    <span class="tmave">☾ Tmavý</span><span class="svetle">☀ Světlý</span>
+                </button>
+            </div>
+        </div>
+        <p class="sub">{{ client.name }}</p>
+
+        {% if request.user.role != "klient" %}
+            <p class="odkazy">
+                <a href="{% url 'admin:index' %}">&larr; zpět do adminu</a>
+                &nbsp;·&nbsp;
+                <a href="{% url 'moje-vyuctovani' %}{{ dotaz }}">výběr klienta</a>
+                &nbsp;·&nbsp;
+                <a href="{% url 'admin:core_billingline_detail_client' client.pk %}?period={{ period.pk }}">detail po měřidlech (interní)</a>
+            </p>
+        {% endif %}
+
+        {% for cls in classes %}
+            <div class="card">
+                <h2>{{ cls.label }}</h2>
+                <table>
+                    {% for line in cls.lines %}
+                        <tr>
+                            <td>
+                                {{ line.item }}{% if show_card_column %} <span style="color:var(--faint);">({{ line.card }})</span>{% endif %}
+                                {% if line.units is not None %}
+                                    <span class="meta">{{ line|units_display }} × {{ line|price_per_unit_display }}</span>
+                                {% endif %}
+                            </td>
+                            <td class="amount">{{ line.amount|kc }}{% if not line.is_billed %} <span class="meta" style="display:inline;">(v paušálu)</span>{% endif %}</td>
+                        </tr>
+                        {% for meridlo in line.meridla %}
+                            {# Z jakych meridel se jednotky skladaji - klient si je overi na svem meridle. #}
+                            <tr class="rozpad">
+                                <td>↳ {{ meridlo.text }}</td>
+                                <td class="amount">{% if meridlo.units is not None %}{{ meridlo.units_text }}{% endif %}</td>
+                            </tr>
+                        {% endfor %}
+                        {% if line.surcharge_amount %}
+                            {# Rozpad castky - jen vysvetleni radku nad nim, do mezisouctu nevstupuje. #}
+                            <tr class="rozpad">
+                                <td>↳ z toho vlastní naměřená spotřeba</td>
+                                <td class="amount">{{ line.own_amount|kc }}</td>
+                            </tr>
+                            <tr class="rozpad">
+                                <td>↳ {{ line.surcharge_label }}</td>
+                                <td class="amount">{{ line.surcharge_amount|kc }}</td>
+                            </tr>
+                        {% endif %}
+                    {% endfor %}
+                    <tr class="subtotal">
+                        <td>Mezisoučet</td>
+                        <td class="amount">{{ cls.subtotal|kc }}</td>
+                    </tr>
+                </table>
+                {% for zaklad in cls.price_basis %}
+                    <div class="zaklad">
+                        <strong>Jak jsme došli k ceně – {{ zaklad.item }}</strong>
+                        {% for radek in zaklad.text %}<br>{{ radek }}{% endfor %}
+                    </div>
+                {% endfor %}
+            </div>
+        {% empty %}
+            <p class="empty">Pro toto období nejsou k dispozici žádné vyúčtované položky.</p>
+        {% endfor %}
+
+        <div class="grand-total">
+            <span>Celkem k úhradě</span>
+            <span>{{ grand_total|kc }}</span>
+        </div>
+        {% if any_surcharge %}
+            <p class="empty" style="margin-top:10px;">
+                Řádky „z toho“ jsou jen rozpis částky nad nimi, nepřičítají se k ní.
+                Cena za jednotku se liší od ceny na faktuře dodavatele proto, že celý
+                fakturovaný náklad dělíme spotřebou skutečně naměřenou podružnými
+                měřidly. Naměří-li se méně, než dodavatel fakturoval, je v rozdílu
+                spotřeba společných prostor a ztráty v rozvodech a dělí se mezi
+                odběratele v poměru jejich naměřené spotřeby. Naměří-li se více,
+                vrací se rozdíl odběratelům jako vyrovnání rozdílu měření.
+            </p>
+        {% endif %}
+        {% if any_unbilled %}
+            <p class="empty" style="margin-top:10px;">
+                Položky označené „(v paušálu)“ jsou zde jen pro přehlednost - máte je
+                již zahrnuté v paušální platbě, proto nejsou v částce k úhradě.
+            </p>
+        {% endif %}
+    </main>
+
 </div>
-</body>
-</html>
+</div>
+{% endblock %}
