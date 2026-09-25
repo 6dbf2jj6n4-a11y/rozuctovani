@@ -551,6 +551,95 @@ def _consumption_shares(
     return shares, total_consumption
 
 
+def _rozpad_po_meridlech(klice, by_meter, by_key_local, by_key, total_consumption,
+                         period, prev_period, readings_cache, deti_cache):
+    """Rozpad spotreby jedne karty po meridlech - JEN pro zobrazeni
+    v klientskem vyuctovani, na vypocet nema vliv.
+
+    Klient si svou spotrebu overuje na vlastnich meridlech, takze musi
+    videt, z jakych meridel a stavu se jeho jednotky skladaji - ne jen
+    jedno souhrnne cislo za polozku. Uklada se do calc_detail pri vypoctu
+    (stejne jako surcharge_split), aby se vyuctovani uzavreneho obdobi
+    nezmenilo, kdyz nekdo pozdeji upravi klic nebo odecet. Viz Daniel
+    2026-09-25: "klient musi videt spotrebu na meridlech".
+
+    Vstupy jsou auditni vystupy _consumption_shares (by_meter_out,
+    by_key_local_out, by_key_out). Vraci seznam radku (dict se stringy,
+    at jde primo do JSON):
+      kod, nazev, mj       - meridlo
+      stav_pred, stav_akt  - odectene stavy (jen realne meridlo ve rezimu
+                             "stav"; u vymeny meridla je stav_pred pocatecni
+                             stav noveho pristroje)
+      koeficient           - jen kdyz neni 1
+      namereno             - surova spotreba meridla (vc. koeficientu)
+      odecteno             - samostatne uctovana podrizena meridla, ktera se
+                             od namereneho odecetla [{kod, spotreba}]
+      spotreba             - co z meridla vstoupilo do rozuctovani
+      podil                - podil karty na tomto meridle (1 = cele jeji)
+      jednotky             - kolik z toho pripadlo karte
+      spolecne             - klic bez meridla: podil na nezmerene spotrebe
+    """
+    radky = []
+    for key in klice:
+        if key.allocation_type in ABSOLUTE_AMOUNT_TYPES:
+            continue
+        skupina = by_meter.get(key.meter_id) if key.meter_id else None
+        if skupina is None:
+            # Klic bez (merici) meridla - dostal podil na tom, co nezachytilo
+            # zadne pojmenovane meridlo (spolecne prostory bez podmeru).
+            podil = by_key.get(key.id)
+            if podil and total_consumption:
+                radky.append({
+                    "kod": None, "spolecne": True,
+                    "jednotky": str((podil * total_consumption).quantize(Decimal("0.001"))),
+                })
+            continue
+        podil = by_key_local.get(key.id)
+        if podil is None:
+            continue
+        meter = skupina["meter"]
+        spotreba = skupina["consumption"]
+        radek = {
+            "kod": meter.code or meter.name,
+            "nazev": meter.name,
+            "mj": meter.unit_of_measure or "",
+            "virtualni": bool(meter.is_virtual),
+            "spotreba": str(spotreba),
+            "podil": str(podil),
+            "jednotky": str((podil * spotreba).quantize(Decimal("0.001"))),
+        }
+        if not meter.is_virtual:
+            if meter.reading_mode != meter.ReadingMode.CONSUMPTION:
+                akt = readings_cache.get((meter.id, period.id))
+                if akt is not None:
+                    if akt.reset_from_value is not None:
+                        pred = akt.reset_from_value
+                    else:
+                        r = readings_cache.get((meter.id, prev_period.id)) if prev_period else None
+                        pred = r.value if r is not None else None
+                    radek["stav_pred"] = str(pred) if pred is not None else None
+                    radek["stav_akt"] = str(akt.value)
+            if meter.coefficient is not None and meter.coefficient != Decimal("1"):
+                radek["koeficient"] = str(meter.coefficient)
+            # Stejny odecet jako _owned_consumption: SUROVA spotreba primych
+            # deti, ktere se na polozce uctuji samostatne.
+            if meter.id not in deti_cache:
+                deti_cache[meter.id] = list(meter.children.all())
+            odecteno = []
+            for dite in deti_cache[meter.id]:
+                if dite.id in by_meter:
+                    c = dite.consumption_for(period, readings_cache=readings_cache)
+                    if c:
+                        odecteno.append({"kod": dite.code or dite.name, "spotreba": str(c)})
+            if odecteno:
+                radek["odecteno"] = odecteno
+                namereno = meter.consumption_for(period, readings_cache=readings_cache)
+                if namereno is not None:
+                    radek["namereno"] = str(namereno)
+        radky.append(radek)
+    return radky
+
+
 def surcharge_split(share, units, remaining_cost, reported_units, total_consumption):
     """Rozpad spotrebni casti castky na "vlastni spotreba" a rozdil proti
     fakturovanemu mnozstvi - JEN pro zobrazeni, na vypocet nema zadny vliv.
@@ -734,6 +823,9 @@ def calculate_period(period, site=None):
             (r.meter_id, r.period_id): r
             for r in MeterReading.objects.filter(period__in=relevant_periods)
         }
+        # Podrizena meridla po meridlech - pro _rozpad_po_meridlech, aby se
+        # meter.children nedotazoval znovu za kazdou kartu.
+        deti_cache = {}
 
         # Hromadne predem nactene ceniky vsech polozek (jedinym dotazem) -
         # "posledni platna cena k datu" se pak dohleda v pameti (viz
@@ -903,6 +995,9 @@ def calculate_period(period, site=None):
 
             # 2) podily na zbytku castky
             total_consumption = None
+            # Auditni vystupy _consumption_shares - jen pro rozpad po
+            # meridlech v klientskem vyuctovani (_rozpad_po_meridlech).
+            by_key, by_key_local, by_meter = {}, {}, {}
             # I bez hlavniho meridla na urovni polozky (service_item.meter)
             # muze mit nektery klic napojene SVE VLASTNI meridlo (typicky
             # "Podružné měřidlo", viz _consumption_shares) - v tom pripade
@@ -914,6 +1009,7 @@ def calculate_period(period, site=None):
             if _polozka_ma_meridlo(service_item, cache=meter_provides_cache) or has_meter_keys:
                 shares, total_consumption = _consumption_shares(
                     service_item, period, warnings,
+                    by_key_out=by_key, by_key_local_out=by_key_local, by_meter_out=by_meter,
                     meter_provides_cache=meter_provides_cache, readings_cache=readings_cache,
                 )
             else:
@@ -976,6 +1072,7 @@ def calculate_period(period, site=None):
                 price_per_unit = None
                 unit_of_measure = None
                 split = None
+                meridla = []
                 if card_id in fixed_units:
                     units = fixed_units[card_id]
                     price_per_unit = fixed_price_per_unit.get(card_id)
@@ -1003,6 +1100,12 @@ def calculate_period(period, site=None):
                         share, units, remaining_cost,
                         cost_totals["units"], total_consumption,
                     )
+                    if by_meter:
+                        meridla = _rozpad_po_meridlech(
+                            [k for k in valid_keys if k.client_card_id == card_id],
+                            by_meter, by_key_local, by_key, total_consumption,
+                            period, prev_period, readings_cache, deti_cache,
+                        )
 
                 to_create.append(BillingLine(
                     client_card_id=card_id,
@@ -1035,6 +1138,7 @@ def calculate_period(period, site=None):
                                 str(legal_loss_pct) if legal_loss_pct else None
                             ),
                         } if split else {}),
+                        **({"meridla": meridla} if meridla else {}),
                     },
                 ))
 

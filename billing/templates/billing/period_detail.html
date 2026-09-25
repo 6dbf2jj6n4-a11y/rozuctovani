@@ -70,6 +70,13 @@
                         </td>
                         <td class="amount">{{ line.amount|kc }}{% if not line.is_billed %} <span class="meta" style="display:inline;">(v paušálu)</span>{% endif %}</td>
                     </tr>
+                    {% for meridlo in line.meridla %}
+                        {# Z jakych meridel se jednotky skladaji - klient si je overi na svem meridle. #}
+                        <tr class="rozpad">
+                            <td>↳ {{ meridlo.text }}</td>
+                            <td class="amount">{% if meridlo.units is not None %}{{ meridlo.units_text }}{% endif %}</td>
+                        </tr>
+                    {% endfor %}
                     {% if line.surcharge_amount %}
                         {# Rozpad castky - jen vysvetleni radku nad nim, do mezisouctu nevstupuje. #}
                         <tr class="rozpad">

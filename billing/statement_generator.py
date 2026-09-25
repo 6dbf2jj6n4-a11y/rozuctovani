@@ -29,10 +29,53 @@ _STYLE_TOTAL = ParagraphStyle("StatementTotal", fontName=FONT_BOLD, fontSize=13,
 _STYLE_EMPTY = ParagraphStyle("StatementEmpty", fontName=FONT_REGULAR, fontSize=10, spaceBefore=4 * mm)
 
 
+_STYLE_METER = ParagraphStyle(
+    "StatementMeter", fontName=FONT_REGULAR, fontSize=8, leading=10,
+    textColor=colors.HexColor("#6b7280"), leftIndent=10,
+)
 _STYLE_BASIS = ParagraphStyle(
     "StatementBasis", fontName=FONT_REGULAR, fontSize=8, leading=11,
     spaceBefore=2 * mm, spaceAfter=3 * mm, textColor=colors.HexColor("#4b5563"),
 )
+
+
+def _cislo(hodnota, mist=3):
+    """Stav nebo spotreba meridla bez zbytecnych nul: 292 350, 0.952.
+    Koeficient se tiskne s `mist=6` - teplo ma 0,0036 a zaokrouhlene
+    0,004 by klientovi nesedelo s tim, co si prepocita."""
+    d = Decimal(str(hodnota))
+    if d == d.to_integral_value():
+        return f"{d:,.0f}".replace(",", " ")
+    return f"{d:,.{mist}f}".rstrip("0").rstrip(".").replace(",", " ")
+
+
+def meridlo_text(radek):
+    """Popis jednoho meridla v rozpadu polozky - z ceho se jednotky karty
+    skladaji, aby si je klient overil na svem meridle. Radky pripravuje
+    billing/engine.py _rozpad_po_meridlech a ukladaji se pri vypoctu.
+    Viz Daniel 2026-09-25: "klient musi videt spotrebu na meridlech"."""
+    mj = radek.get("mj") or ""
+    if radek.get("spolecne"):
+        return "podíl na nezměřené společné spotřebě"
+    kod = radek.get("kod") or ""
+    if radek.get("virtualni"):
+        text = f"{kod} – společná spotřeba {_cislo(radek['spotreba'])} {mj}"
+    elif radek.get("stav_akt") is not None and radek.get("stav_pred") is not None:
+        text = f"{kod}: stav {_cislo(radek['stav_pred'])} → {_cislo(radek['stav_akt'])}"
+        if radek.get("koeficient"):
+            text += f" × koef. {_cislo(radek['koeficient'], mist=6)}"
+        if radek.get("odecteno") and radek.get("namereno") is not None:
+            text += f" = {_cislo(radek['namereno'])} {mj}"
+    else:
+        text = f"{kod}: spotřeba {_cislo(radek.get('namereno') or radek['spotreba'])} {mj}"
+    for dite in radek.get("odecteno") or []:
+        text += f", − {dite['kod']} {_cislo(dite['spotreba'])} {mj} (účtuje se zvlášť)"
+    podil = Decimal(radek["podil"]) if radek.get("podil") else None
+    if podil is not None and podil != 1:
+        if not radek.get("virtualni") and not radek.get("odecteno"):
+            text += f" = {_cislo(radek['spotreba'])} {mj}"
+        text += f", váš podíl {podil * 100:.2f} %"
+    return text.strip()
 
 
 def price_basis_text(zaklad):
@@ -215,6 +258,22 @@ def build_statement_data(client, period):
                     "surcharge_amount": _dec(line.calc_detail, "surcharge_amount"),
                     "surcharge_label": surcharge_label(
                         _dec(line.calc_detail, "surcharge_amount")),
+                    # Rozpad po meridlech (billing/engine.py
+                    # _rozpad_po_meridlech). Obdobi spocitana pred jeho
+                    # zavedenim ho v calc_detail nemaji - pak se proste
+                    # neukaze.
+                    "meridla": [
+                        {
+                            "text": meridlo_text(r),
+                            "units": Decimal(r["jednotky"]) if r.get("jednotky") else None,
+                            "unit_of_measure": r.get("mj") or line.calc_detail.get("unit_of_measure"),
+                            "units_text": format_units(
+                                Decimal(r["jednotky"]) if r.get("jednotky") else None,
+                                r.get("mj") or line.calc_detail.get("unit_of_measure"),
+                            ),
+                        }
+                        for r in (line.calc_detail or {}).get("meridla", [])
+                    ],
                 }
                 for line in class_lines
             ],
@@ -270,6 +329,16 @@ def generate_client_statement_pdf(client, period, output_path):
             row.append(amount_text)
             rows.append(row)
 
+            for meridlo in line["meridla"]:
+                detail_row_indexes.append(len(rows))
+                sub_row = [Paragraph(escape(meridlo["text"]), _STYLE_METER)]
+                if show_card_column:
+                    sub_row.append("")
+                sub_row.append(format_units(meridlo["units"], meridlo["unit_of_measure"]))
+                sub_row.append("")
+                sub_row.append("")
+                rows.append(sub_row)
+
             if line["surcharge_amount"]:
                 breakdown = (
                     ("z toho vlastní naměřená spotřeba", line["units"], line["own_amount"]),
@@ -299,6 +368,9 @@ def generate_client_statement_pdf(client, period, output_path):
             ("BACKGROUND", (0, -1), (-1, -1), colors.HexColor("#f3f4f6")),
             ("ALIGN", (-1, 0), (-1, -1), "RIGHT"),
             ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#9ca3af")),
+            # Zalomeny popis meridla je vyssi nez jeden radek - jednotky
+            # a castky at stoji nahore u zacatku textu, ne u jeho konce.
+            ("VALIGN", (0, 0), (-1, -1), "TOP"),
             ("FONTSIZE", (0, 0), (-1, -1), 9),
             ("TOPPADDING", (0, 0), (-1, -1), 3),
             ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
