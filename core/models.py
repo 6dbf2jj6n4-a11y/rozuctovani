@@ -624,6 +624,16 @@ class ClientCard(models.Model):
             "samy - zadává se jednou za kartu, ne u každého klíče."
         ),
     )
+    # Teplou vodu nepouziva vzdy cely tym (sklad, dilna) - proto zvlast.
+    # Viz Daniel 2026-09-25.
+    pocet_osob_tuv = models.PositiveIntegerField(
+        "Počet osob pro TUV", null=True, blank=True,
+        help_text=(
+            "Kolik lidí používá teplou vodu. Klíče s váhou „Počet osob pro "
+            "TUV z karty“ si ho vezmou samy. Nech prázdné, když je stejný "
+            "jako Počet osob."
+        ),
+    )
     document = models.FileField(
         "Vygenerovaný dokument (Karta nájemce)", upload_to="karty/", null=True, blank=True
     )
@@ -767,6 +777,12 @@ class ClientCard(models.Model):
             if cu.unit and cu.unit.site and cu.unit.site.landlord_id:
                 return cu.unit.site.landlord
         return None
+
+    @property
+    def osob_tuv(self):
+        """Pocet osob pro TUV - kdyz neni vyplneny, plati celkovy Pocet osob
+        (u vetsiny karet teplou vodu pouzivaji vsichni)."""
+        return self.pocet_osob_tuv if self.pocet_osob_tuv is not None else self.pocet_osob
 
     @property
     def plocha_celkem(self):
@@ -1900,6 +1916,7 @@ class AllocationKey(models.Model):
         PLOCHA = "plocha", "Celá plocha karty (m²)"
         VYTAPENA = "vytapena", "Vytápěná plocha karty (m²)"
         OSOBY = "osoby", "Počet osob z karty"
+        OSOBY_TUV = "osoby_tuv", "Počet osob pro TUV z karty"
 
     weight_source = models.CharField(
         "Odkud brát váhu", max_length=20, blank=True,
@@ -2004,6 +2021,8 @@ class AllocationKey(models.Model):
             return self.client_card.vytapena_plocha
         if self.weight_source == volby.OSOBY:
             return Decimal(self.client_card.pocet_osob or 0)
+        if self.weight_source == volby.OSOBY_TUV:
+            return Decimal(self.client_card.osob_tuv or 0)
         return self.value or Decimal("0")
 
     def is_valid_for_period(self, period):

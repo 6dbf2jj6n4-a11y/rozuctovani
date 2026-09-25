@@ -123,6 +123,13 @@ def _sdilena_meridla(keys):
     )
 
 
+def _osob(pocet):
+    """1 osoba, 2-4 osoby, 0 a 5+ osob."""
+    n = int(pocet or 0)
+    slovo = "osoba" if n == 1 else ("osoby" if 2 <= n <= 4 else "osob")
+    return f"{n} {slovo}"
+
+
 def _fmt_key_value(key, sdilene_meridlo=False):
     """Hodnota klíče formátovaná podle typu výpočtu - měna jen tam, kam patří.
 
@@ -136,9 +143,9 @@ def _fmt_key_value(key, sdilene_meridlo=False):
     měřidle" to začalo skrývat váhy i tam, kde nesou celý výpočet - na
     kartě KJO EU vycházelo osm hodnot z deseti jako pomlčka.
     Daniel 2026-08-27."""
-    if key.weight_source == AllocationKey.ZdrojVahy.OSOBY:
+    if key.weight_source in (AllocationKey.ZdrojVahy.OSOBY, AllocationKey.ZdrojVahy.OSOBY_TUV):
         # Vaha z Poctu osob na Karte (Daniel 2026-09-25).
-        return f"{_strip_trailing_zeros(key.vaha)} osob"
+        return _osob(key.vaha)
     if key.weight_source:
         # Klic s dopoctenou vahou Hodnotu vyplnenou nema - v Karte se ukaze
         # to, cim se opravdu deli, tedy plocha (Daniel 2026-09-05).
@@ -231,6 +238,12 @@ def generate_client_card_document(card, output_path):
     ]
     if card.valid_to:
         info_lines.append(f"Platnost do: {format_date_cz(card.valid_to)}")
+    # Pocet osob - klice na vodu, TUV a dalsi z nej berou vahu, takze musi
+    # byt na Karte videt (Daniel 2026-09-25). TUV jen kdyz se lisi.
+    if card.pocet_osob is not None:
+        info_lines.append(f"Počet osob: {card.pocet_osob}")
+    if card.pocet_osob_tuv is not None and card.pocet_osob_tuv != card.pocet_osob:
+        info_lines.append(f"Počet osob pro TUV: {card.pocet_osob_tuv}")
     elements.append(Paragraph("<br/>".join(info_lines), _STYLE_INFO))
 
     # --- Plochy ---
