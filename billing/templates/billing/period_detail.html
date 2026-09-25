@@ -41,6 +41,13 @@
         font-size: 16px; font-weight: 600;
     }
     .empty { color: var(--muted); font-size: 14px; }
+    .faktury { margin-top: 16px; }
+    .faktura {
+        display: flex; justify-content: space-between; align-items: center; gap: 12px;
+        padding: 10px 0; border-top: 1px solid var(--line); color: var(--text); text-decoration: none;
+        font-size: 14px;
+    }
+    .faktura:hover strong { text-decoration: underline; }
 
     /* Na telefonu se seznam obdobi presune nahoru jako vodorovny pruh. */
     @media (max-width: 720px) {
@@ -50,7 +57,7 @@
         .obdobi a { border-left: none; border-radius: 6px; white-space: nowrap; }
     }
     @media print {
-        .obdobi, .akce, .odkazy { display: none; }
+        .obdobi, .akce, .odkazy, .faktury { display: none; }
         .rozlozeni { grid-template-columns: 1fr; }
     }
 {% endblock %}
@@ -144,6 +151,23 @@
             <span>Celkem k úhradě</span>
             <span>{{ grand_total|kc }}</span>
         </div>
+
+        {% if faktury %}
+            {# Podkladove faktury dodavatelu - PDF se otevre primo z ucetnictvi (ABRA). #}
+            <div class="card faktury">
+                <h2>Podkladové faktury dodavatelů</h2>
+                <p class="empty" style="margin:0 0 8px;">Faktury, ze kterých vychází cena a množství ve vašem vyúčtování. Jsou za celý areál.</p>
+                {% for z in faktury %}
+                    <a class="faktura" href="{% url 'moje-vyuctovani-faktura' period.pk z.faktura.pk %}{{ dotaz }}" target="_blank" rel="noopener">
+                        <span>
+                            <strong>{{ z.faktura.dodavatel }}</strong>
+                            <span class="meta">{{ z.faktura.kod }} · {{ z.polozky|join:", " }}</span>
+                        </span>
+                        <span class="tlacitko">PDF</span>
+                    </a>
+                {% endfor %}
+            </div>
+        {% endif %}
         {% if any_surcharge %}
             <p class="empty" style="margin-top:10px;">
                 Řádky „z toho“ jsou jen rozpis částky nad nimi, nepřičítají se k ní.

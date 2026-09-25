@@ -2419,6 +2419,53 @@ class CostEntry(models.Model):
         return None
 
 
+class PodkladovaFaktura(models.Model):
+    """Faktura dodavatele (prijata faktura v ABRA Flexi), ze ktere vznikl
+    naklad polozky za obdobi. Klientsky portal ji nabizi ke stazeni -
+    klient si tak muze overit cenu a mnozstvi, ze kterych se jeho
+    vyuctovani pocita. Viz Daniel 2026-09-25: "nekdy chteji videt
+    podkladove faktury"; ukazuje se kazdemu klientovi, vcetne toho, ze na
+    fakture je cely areal (celkova spotreba a nakupni cena).
+
+    Vaze se na POLOZKU A OBDOBI, ne na konkretni Naklad za obdobi:
+    naklady se casto zadavaji rucne, jedna polozka muze mit vic faktur
+    (FM elektrina = TEDOM + SZYPKA), jedna faktura muze kryt vic polozek
+    (SMVAK NJ = voda i srazkove) i vic mesicu (ctvrtletni srazkove).
+
+    Samotne PDF se nikam nekopiruje - zustava priloha faktury v ABRA a do
+    portalu se streamuje pri stazeni. Plni se prikazem
+    propojit_podkladove_faktury nebo akci u Obdobi (core/podkladove_faktury.py)."""
+
+    service_item = models.ForeignKey(
+        "ServicePoolItem", on_delete=models.CASCADE, related_name="podkladove_faktury",
+        verbose_name="Položka zásobníku",
+    )
+    period = models.ForeignKey(
+        "Period", on_delete=models.CASCADE, related_name="podkladove_faktury",
+        verbose_name="Období",
+    )
+    flexi_id = models.PositiveIntegerField("ID faktury v ABRA")
+    kod = models.CharField("Číslo dokladu", max_length=40)
+    dodavatel = models.CharField("Dodavatel", max_length=200, blank=True)
+    popis = models.CharField("Popis", max_length=200, blank=True)
+    priloha_id = models.PositiveIntegerField("ID přílohy v ABRA", null=True, blank=True)
+    nazev_souboru = models.CharField("Soubor", max_length=255, blank=True)
+    nacteno = models.DateTimeField("Načteno z ABRA", auto_now=True)
+
+    class Meta:
+        verbose_name = "Podkladová faktura"
+        verbose_name_plural = "Podkladové faktury"
+        ordering = ["period__year", "period__month", "service_item__name", "kod"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["service_item", "period", "flexi_id"], name="podkladova_faktura_jednou",
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.kod} – {self.dodavatel}"
+
+
 class BillingLine(models.Model):
     client_card = models.ForeignKey(
         ClientCard, on_delete=models.CASCADE, related_name="billing_lines", verbose_name="Karta klienta"

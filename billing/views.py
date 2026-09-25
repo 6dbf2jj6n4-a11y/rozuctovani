@@ -9,12 +9,13 @@ from io import BytesIO
 
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import PermissionDenied
-from django.http import FileResponse
+from django.http import FileResponse, Http404
 from django.shortcuts import get_object_or_404, render
 from django.utils.text import slugify
 
 from accounts.models import User
-from core.models import BillingLine, Client, Period
+from core.models import BillingLine, Client, Period, PodkladovaFaktura
+from core.podkladove_faktury import stahnout_prilohu
 from billing.statement_generator import build_statement_data, generate_client_statement_pdf
 
 
@@ -50,6 +51,24 @@ def _klient_a_obdobi(request, period_id):
     if not BillingLine.objects.filter(period=period, client_card__client=client).exists():
         raise PermissionDenied("Pro tohoto klienta a období nejsou k dispozici žádná data.")
     return client, period
+
+
+def _faktury_klienta(client, period):
+    """Podkladove faktury dodavatelu k polozkam, ktere ma klient v obdobi
+    vyuctovane - jen ty s PDF prilohou. Faktura krYjici vic polozek (SMVAK
+    NJ = voda i srazkove) se ukaze jednou se vsemi polozkami."""
+    polozky = BillingLine.objects.filter(
+        period=period, client_card__client=client,
+    ).values_list("service_item_id", flat=True)
+    faktury = {}
+    for f in (
+        PodkladovaFaktura.objects
+        .filter(period=period, service_item_id__in=polozky, priloha_id__isnull=False)
+        .select_related("service_item").order_by("dodavatel", "kod")
+    ):
+        zaznam = faktury.setdefault(f.flexi_id, {"faktura": f, "polozky": []})
+        zaznam["polozky"].append(f.service_item.name)
+    return list(faktury.values())
 
 
 def _dotaz(request, client):
@@ -93,7 +112,30 @@ def period_detail(request, period_id):
         # na prehled. Viz Daniel 2026-09-25.
         "obdobi": _obdobi_klienta(client),
         "dotaz": _dotaz(request, client),
+        "faktury": _faktury_klienta(client, period),
     })
+
+
+@login_required
+def period_faktura(request, period_id, faktura_id):
+    """Podkladova faktura dodavatele - PDF se streamuje primo z ABRA, nikam
+    se nekopiruje. Klient smi otevrit jen fakturu k polozce, kterou ma
+    v tomto obdobi vyuctovanou. Viz core.models.PodkladovaFaktura."""
+    client, period = _klient_a_obdobi(request, period_id)
+    faktura = get_object_or_404(
+        PodkladovaFaktura, pk=faktura_id, period=period, priloha_id__isnull=False,
+    )
+    if not BillingLine.objects.filter(
+        period=period, client_card__client=client, service_item_id=faktura.service_item_id,
+    ).exists():
+        raise PermissionDenied("Tahle faktura k vašemu vyúčtování nepatří.")
+    try:
+        obsah, typ = stahnout_prilohu(faktura)
+    except Exception:
+        raise Http404("Fakturu se teď nepodařilo načíst z účetnictví, zkuste to prosím později.")
+    nazev = faktura.nazev_souboru or f"{faktura.kod.replace('/', '-')}.pdf"
+    # Inline - prohlizec fakturu rovnou ukaze, stahnout jde odtamtud.
+    return FileResponse(BytesIO(obsah), filename=nazev, content_type=typ)
 
 
 @login_required

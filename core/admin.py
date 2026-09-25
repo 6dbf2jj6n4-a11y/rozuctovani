@@ -28,7 +28,7 @@ from .models import (
     Client, ClientCard, Contract, Site, Unit, CardUnit, Floorplan,
     Meter, MeterReading, Period, InflationRate, SupplyPoint, InvoiceClassColor,
     ServicePoolItem, AllocationKey, PriceList, CostEntry, BillingLine, UnitService,
-    CardOccupant, ReadingsClosure, NastaveniRozuctovani,
+    CardOccupant, ReadingsClosure, NastaveniRozuctovani, PodkladovaFaktura,
     normalizovat_telefon,
 )
 
@@ -3573,7 +3573,7 @@ class PeriodAdmin(ModelAdmin):
     ordering = ("-year", "-month")
     actions = [
         "spocitat_rozuctovani", "zkontrolovat_co_zadat", "vygenerovat_chybejici_naklady",
-        "dotahnout_fakturovana_mnozstvi",
+        "dotahnout_fakturovana_mnozstvi", "propojit_podkladove_faktury",
         "nastavit_jako_aktualni", "uzavrit_obdobi", "znovu_otevrit_obdobi",
     ]
     # Tlacitko "Generovat pro celý rok" nad tabulkou - puvodne zkoušeno
@@ -3896,6 +3896,33 @@ class PeriodAdmin(ModelAdmin):
             # hleda, co presne je problem (viz konverzace s Danielem).
             for warning in result["warnings"]:
                 self.message_user(request, f"{label}: {warning}", level=messages.WARNING)
+
+    @admin.action(description="Propojit podkladové faktury z ABRA (pro klientský portál)")
+    def propojit_podkladove_faktury(self, request, queryset):
+        """Pripoji prijate faktury dodavatelu z ABRA k polozkam vybranych
+        Obdobi, aby je klient v portalu videl ke stazeni. Naklady se nemeni.
+        Viz core/podkladove_faktury.py, Daniel 2026-09-25."""
+        from core.podkladove_faktury import propojit
+
+        vybrana = {str(p) for p in queryset}
+        od = min((p.year, p.month) for p in queryset)
+        try:
+            radky, nerozpoznane = propojit(od=od, zapsat=True)
+        except Exception as exc:  # ABRA nedostupna, spatne prihlaseni...
+            self.message_user(request, f"ABRA nevrátila faktury: {exc}", level=messages.ERROR)
+            return
+        radky = [r for r in radky if r[0] in vybrana]
+        if not radky:
+            self.message_user(
+                request, "Pro vybraná období jsem v ABRA nenašel žádnou fakturu k propojení.",
+                level=messages.WARNING)
+            return
+        nove = [r for r in radky if r[5] in ("nová", "změna")]
+        bez_prilohy = [r for r in radky if not r[4]]
+        text = f"Podkladové faktury: {len(radky)} propojeno ({len(nove)} nových nebo změněných)."
+        if bez_prilohy:
+            text += " Bez PDF přílohy v ABRA: " + ", ".join(sorted({r[2] for r in bez_prilohy})) + "."
+        self.message_user(request, text, level=messages.WARNING if bez_prilohy else messages.SUCCESS)
 
     @admin.action(description="Zkontrolovat, co je potřeba zadat (Náklady/Ceník)")
     def zkontrolovat_co_zadat(self, request, queryset):
@@ -4964,6 +4991,26 @@ class CostEntryVyplnenoFilter(admin.SimpleListFilter):
         if self.value() == "vyplneno":
             return queryset.exclude(amount_units__isnull=True, amount_czk__isnull=True)
         return queryset
+
+
+@admin.register(PodkladovaFaktura)
+class PodkladovaFakturaAdmin(PodlePronajimatele, ModelAdmin):
+    """Ktere faktury dodavatelu z ABRA vidi klienti v portalu ke stazeni.
+    Plni se akci u Obdobi "Propojit podkladové faktury z ABRA" (nebo
+    prikazem propojit_podkladove_faktury) - rucne se tu nic nezadava,
+    jen se da vazba smazat, kdyby nekam nepatrila."""
+    cesta_k_arealu = "service_item__site"
+    list_display = ("period", "service_item", "kod", "dodavatel", "nazev_souboru", "nacteno")
+    list_filter = ("period", "service_item__site", "service_item__invoice_class")
+    search_fields = ("kod", "dodavatel", "service_item__name")
+    list_select_related = ("period", "service_item", "service_item__site")
+    readonly_fields = (
+        "service_item", "period", "flexi_id", "kod", "dodavatel", "popis",
+        "priloha_id", "nazev_souboru", "nacteno",
+    )
+
+    def has_add_permission(self, request):
+        return False
 
 
 @admin.register(CostEntry)
