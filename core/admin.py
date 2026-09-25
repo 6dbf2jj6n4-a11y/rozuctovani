@@ -3571,10 +3571,13 @@ class PeriodAdmin(ModelAdmin):
     )
     list_filter = ("status", "is_current")
     ordering = ("-year", "-month")
+    # Jen akce, ktere nemaji tlacitko v radku tabulky. Vypocet (i po
+    # arealech), Zavrit a Otevrit jsou tlacitka v kazdem radku - v
+    # rozbalovatku byly jen duplikaty a akci bylo 11 (Daniel 2026-09-25).
+    # Vygenerovani prazdnych Nakladu Daniel nepouzival, zruseno taky.
     actions = [
-        "spocitat_rozuctovani", "zkontrolovat_co_zadat", "vygenerovat_chybejici_naklady",
-        "dotahnout_fakturovana_mnozstvi", "propojit_podkladove_faktury",
-        "nastavit_jako_aktualni", "uzavrit_obdobi", "znovu_otevrit_obdobi",
+        "zkontrolovat_co_zadat", "dotahnout_fakturovana_mnozstvi",
+        "propojit_podkladove_faktury", "nastavit_jako_aktualni",
     ]
     # Tlacitko "Generovat pro celý rok" nad tabulkou - puvodne zkoušeno
     # pres object-tools-items blok jako u change_form, ale na
@@ -3838,27 +3841,8 @@ class PeriodAdmin(ModelAdmin):
         }
         return render(request, "admin/core/period/vypocet.html", context)
 
-    def get_actions(self, request):
-        actions = super().get_actions(request)
-        for site in pronajimatele.arealy(request):
-            action_name = f"spocitat_rozuctovani_site_{site.pk}"
-            actions[action_name] = (
-                self._site_action(site),
-                action_name,
-                f"Spočítat rozúčtování za vybraná období – jen {site}",
-            )
-        return actions
-
-    def _site_action(self, site):
-        def action(modeladmin, request, queryset):
-            modeladmin._spocitat_rozuctovani(request, queryset, site=site)
-        return action
-
-    @admin.action(description="Spočítat rozúčtování za vybraná období (všechny areály)")
-    def spocitat_rozuctovani(self, request, queryset):
-        self._spocitat_rozuctovani(request, queryset, site=None)
-
     def _spocitat_rozuctovani(self, request, queryset, site=None):
+        """Vypocet pro tlacitko Vypocet v radku (vypocet_view)."""
         from billing.engine import BillingPeriodClosedError, calculate_period, sync_card_activity
 
         for period in queryset:
@@ -4063,63 +4047,6 @@ class PeriodAdmin(ModelAdmin):
                 self.message_user(
                     request, f"{period}: {r['meter'].code} - {r['stav']}", messages.WARNING
                 )
-
-    @admin.action(description="Vygenerovat chybějící Náklady za období (prázdné, k doplnění)")
-    def vygenerovat_chybejici_naklady(self, request, queryset):
-        """Pro vybrana Obdobi vytvori PRAZDNY CostEntry (bez amount_units
-        i amount_czk, jen s poznamkou 'K DOPLNĚNÍ') pro kazdou polozku,
-        ktera pro dane obdobi zadny CostEntry nema a nema ani Vychozi
-        mesicni castku - aby je Daniel nemusel zakladat rucne jednu po
-        druhe pres "Pridat", jen dohledat v seznamu Nakladu (vyhledavani
-        podle poznamky) a doplnit realna cisla.
-
-        ZAMERNE se nevyplnuje amount_czk=0 (i kdyz o to Daniel puvodne
-        zadal) - prazdny CostEntry porad spadne na varovani "chybí cena/
-        náklad" pri "Spočítat rozúčtování" (billing/engine.py), takze
-        zapomenuty/nedoplneny radek nikdy tise neuctuje 0 Kc. Kdyby mel
-        amount_czk rovnou 0, engine by to vzal jako platnou nulovou
-        castku BEZ JAKEHOKOLIV varovani - to by bylo nebezpecnejsi nez
-        zadny CostEntry vubec."""
-        for period in queryset:
-            created = []
-            for item in pronajimatele.omez(ServicePoolItem.objects, "site", request):
-                if item.default_amount_czk is not None:
-                    continue
-                # Uz aspon jednu fakturu ma - dalsi (od jineho dodavatele) si
-                # Daniel prida sam, generovat prazdne stuby by je jen mnozilo.
-                if CostEntry.objects.filter(service_item=item, period=period).exists():
-                    continue
-                CostEntry.objects.create(service_item=item, period=period, note=CostEntry.NOTE_K_DOPLNENI)
-                created.append(item)
-
-            label = str(period)
-            if created:
-                names = ", ".join(str(i) for i in created)
-                self.message_user(
-                    request,
-                    f"{label}: vytvořeno {len(created)} prázdných Nákladů (poznámka „{CostEntry.NOTE_K_DOPLNENI}“) - "
-                    f"doplň částky v seznamu Náklady za období (vyhledej „{CostEntry.NOTE_K_DOPLNENI}“): {names}",
-                    level=messages.WARNING,
-                )
-            else:
-                self.message_user(
-                    request, f"{label}: nic k vygenerování, vše už existuje nebo má Výchozí částku.",
-                    level=messages.SUCCESS,
-                )
-
-    @admin.action(description="Uzavřít vybraná období (zamkne proti přepočtu)")
-    def uzavrit_obdobi(self, request, queryset):
-        updated = queryset.update(status=Period.Status.CLOSED)
-        self.message_user(
-            request, f"Uzavřeno {updated} období - rozúčtování už nepůjde přepočítat.", level=messages.SUCCESS
-        )
-
-    @admin.action(description="Znovu otevřít vybraná období")
-    def znovu_otevrit_obdobi(self, request, queryset):
-        updated = queryset.update(status=Period.Status.OPEN)
-        self.message_user(
-            request, f"Znovu otevřeno {updated} období - rozúčtování teď jde přepočítat.", level=messages.WARNING
-        )
 
 
 @admin.register(NastaveniRozuctovani)
@@ -4986,7 +4913,8 @@ class PriceListAdmin(PodlePronajimatele, DefaultToCurrentPeriodMixin, ModelAdmin
 class CostEntryVyplnenoFilter(admin.SimpleListFilter):
     """Filtr 'Stav' v seznamu Nakladu za obdobi - 'Nevyplneno' ukaze jen
     zaznamy bez amount_units i bez amount_czk (typicky prazdne stuby
-    z akce "Vygenerovat chybějící Náklady", poznamka 'K DOPLNĚNÍ') - aby
+    z drivejsi akce "Vygenerovat chybějící Náklady", poznamka 'K DOPLNĚNÍ';
+    akce je od 2026-09-25 zrusena, stare stuby ale mohou zustat) - aby
     Daniel nemusel psat hledani rucne a nemusel proklikavat uz hotove
     polozky (viz konverzace - "Pult ochrany ALSYKO" priklad polozky,
     ktera uz je vyplnena a nema co delat v seznamu k doplneni)."""

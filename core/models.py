@@ -2386,8 +2386,8 @@ class CostEntry(models.Model):
 
     def save(self, *args, **kwargs):
         """Jakmile se doplni amount_units nebo amount_czk, sama zmizi
-        znacka NOTE_K_DOPLNENI (viz core/admin.py
-        PeriodAdmin.vygenerovat_chybejici_naklady) - jinak by v Poznamce
+        znacka NOTE_K_DOPLNENI (davala ji drivejsi akce u Obdobi
+        "Vygenerovat chybějící Náklady", zrusena 2026-09-25) - jinak by v Poznamce
         zustavala navzdy, i kdyz uz zaznam neni "k doplneni", a matla by
         pozdejsi hledani/filtr Stav=Nevyplneno."""
         self.clean()
