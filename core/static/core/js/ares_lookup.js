@@ -31,6 +31,27 @@
         return COURT_NAMES[code] || code;
     }
 
+    // [ulice, cislo] ze sidla - stejne pravidlo jako ulice_a_cislo() v
+    // core/ares_client.py. ARES (API 1.3) u casti adres nevyplni nazevUlice
+    // ani cisloOrientacni, ulice je pak jen v textovaAdresa
+    // ("Vitkovicka 3335/15, ..."); obec bez ulic ma v textu cast obce
+    // ("Liskovec 393") nebo jen "c.p. 256".
+    function uliceACislo(s) {
+        var ulice = s.nazevUlice || "";
+        var cislo = String(s.cisloDomovni || "");
+        var orientacni = String(s.cisloOrientacni || "") + (s.cisloOrientacniPismeno || "");
+        if (orientacni) cislo += "/" + orientacni;
+        if (ulice) return [ulice, cislo];
+
+        var prvni = (s.textovaAdresa || "").split(",")[0].trim();
+        var m = prvni.match(/^(.+?)\s+(\d+[A-Za-z]?(?:\/\d+[A-Za-z]?)?)$/);
+        if (m) {
+            ulice = /^[čc]\./i.test(m[1]) ? "" : m[1];  // č.p. / č.ev.
+            cislo = m[2];
+        }
+        return [ulice || s.nazevCastiObce || s.nazevObce || "", cislo];
+    }
+
     window.aresLookup = function () {
         var ico = $("#id_ico").val().trim().replace(/\s/g, "");
         var $status = $("#ares-status");
@@ -68,10 +89,9 @@
                         }
                         var s = d.sidlo;
                         if (s) {
-                            fillIfEmpty("#id_street", s.nazevUlice || s.nazevObce || "");
-                            var c = s.cisloDomovni || "";
-                            if (s.cisloOrientacni) c += "/" + s.cisloOrientacni;
-                            fillIfEmpty("#id_street_number", c);
+                            var adresa = uliceACislo(s);
+                            fillIfEmpty("#id_street", adresa[0]);
+                            fillIfEmpty("#id_street_number", adresa[1]);
                             if (s.psc) fillIfEmpty("#id_zip_code", String(s.psc));
                             fillIfEmpty("#id_city", s.nazevObce);
                         }

@@ -6,6 +6,7 @@ adminu viz core/static/core/js/ares_lookup.js, ktery dela totez primo
 z prohlizece (tam CORS ARES povoluje, na rozdil od Registru DPH).
 """
 import json
+import re
 import urllib.error
 import urllib.request
 
@@ -40,6 +41,36 @@ def _get_json(url, timeout=15):
         return None
 
 
+# Prvni cast textove adresy: "Vitkovicka 3335/15", "Liskovec 393", "c.p. 256".
+_TEXT_ULICE = re.compile(r"^(?P<ulice>.+?)\s+(?P<cislo>\d+[A-Za-z]?(?:/\d+[A-Za-z]?)?)$")
+
+
+def ulice_a_cislo(sidlo):
+    """(ulice, cislo) ze sidla v ARES. Stejne pravidlo je v ares_lookup.js.
+
+    ARES (API 1.3) u casti adres nevyplni nazevUlice ani cisloOrientacni,
+    prestoze je ulice v textovaAdresa (GEHER: "Vitkovicka 3335/15, ...").
+    Pak se ulice a cislo vezmou z prvni casti textove adresy. Obec bez ulic
+    ma v textu cast obce ("Liskovec 393"), nebo jen "c.p. 256" - tam se
+    jako ulice pouzije cast obce, pripadne obec.
+    """
+    ulice = sidlo.get("nazevUlice") or ""
+    cislo = str(sidlo.get("cisloDomovni") or "")
+    orientacni = f"{sidlo.get('cisloOrientacni') or ''}{sidlo.get('cisloOrientacniPismeno') or ''}"
+    if orientacni:
+        cislo = f"{cislo}/{orientacni}"
+    if ulice:
+        return ulice, cislo
+
+    m = _TEXT_ULICE.match((sidlo.get("textovaAdresa") or "").split(",")[0].strip())
+    if m:
+        ulice = m.group("ulice")
+        if ulice.lower().startswith("č.") or ulice.lower().startswith("c."):  # č.p. / č.ev.
+            ulice = ""
+        cislo = m.group("cislo")
+    return ulice or sidlo.get("nazevCastiObce") or sidlo.get("nazevObce") or "", cislo
+
+
 def lookup_company(ico):
     """Vrati dict {name, dic, street, street_number, zip_code, city,
     insolvence_stav} nebo None.
@@ -64,13 +95,7 @@ def lookup_company(ico):
         "pravni_forma": data.get("pravniForma") or "",
     }
     sidlo = data.get("sidlo") or {}
-    result["street"] = sidlo.get("nazevUlice") or sidlo.get("nazevObce") or ""
-    cislo = sidlo.get("cisloDomovni")
-    cislo_str = str(cislo) if cislo else ""
-    orientacni = sidlo.get("cisloOrientacni")
-    if orientacni:
-        cislo_str = f"{cislo_str}/{orientacni}"
-    result["street_number"] = cislo_str
+    result["street"], result["street_number"] = ulice_a_cislo(sidlo)
     psc = sidlo.get("psc")
     result["zip_code"] = str(psc) if psc else ""
     result["city"] = sidlo.get("nazevObce") or ""
