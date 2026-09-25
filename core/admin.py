@@ -5013,7 +5013,7 @@ class PodkladovaFakturaAdmin(PodlePronajimatele, ModelAdmin):
     ucetniho systemu nebo u faktur, ktere se z ABRA nedotahuji (pelety NJ):
     polozka, obdobi, cislo dokladu, dodavatel a PDF. Viz Daniel 2026-09-25."""
     cesta_k_arealu = "service_item__site"
-    list_display = ("period", "service_item", "kod", "dodavatel", "zdroj", "ma_pdf", "nacteno")
+    list_display = ("period", "service_item", "kod", "dodavatel", "zdroj", "pdf", "nacteno")
     list_filter = ("period", "service_item__site", "service_item__invoice_class")
     search_fields = ("kod", "dodavatel", "service_item__name")
     list_select_related = ("period", "service_item", "service_item__site")
@@ -5023,9 +5023,16 @@ class PodkladovaFakturaAdmin(PodlePronajimatele, ModelAdmin):
     def zdroj(self, obj):
         return "ABRA" if obj.flexi_id else "ručně"
 
-    @admin.display(description="PDF", boolean=True)
-    def ma_pdf(self, obj):
-        return bool(obj.soubor)
+    @admin.display(description="PDF")
+    def pdf(self, obj):
+        """Odkaz na PDF v ulozisti - R2 vraci podepsanou adresu platnou
+        hodinu, pocita se lokalne bez dotazu na R2. Viz Daniel 2026-09-25."""
+        from django.utils.html import format_html
+
+        if not obj.soubor:
+            return format_html('<span style="color:#dc2626;">chybí</span>')
+        return format_html(
+            '<a href="{}" target="_blank" rel="noopener">otevřít</a>', obj.soubor.url)
 
     def get_fields(self, request, obj=None):
         if obj is not None and obj.flexi_id:
