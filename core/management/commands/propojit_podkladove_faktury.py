@@ -1,6 +1,8 @@
 """
-Propoji prijate faktury dodavatelu v ABRA Flexi s polozkami a obdobimi,
-aby je klientsky portal nabidl ke stazeni jako podkladove faktury.
+Propoji prijate faktury dodavatelu v ABRA Flexi s polozkami a obdobimi
+a PDF zkopiruje na R2, aby je klientsky portal nabidl ke stazeni jako
+podkladove faktury. Kopirovani na R2 potrebuje promenne R2_* - lokalne
+nejsou, proto se v provozu spousti akci u Obdobi.
 Viz core/podkladove_faktury.py a core.models.PodkladovaFaktura.
 
 Naklady se tim nemeni - jde jen o odkaz na doklad. Opakovatelne: uz
@@ -37,12 +39,12 @@ class Command(BaseCommand):
 
         radky, nerozpoznane = propojit(od=od, zapsat=zapsat)
         for obdobi, polozka, kod, dodavatel, soubor, stav in sorted(radky):
-            styl = self.style.SUCCESS if stav in ("nová", "změna") else (lambda x: x)
+            styl = self.style.SUCCESS if stav in ("nová", "změna", "chybí PDF") else (lambda x: x)
             self.stdout.write(styl("  {:8} {:30} {:11} {:28} {:38} {}".format(
                 obdobi, polozka[:30], kod, dodavatel[:28], soubor[:38] or "(bez přílohy)", stav)))
         if nerozpoznane:
             self.stdout.write(self.style.WARNING("\nBEZ MAPOVÁNÍ (přeskočeno):"))
             for kod, popis, trida, stred, firma in nerozpoznane:
                 self.stdout.write(f"  {kod} | {popis[:26]} | {trida} / {stred} / {firma}")
-        nove = sum(1 for r in radky if r[5] in ("nová", "změna"))
-        self.stdout.write(f"\nnových nebo změněných vazeb: {nove}, celkem nalezeno: {len(radky)}")
+        nove = sum(1 for r in radky if r[5] in ("nová", "změna", "chybí PDF"))
+        self.stdout.write(f"\nnových, změněných nebo bez PDF: {nove}, celkem nalezeno: {len(radky)}")

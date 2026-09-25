@@ -170,7 +170,7 @@ SESSION_SAVE_EVERY_REQUEST = True
 # 2027.0), i kdyby se nekdo zapomnel APP_VERSION_YEAR rucne prepsat -
 # dohoda s Danielem 2026-08-15.
 APP_VERSION_YEAR = 2026
-APP_VERSION_SEQUENCE = 300
+APP_VERSION_SEQUENCE = 301
 APP_VERSION = (
     f"{APP_VERSION_YEAR}.{APP_VERSION_SEQUENCE}"
     if date.today().year == APP_VERSION_YEAR
@@ -240,11 +240,6 @@ UNFOLD = {
                         "icon": "speed",
                         "link": reverse_lazy("admin:core_meterreading_changelist"),
                     },
-                    {
-                        "title": _("Míry inflace"),
-                        "icon": "trending_up",
-                        "link": reverse_lazy("admin:core_inflationrate_changelist"),
-                    },
                 ],
             },
             {
@@ -277,16 +272,6 @@ UNFOLD = {
                         "title": _("Kontrola plánků"),
                         "icon": "rule",
                         "link": reverse_lazy("admin:core_floorplan_kontrola"),
-                    },
-                    {
-                        "title": _("Nastavení rozúčtování"),
-                        "icon": "tune",
-                        "link": reverse_lazy("admin:core_nastavenirozuctovani_changelist"),
-                    },
-                    {
-                        "title": _("Třídy"),
-                        "icon": "category",
-                        "link": reverse_lazy("admin:core_invoiceclasscolor_changelist"),
                     },
                     {
                         "title": _("Měřidla"),
@@ -430,6 +415,41 @@ UNFOLD = {
                         "title": _("Paušální klienti"),
                         "icon": "balance",
                         "link": reverse_lazy("admin:core_billingline_report_pausalni"),
+                    },
+                ],
+            },
+            {
+                # Nastaveni modelu na jednom miste - drive rozhazene po
+                # Obdobich a Arealech. Dalsi nastaveni pribudou sem. Viz
+                # Daniel 2026-09-25.
+                "title": _("Nastavení"),
+                "separator": True,
+                "collapsible": True,
+                "items": [
+                    {
+                        "title": _("Nastavení rozúčtování"),
+                        "icon": "tune",
+                        "link": reverse_lazy("admin:core_nastavenirozuctovani_changelist"),
+                    },
+                    {
+                        "title": _("Třídy"),
+                        "icon": "category",
+                        "link": reverse_lazy("admin:core_invoiceclasscolor_changelist"),
+                    },
+                    {
+                        "title": _("Míry inflace"),
+                        "icon": "trending_up",
+                        "link": reverse_lazy("admin:core_inflationrate_changelist"),
+                    },
+                    {
+                        "title": _("Napojení na účetnictví"),
+                        "icon": "account_balance",
+                        "link": reverse_lazy("admin:core_napojeniucetnictvi_changelist"),
+                    },
+                    {
+                        "title": _("Podkladové faktury"),
+                        "icon": "receipt_long",
+                        "link": reverse_lazy("admin:core_podkladovafaktura_changelist"),
                     },
                 ],
             },

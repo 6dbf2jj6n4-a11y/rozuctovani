@@ -28,7 +28,7 @@ from .models import (
     Client, ClientCard, Contract, Site, Unit, CardUnit, Floorplan,
     Meter, MeterReading, Period, InflationRate, SupplyPoint, InvoiceClassColor,
     ServicePoolItem, AllocationKey, PriceList, CostEntry, BillingLine, UnitService,
-    CardOccupant, ReadingsClosure, NastaveniRozuctovani, PodkladovaFaktura,
+    CardOccupant, ReadingsClosure, NastaveniRozuctovani, PodkladovaFaktura, NapojeniUcetnictvi,
     normalizovat_telefon,
 )
 
@@ -3897,29 +3897,40 @@ class PeriodAdmin(ModelAdmin):
             for warning in result["warnings"]:
                 self.message_user(request, f"{label}: {warning}", level=messages.WARNING)
 
-    @admin.action(description="Propojit podkladové faktury z ABRA (pro klientský portál)")
+    @admin.action(description="Dotáhnout podkladové faktury z ABRA (pro klientský portál)")
     def propojit_podkladove_faktury(self, request, queryset):
-        """Pripoji prijate faktury dodavatelu z ABRA k polozkam vybranych
-        Obdobi, aby je klient v portalu videl ke stazeni. Naklady se nemeni.
-        Viz core/podkladove_faktury.py, Daniel 2026-09-25."""
+        """Najde v ABRA prijate faktury dodavatelu k vybranym Obdobim,
+        propoji je s polozkami a PDF zkopiruje do uloziste (R2), odkud
+        je klient v portalu stahne. Naklady se nemeni. U jineho ucetniho
+        systemu nez ABRA se faktury nahravaji rucne (Nastaveni ->
+        Podkladove faktury). Viz core/podkladove_faktury.py, Daniel
+        2026-09-25."""
         from core.podkladove_faktury import propojit
 
+        if NapojeniUcetnictvi.nacti().system != NapojeniUcetnictvi.System.ABRA_FLEXI:
+            self.message_user(
+                request, "Účetní systém není ABRA Flexi - podkladové faktury se nahrávají ručně "
+                "v Nastavení → Podkladové faktury.", level=messages.WARNING)
+            return
         vybrana = {str(p) for p in queryset}
         od = min((p.year, p.month) for p in queryset)
         try:
-            radky, nerozpoznane = propojit(od=od, zapsat=True)
-        except Exception as exc:  # ABRA nedostupna, spatne prihlaseni...
-            self.message_user(request, f"ABRA nevrátila faktury: {exc}", level=messages.ERROR)
+            radky, nerozpoznane = propojit(
+                od=od, zapsat=True, obdobi_jen={p.pk for p in queryset})
+        except Exception as exc:  # ABRA/R2 nedostupne, spatne prihlaseni...
+            self.message_user(
+                request, f"Dotažení se nepovedlo: {exc}. Zkontroluj Nastavení → Napojení "
+                "na účetnictví.", level=messages.ERROR)
             return
         radky = [r for r in radky if r[0] in vybrana]
         if not radky:
             self.message_user(
-                request, "Pro vybraná období jsem v ABRA nenašel žádnou fakturu k propojení.",
+                request, "Pro vybraná období jsem v ABRA nenašel žádnou fakturu k dotažení.",
                 level=messages.WARNING)
             return
-        nove = [r for r in radky if r[5] in ("nová", "změna")]
+        nove = [r for r in radky if r[5] != "beze změny"]
         bez_prilohy = [r for r in radky if not r[4]]
-        text = f"Podkladové faktury: {len(radky)} propojeno ({len(nove)} nových nebo změněných)."
+        text = f"Podkladové faktury: {len(radky)} v ABRA, {len(nove)} nově dotaženo nebo aktualizováno."
         if bez_prilohy:
             text += " Bez PDF přílohy v ABRA: " + ", ".join(sorted({r[2] for r in bez_prilohy})) + "."
         self.message_user(request, text, level=messages.WARNING if bez_prilohy else messages.SUCCESS)
@@ -4995,22 +5006,94 @@ class CostEntryVyplnenoFilter(admin.SimpleListFilter):
 
 @admin.register(PodkladovaFaktura)
 class PodkladovaFakturaAdmin(PodlePronajimatele, ModelAdmin):
-    """Ktere faktury dodavatelu z ABRA vidi klienti v portalu ke stazeni.
-    Plni se akci u Obdobi "Propojit podkladové faktury z ABRA" (nebo
-    prikazem propojit_podkladove_faktury) - rucne se tu nic nezadava,
-    jen se da vazba smazat, kdyby nekam nepatrila."""
+    """Faktury dodavatelu, ktere klienti vidi v portalu ke stazeni.
+
+    Z ABRA se dotahuji akci u Obdobi (PDF se zkopiruje do uloziste) - u
+    takovych jsou udaje z ABRA jen ke cteni. Rucne se pridavaji u jineho
+    ucetniho systemu nebo u faktur, ktere se z ABRA nedotahuji (pelety NJ):
+    polozka, obdobi, cislo dokladu, dodavatel a PDF. Viz Daniel 2026-09-25."""
     cesta_k_arealu = "service_item__site"
-    list_display = ("period", "service_item", "kod", "dodavatel", "nazev_souboru", "nacteno")
+    list_display = ("period", "service_item", "kod", "dodavatel", "zdroj", "ma_pdf", "nacteno")
     list_filter = ("period", "service_item__site", "service_item__invoice_class")
     search_fields = ("kod", "dodavatel", "service_item__name")
     list_select_related = ("period", "service_item", "service_item__site")
-    readonly_fields = (
-        "service_item", "period", "flexi_id", "kod", "dodavatel", "popis",
-        "priloha_id", "nazev_souboru", "nacteno",
-    )
+    autocomplete_fields = ()
+
+    @admin.display(description="Zdroj")
+    def zdroj(self, obj):
+        return "ABRA" if obj.flexi_id else "ručně"
+
+    @admin.display(description="PDF", boolean=True)
+    def ma_pdf(self, obj):
+        return bool(obj.soubor)
+
+    def get_fields(self, request, obj=None):
+        if obj is not None and obj.flexi_id:
+            return ("service_item", "period", "kod", "dodavatel", "popis", "soubor",
+                    "flexi_id", "priloha_id", "nazev_souboru", "nacteno")
+        return ("service_item", "period", "kod", "dodavatel", "popis", "soubor")
+
+    def get_readonly_fields(self, request, obj=None):
+        if obj is not None and obj.flexi_id:
+            # Udaje z ABRA se prepisou pri dalsim dotazeni - rucni zmena by
+            # se ztratila. PDF jde vymenit.
+            return ("service_item", "period", "kod", "dodavatel", "popis",
+                    "flexi_id", "priloha_id", "nazev_souboru", "nacteno")
+        return ()
+
+    def save_model(self, request, obj, form, change):
+        if "soubor" in form.changed_data and obj.soubor and not obj.flexi_id:
+            obj.nazev_souboru = obj.soubor.name.rsplit("/", 1)[-1][:255]
+        super().save_model(request, obj, form, change)
+
+
+@admin.register(NapojeniUcetnictvi)
+class NapojeniUcetnictviAdmin(ModelAdmin):
+    """Jediny zaznam, jako Nastaveni rozuctovani. Pristupove udaje k ABRA
+    jsou v promennych prostredi (Railway), tady se jen ukaze, jestli
+    spojeni funguje."""
+    fields = ("system", "stav_spojeni")
+    readonly_fields = ("stav_spojeni",)
 
     def has_add_permission(self, request):
+        return not NapojeniUcetnictvi.objects.exists()
+
+    def has_delete_permission(self, request, obj=None):
         return False
+
+    def changelist_view(self, request, extra_context=None):
+        from django.shortcuts import redirect
+        from django.urls import reverse
+
+        zaznam = NapojeniUcetnictvi.objects.first()
+        if zaznam is None:
+            zaznam = NapojeniUcetnictvi()
+            zaznam.save()
+        return redirect(reverse("admin:core_napojeniucetnictvi_change", args=[zaznam.pk]))
+
+    @admin.display(description="Spojení s ABRA")
+    def stav_spojeni(self, obj):
+        """Zkusi ABRA pri kazdem otevreni stranky - jeden maly dotaz."""
+        import os
+
+        from django.utils.html import format_html
+
+        from core.flexi_client import FlexiClient
+
+        if obj is None or obj.system != NapojeniUcetnictvi.System.ABRA_FLEXI:
+            return "— (faktury se nahrávají ručně)"
+        chybi = [k for k in ("FLEXI_URL", "FLEXI_COMPANY", "FLEXI_USER", "FLEXI_PASS")
+                 if not os.environ.get(k)]
+        if chybi:
+            return format_html(
+                '<span style="color:#dc2626;">✗ Na serveru chybí proměnné: {}</span>', ", ".join(chybi))
+        try:
+            FlexiClient().list_records("faktura-prijata", extra_params={"limit": "1"})
+        except Exception as exc:
+            return format_html('<span style="color:#dc2626;">✗ ABRA neodpovídá: {}</span>', str(exc)[:200])
+        return format_html(
+            '<span style="color:#16a34a;">✓ Spojení funguje</span> – {} / firma {} / uživatel {}',
+            os.environ["FLEXI_URL"], os.environ["FLEXI_COMPANY"], os.environ["FLEXI_USER"])
 
 
 @admin.register(CostEntry)

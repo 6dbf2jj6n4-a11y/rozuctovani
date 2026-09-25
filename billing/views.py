@@ -15,7 +15,6 @@ from django.utils.text import slugify
 
 from accounts.models import User
 from core.models import BillingLine, Client, Period, PodkladovaFaktura
-from core.podkladove_faktury import stahnout_prilohu
 from billing.statement_generator import build_statement_data, generate_client_statement_pdf
 
 
@@ -55,18 +54,20 @@ def _klient_a_obdobi(request, period_id):
 
 def _faktury_klienta(client, period):
     """Podkladove faktury dodavatelu k polozkam, ktere ma klient v obdobi
-    vyuctovane - jen ty s PDF prilohou. Faktura krYjici vic polozek (SMVAK
-    NJ = voda i srazkove) se ukaze jednou se vsemi polozkami."""
+    vyuctovane - jen ty, ktere uz maji PDF v ulozisti. Faktura kryjici
+    vic polozek (SMVAK NJ = voda i srazkove) se ukaze jednou se vsemi."""
     polozky = BillingLine.objects.filter(
         period=period, client_card__client=client,
     ).values_list("service_item_id", flat=True)
     faktury = {}
     for f in (
         PodkladovaFaktura.objects
-        .filter(period=period, service_item_id__in=polozky, priloha_id__isnull=False)
+        .filter(period=period, service_item_id__in=polozky)
+        .exclude(soubor="")
         .select_related("service_item").order_by("dodavatel", "kod")
     ):
-        zaznam = faktury.setdefault(f.flexi_id, {"faktura": f, "polozky": []})
+        # Rucne nahrane nemaji flexi_id - seskupuji se podle souboru.
+        zaznam = faktury.setdefault(f.flexi_id or f.soubor.name, {"faktura": f, "polozky": []})
         zaznam["polozky"].append(f.service_item.name)
     return list(faktury.values())
 
@@ -118,24 +119,25 @@ def period_detail(request, period_id):
 
 @login_required
 def period_faktura(request, period_id, faktura_id):
-    """Podkladova faktura dodavatele - PDF se streamuje primo z ABRA, nikam
-    se nekopiruje. Klient smi otevrit jen fakturu k polozce, kterou ma
-    v tomto obdobi vyuctovanou. Viz core.models.PodkladovaFaktura."""
+    """Podkladova faktura dodavatele - PDF z vlastniho uloziste (R2), ne
+    z ucetnictvi, takze funguje i po zmene ucetniho systemu. Klient smi
+    otevrit jen fakturu k polozce, kterou ma v tomto obdobi vyuctovanou.
+    Viz core.models.PodkladovaFaktura a NapojeniUcetnictvi."""
     client, period = _klient_a_obdobi(request, period_id)
-    faktura = get_object_or_404(
-        PodkladovaFaktura, pk=faktura_id, period=period, priloha_id__isnull=False,
-    )
+    faktura = get_object_or_404(PodkladovaFaktura, pk=faktura_id, period=period)
+    if not faktura.soubor:
+        raise Http404("Faktura zatím nemá nahrané PDF.")
     if not BillingLine.objects.filter(
         period=period, client_card__client=client, service_item_id=faktura.service_item_id,
     ).exists():
         raise PermissionDenied("Tahle faktura k vašemu vyúčtování nepatří.")
     try:
-        obsah, typ = stahnout_prilohu(faktura)
+        soubor = faktura.soubor.open("rb")
     except Exception:
-        raise Http404("Fakturu se teď nepodařilo načíst z účetnictví, zkuste to prosím později.")
-    nazev = faktura.nazev_souboru or f"{faktura.kod.replace('/', '-')}.pdf"
+        raise Http404("Fakturu se teď nepodařilo načíst, zkuste to prosím později.")
+    nazev = faktura.nazev_souboru or faktura.soubor.name.rsplit("/", 1)[-1]
     # Inline - prohlizec fakturu rovnou ukaze, stahnout jde odtamtud.
-    return FileResponse(BytesIO(obsah), filename=nazev, content_type=typ)
+    return FileResponse(soubor, filename=nazev, content_type="application/pdf")
 
 
 @login_required

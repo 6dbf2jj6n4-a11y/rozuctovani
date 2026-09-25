@@ -2419,6 +2419,57 @@ class CostEntry(models.Model):
         return None
 
 
+def _cesta_podkladove_faktury(instance, filename):
+    """podkladove_faktury/RRRR/MM/<soubor> - na R2 serazene po obdobich."""
+    p = instance.period
+    return f"podkladove_faktury/{p.year}/{p.month:02d}/{filename}"
+
+
+class NapojeniUcetnictvi(models.Model):
+    """Odkud se berou podkladove faktury dodavatelu pro klientsky portal -
+    jediny zaznam pro celou aplikaci.
+
+    ABRA Flexi: faktury se dotahuji tlacitkem u Obdobi a PDF se zkopiruje
+    na R2. Jiny system: faktury se nahravaji rucne v Podkladovych
+    fakturach. V obou pripadech portal cte PDF z R2, takze na ucetnim
+    systemu nezavisi - kdyby se ABRA jednou zrusila, stare faktury
+    v portalu zustanou. Pristupove udaje k ABRA (FLEXI_URL, FLEXI_COMPANY,
+    FLEXI_USER, FLEXI_PASS) jsou v promennych prostredi na Railway, ne
+    tady - hesla do databaze nepatri. Viz Daniel 2026-09-25."""
+
+    class System(models.TextChoices):
+        ABRA_FLEXI = "abra_flexi", "ABRA Flexi – faktury se dotahují z účetnictví"
+        RUCNE = "rucne", "Jiný systém – faktury se nahrávají ručně"
+
+    system = models.CharField(
+        "Účetní systém", max_length=20, choices=System.choices, default=System.ABRA_FLEXI,
+        help_text=(
+            "ABRA Flexi: u Období akce „Dotáhnout podkladové faktury z ABRA“ "
+            "faktury najde, propojí s položkami a PDF zkopíruje do úložiště.\n"
+            "Jiný systém: faktury se přidávají ručně v Nastavení → Podkladové "
+            "faktury (nahraje se PDF). Ručně jde přidat i s ABRA, třeba pelety."
+        ),
+    )
+
+    class Meta:
+        verbose_name = "Napojení na účetnictví"
+        verbose_name_plural = "Napojení na účetnictví"
+
+    def __str__(self):
+        return "Napojení na účetnictví"
+
+    def save(self, *args, **kwargs):
+        self.pk = 1
+        super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        """Nastaveni se nemaze."""
+
+    @classmethod
+    def nacti(cls):
+        return cls.objects.first() or cls()
+
+
 class PodkladovaFaktura(models.Model):
     """Faktura dodavatele (prijata faktura v ABRA Flexi), ze ktere vznikl
     naklad polozky za obdobi. Klientsky portal ji nabizi ke stazeni -
@@ -2432,9 +2483,10 @@ class PodkladovaFaktura(models.Model):
     (FM elektrina = TEDOM + SZYPKA), jedna faktura muze kryt vic polozek
     (SMVAK NJ = voda i srazkove) i vic mesicu (ctvrtletni srazkove).
 
-    Samotne PDF se nikam nekopiruje - zustava priloha faktury v ABRA a do
-    portalu se streamuje pri stazeni. Plni se prikazem
-    propojit_podkladove_faktury nebo akci u Obdobi (core/podkladove_faktury.py)."""
+    PDF se kopiruje na R2 (pole soubor) a portal ho cte odtud - viz
+    NapojeniUcetnictvi. Z ABRA se plni akci u Obdobi nebo prikazem
+    propojit_podkladove_faktury (core/podkladove_faktury.py), jinak se
+    faktura prida rucne v adminu."""
 
     service_item = models.ForeignKey(
         "ServicePoolItem", on_delete=models.CASCADE, related_name="podkladove_faktury",
@@ -2444,13 +2496,22 @@ class PodkladovaFaktura(models.Model):
         "Period", on_delete=models.CASCADE, related_name="podkladove_faktury",
         verbose_name="Období",
     )
-    flexi_id = models.PositiveIntegerField("ID faktury v ABRA")
+    flexi_id = models.PositiveIntegerField(
+        "ID faktury v ABRA", null=True, blank=True,
+        help_text="Vyplněno u faktur dotažených z ABRA, u ručně nahraných prázdné.",
+    )
     kod = models.CharField("Číslo dokladu", max_length=40)
     dodavatel = models.CharField("Dodavatel", max_length=200, blank=True)
     popis = models.CharField("Popis", max_length=200, blank=True)
     priloha_id = models.PositiveIntegerField("ID přílohy v ABRA", null=True, blank=True)
-    nazev_souboru = models.CharField("Soubor", max_length=255, blank=True)
-    nacteno = models.DateTimeField("Načteno z ABRA", auto_now=True)
+    nazev_souboru = models.CharField("Název souboru", max_length=255, blank=True)
+    # Kopie PDF na R2 - portal cte odtud, ne z ucetnictvi (viz
+    # NapojeniUcetnictvi). Jeden soubor muze sdilet vic radku, kdyz jedna
+    # faktura kryje vic polozek nebo mesicu.
+    soubor = models.FileField(
+        "PDF faktury", upload_to=_cesta_podkladove_faktury, storage=R2MediaStorage(), blank=True,
+    )
+    nacteno = models.DateTimeField("Naposledy změněno", auto_now=True)
 
     class Meta:
         verbose_name = "Podkladová faktura"
