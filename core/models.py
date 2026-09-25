@@ -613,6 +613,17 @@ class ClientCard(models.Model):
     external_id = models.IntegerField("Původní ID (IDK)", null=True, blank=True)
     description = models.CharField("Popis karty", max_length=200, blank=True)
     is_active = models.BooleanField("Aktivní", default=True)
+    # Osoby patri klientovi, ne mistnosti - pri dvou kancelarich neni kam
+    # je rozdelit. Klice se zdrojem vahy "Pocet osob z karty" z nej berou
+    # vahu samy, takze se zadava jednou za kartu. Viz Daniel 2026-09-25.
+    pocet_osob = models.PositiveIntegerField(
+        "Počet osob", null=True, blank=True,
+        help_text=(
+            "Kolik lidí klient v pronajatých prostorách má. Klíče s váhou "
+            "„Počet osob z karty“ (voda, teplá voda, úklid…) si ho vezmou "
+            "samy - zadává se jednou za kartu, ne u každého klíče."
+        ),
+    )
     document = models.FileField(
         "Vygenerovaný dokument (Karta nájemce)", upload_to="karty/", null=True, blank=True
     )
@@ -1888,6 +1899,7 @@ class AllocationKey(models.Model):
         HODNOTA = "", "Hodnota zadaná ručně"
         PLOCHA = "plocha", "Celá plocha karty (m²)"
         VYTAPENA = "vytapena", "Vytápěná plocha karty (m²)"
+        OSOBY = "osoby", "Počet osob z karty"
 
     weight_source = models.CharField(
         "Odkud brát váhu", max_length=20, blank=True,
@@ -1897,8 +1909,9 @@ class AllocationKey(models.Model):
             "přepočítá se sama při každém rozúčtování - nerozejde se, když "
             "se plocha přidá, ubere nebo se opraví výměra. „Celá plocha“ je "
             "pro služby placené podle velikosti pronajatého (ostraha, odvoz "
-            "odpadu, úklid sněhu), „Vytápěná plocha“ pro teplo. Když má "
-            "karta na jedné položce takových klíčů víc, plocha se započítá "
+            "odpadu, úklid sněhu), „Vytápěná plocha“ pro teplo, „Počet osob“ "
+            "(z pole na Kartě) pro vodu, teplou vodu a úklid. Když má "
+            "karta na jedné položce takových klíčů víc, váha se započítá "
             "jen JEDNOU - klíče doplněné automaticky k plochám tak nemůžou "
             "nic zdvojit."
         ),
@@ -1989,6 +2002,8 @@ class AllocationKey(models.Model):
             return self.client_card.plocha_celkem
         if self.weight_source == volby.VYTAPENA:
             return self.client_card.vytapena_plocha
+        if self.weight_source == volby.OSOBY:
+            return Decimal(self.client_card.pocet_osob or 0)
         return self.value or Decimal("0")
 
     def is_valid_for_period(self, period):

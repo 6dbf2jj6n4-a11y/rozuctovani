@@ -136,6 +136,9 @@ def _fmt_key_value(key, sdilene_meridlo=False):
     měřidle" to začalo skrývat váhy i tam, kde nesou celý výpočet - na
     kartě KJO EU vycházelo osm hodnot z deseti jako pomlčka.
     Daniel 2026-08-27."""
+    if key.weight_source == AllocationKey.ZdrojVahy.OSOBY:
+        # Vaha z Poctu osob na Karte (Daniel 2026-09-25).
+        return f"{_strip_trailing_zeros(key.vaha)} osob"
     if key.weight_source:
         # Klic s dopoctenou vahou Hodnotu vyplnenou nema - v Karte se ukaze
         # to, cim se opravdu deli, tedy plocha (Daniel 2026-09-05).

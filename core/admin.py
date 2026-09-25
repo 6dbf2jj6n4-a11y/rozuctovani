@@ -571,6 +571,8 @@ class AllocationKeyInlineBase(TabularInline):
             return format_html('<span style="color:#2a7;">celá plocha karty</span>')
         if obj.weight_source == volby.VYTAPENA:
             return format_html('<span style="color:#2a7;">vytápěná plocha karty</span>')
+        if obj.weight_source == volby.OSOBY:
+            return format_html('<span style="color:#2a7;">počet osob z karty</span>')
         popis = ""
         if obj.meter_id and obj.meter.weight_unit_label:
             popis = obj.meter.weight_unit_label
@@ -1849,7 +1851,7 @@ class ClientCardAdmin(PodlePronajimatele, ModelAdmin):
     fieldsets = (
         ("Základní údaje", {
             "fields": (("client", "description"), ("valid_from", "valid_to"),
-                       "contract", "is_active", "note")
+                       ("contract", "pocet_osob"), "is_active", "note")
         }),
         ("Čísla objednávek (na faktury)", {
             "fields": (("po_number_rent", "po_number_services"),)
