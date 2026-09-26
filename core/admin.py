@@ -5324,7 +5324,13 @@ class BillingLineAdmin(PodlePronajimatele, DefaultToCurrentPeriodMixin, ModelAdm
           aby se u klienta s vice kartami (ruzne arealy) nemichaly
           dohromady - viz konverzace s Danielem 2026-08-12.
         - Rozdil: Vynos - Naklad (zaporne = na te karte v tom obdobi
-          prodelavame - typicky v zime kvuli teplu)."""
+          prodelavame - typicky v zime kvuli teplu).
+        - Karta s PAUSALEM za energie/sluzby (fakturovana pevna castka na
+          polozce, na ktere ma zaroven nefakturovany skutecny podil - viz
+          billing/engine.py, model 2): vynosem je ten pausal, ne najem.
+          Rozdil pak rika, jestli je pausal nastaveny dobre - zaporny =
+          prodelavame a pausal je potreba v dalsich obdobich zvednout
+          (Daniel 2026-09-26)."""
         from decimal import ROUND_CEILING
         from django.db.models import Sum
         from django.shortcuts import render
@@ -5362,6 +5368,17 @@ class BillingLineAdmin(PodlePronajimatele, DefaultToCurrentPeriodMixin, ModelAdm
             if not pausal_lines:
                 continue
             card_ids_pausal = {line.client_card_id for line in pausal_lines}
+            # Pausaly: fakturovana pevna castka na teze polozce, kde karta
+            # ma nefakturovany podil.
+            s_podilem = {(line.client_card_id, line.service_item_id) for line in pausal_lines}
+            pausaly = {}
+            for line in BillingLine.objects.filter(
+                period=period, is_billed=True, client_card_id__in=card_ids_pausal,
+            ):
+                if (line.client_card_id, line.service_item_id) in s_podilem:
+                    castka = Decimal((line.calc_detail or {}).get("fixed_amount") or "0")
+                    if castka:
+                        pausaly[line.client_card_id] = pausaly.get(line.client_card_id, Decimal("0")) + castka
 
             naklad = sum((line.amount for line in pausal_lines), Decimal("0"))
 
@@ -5389,20 +5406,28 @@ class BillingLineAdmin(PodlePronajimatele, DefaultToCurrentPeriodMixin, ModelAdm
             vynos = Decimal("0")
             card_rows = []
             for detail in by_card.values():
-                card_vynos_amount = card_vynos(detail["card"], period)
+                if detail["card"].id in pausaly:
+                    card_vynos_amount = pausaly[detail["card"].id]
+                    zdroj = "paušál"
+                else:
+                    card_vynos_amount = card_vynos(detail["card"], period)
+                    zdroj = "nájem"
                 vynos += card_vynos_amount
                 card_rows.append({
                     "card": detail["card"],
                     "by_class": detail["by_class"],
                     "naklad": detail["naklad"],
                     "vynos": card_vynos_amount,
+                    "zdroj": zdroj,
                     "rozdil": card_vynos_amount - detail["naklad"],
                 })
 
                 year_row = year_by_card.setdefault(detail["card"].id, {
                     "card": detail["card"], "by_class": {},
                     "naklad": Decimal("0"), "vynos": Decimal("0"), "mesicu": 0,
+                    "zdroje": set(),
                 })
+                year_row["zdroje"].add(zdroj)
                 for cls, amount in detail["by_class"].items():
                     year_row["by_class"][cls] = year_row["by_class"].get(cls, Decimal("0")) + amount
                 year_row["naklad"] += detail["naklad"]
@@ -5434,6 +5459,7 @@ class BillingLineAdmin(PodlePronajimatele, DefaultToCurrentPeriodMixin, ModelAdm
         )
         for year_row in year_rows:
             year_row["rozdil"] = year_row["vynos"] - year_row["naklad"]
+            year_row["zdroj"] = " + ".join(sorted(year_row["zdroje"]))
 
         # Castky po Tridach jako SEZNAM v poradi sloupcu - sablona se do
         # dictu klicem ze smycky dostat neumi.

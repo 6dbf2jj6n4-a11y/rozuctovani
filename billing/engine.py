@@ -948,6 +948,22 @@ def calculate_period(period, site=None):
             # a polozku - stejna pojistka jako u vazenych podilu, jinak by
             # Karta se tremi Plochami zaplatila trikrat celou svou vymeru.
             zapocteno_fixed = set()
+            # Pevne castky zvlast za fakturovane a nefakturovane klice -
+            # karta, ktera je ma ruzne, dostane dva radky (viz 3) nize).
+            fixed_by_group = {}
+            fixed_units_by_group = {}
+            # PAUSAL SE SKUTECNYM PODILEM (model 2, Daniel 2026-09-26): karta
+            # ma na polozce nefakturovany podil (spotreba se meri, nese ji
+            # pronajimatel) a k tomu fakturovanou pevnou castku. Ostatni
+            # plati presne svou spotrebu, pronajimatel dostane pausal a nese
+            # skutecnou spotrebu karty - rozdil je jeho zisk nebo ztrata
+            # na pausalu (report Pausalni klienti). Pausal se proto NIKDY
+            # neodecita z nakladu, jinak by se spotreba karty zapocitala
+            # dvakrat a pausal by se rozpustil v cenach sousedu.
+            s_nefakt_podilem = {
+                k.client_card_id for k in valid_keys
+                if k.allocation_type not in ABSOLUTE_AMOUNT_TYPES and not k.is_billed
+            }
             for key in fixed_keys:
                 if key.client_card.active_days_in_period(period_start, period_end) <= 0:
                     continue
@@ -959,6 +975,8 @@ def calculate_period(period, site=None):
                 if amount is None:
                     continue
                 fixed_amounts[key.client_card_id] = fixed_amounts.get(key.client_card_id, Decimal("0")) + amount
+                skupina = (key.client_card_id, key.is_billed)
+                fixed_by_group[skupina] = fixed_by_group.get(skupina, Decimal("0")) + amount
                 if key.allocation_type == AllocationKey.AllocationType.AREA_PRICE:
                     # Cena z klíče (sjednaná cena karty) má přednost před Ceníkem
                     # - stejně jako v _fixed_amount_for.
@@ -970,13 +988,16 @@ def calculate_period(period, site=None):
                         fixed_units[key.client_card_id] = (
                             fixed_units.get(key.client_card_id, Decimal("0")) + (key.vaha or Decimal("0"))
                         )
+                        fixed_units_by_group[skupina] = (
+                            fixed_units_by_group.get(skupina, Decimal("0")) + (key.vaha or Decimal("0"))
+                        )
                         fixed_price_per_unit[key.client_card_id] = price
                 # Odecist lze jen kdyz to dovoli TRIDA i klic - prepinac
                 # v Nastavení -> Třídy umi vypnout odecitani pausalu plosne
                 # (pak se cely naklad deli mezi ostatni, jako to delal stary
                 # system), jednotlivy klic ho muze vypnout i nad ramec toho.
                 # Viz InvoiceClassColor.deduct_fixed_from_pool.
-                if key.deduct_from_pool and deduct_fixed_allowed:
+                if key.deduct_from_pool and deduct_fixed_allowed and key.client_card_id not in s_nefakt_podilem:
                     remaining_cost -= amount
 
             if remaining_cost < 0:
@@ -1034,7 +1055,7 @@ def calculate_period(period, site=None):
                 weight_keys = [
                     k for k in valid_keys if k.allocation_type not in ABSOLUTE_AMOUNT_TYPES
                 ]
-                shares = _weighted_shares(weight_keys, period)
+                shares = _weighted_shares(weight_keys, period, by_key_out=by_key)
                 # Hlásit "nerozpočítaná zbylá částka" jen když položku fakticky
                 # NIKDO neplatí - tj. nejsou ani vážené/měřené podíly, ani žádné
                 # pevné částky. U položek účtovaných čistě pevnou cenou (napr.
@@ -1083,16 +1104,44 @@ def calculate_period(period, site=None):
             for card_id, share in shares.items():
                 results[card_id] = results.get(card_id, Decimal("0")) + remaining_cost * share
 
+            # "Fakturovat" plati po klicich: kdyz ho ma karta na polozce u
+            # klicu ruzne (typicky fakturovany pausal + nefakturovany skutecny
+            # podil), vzniknou DVA radky - fakturovany a nefakturovany - kazdy
+            # jen ze svych klicu. Drive se vsechno slilo do jednoho radku
+            # fakturovaneho jen tehdy, kdyz byly fakturovane VSECHNY klice,
+            # takze pausal na fakturu vubec nesel (GEHER, Daniel 2026-09-26).
+            # Karta se stejnym nastavenim u vsech klicu ma jeden radek jako dosud.
+            radky_karet = []
             for card_id, amount in results.items():
-                share = shares.get(card_id)
+                klice_karty = [k for k in valid_keys if k.client_card_id == card_id]
+                skupiny = sorted({k.is_billed for k in klice_karty}, reverse=True)
+                if len(skupiny) < 2:
+                    radky_karet.append((
+                        card_id, billed_by_card.get(card_id, True), amount, shares.get(card_id),
+                        klice_karty, fixed_amounts.get(card_id, Decimal("0")),
+                        fixed_units.get(card_id),
+                    ))
+                    continue
+                for fakturovat in skupiny:
+                    klice = [k for k in klice_karty if k.is_billed == fakturovat]
+                    podilove = [k for k in klice if k.allocation_type not in ABSOLUTE_AMOUNT_TYPES]
+                    share = None
+                    if card_id in shares and podilove:
+                        share = sum((by_key.get(k.id, Decimal("0")) for k in podilove), Decimal("0"))
+                    fixed = fixed_by_group.get((card_id, fakturovat), Decimal("0"))
+                    radky_karet.append((
+                        card_id, fakturovat, fixed + remaining_cost * (share or Decimal("0")), share,
+                        klice, fixed, fixed_units_by_group.get((card_id, fakturovat)),
+                    ))
 
+            for card_id, is_billed, amount, share, klice_radku, fixed_radku, fixed_units_radku in radky_karet:
                 units = None
                 price_per_unit = None
                 unit_of_measure = None
                 split = None
                 meridla = []
-                if card_id in fixed_units:
-                    units = fixed_units[card_id]
+                if fixed_units_radku is not None:
+                    units = fixed_units_radku
                     price_per_unit = fixed_price_per_unit.get(card_id)
                     unit_of_measure = "m²"
                 elif share is not None and total_consumption:
@@ -1128,7 +1177,7 @@ def calculate_period(period, site=None):
                         split = None
                     if by_meter:
                         meridla = _rozpad_po_meridlech(
-                            [k for k in valid_keys if k.client_card_id == card_id],
+                            klice_radku,
                             by_meter, by_key_local, by_key, total_consumption,
                             period, prev_period, readings_cache, deti_cache,
                         )
@@ -1140,11 +1189,11 @@ def calculate_period(period, site=None):
                     amount=amount.quantize(Decimal("0.01")),
                     units=units,
                     share=share,
-                    is_billed=billed_by_card.get(card_id, True),
+                    is_billed=is_billed,
                     calc_detail={
                         "total_cost": str(total_cost),
                         "cost_source": cost_source,
-                        "fixed_amount": str(fixed_amounts.get(card_id, Decimal("0"))),
+                        "fixed_amount": str(fixed_radku),
                         "remaining_cost": str(remaining_cost),
                         "share": str(share) if share is not None else None,
                         "price_per_unit": str(price_per_unit) if price_per_unit is not None else None,

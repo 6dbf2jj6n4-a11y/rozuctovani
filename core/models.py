@@ -2586,8 +2586,10 @@ class BillingLine(models.Model):
     class Meta:
         verbose_name = "Vyúčtovaná položka"
         verbose_name_plural = "Vyúčtované položky"
-        unique_together = ("client_card", "period", "service_item")
-        ordering = ["-period", "client_card", "service_item"]
+        # Karta muze mit na polozce dva radky - fakturovany a nefakturovany
+        # (pausal + skutecny podil, viz billing/engine.py, 3) sestaveni).
+        unique_together = ("client_card", "period", "service_item", "is_billed")
+        ordering = ["-period", "client_card", "service_item", "-is_billed"]
 
     def __str__(self):
         return f"{self.client_card} – {self.service_item} – {self.period}: {self.amount} Kč"

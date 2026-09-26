@@ -203,8 +203,25 @@ def build_statement_data(client, period):
         BillingLine.objects
         .filter(period=period, client_card__client=client)
         .select_related("service_item", "client_card")
-        .order_by("service_item__invoice_class", "service_item__name")
+        .order_by("service_item__invoice_class", "service_item__name", "-is_billed")
     )
+    # Karta s pausalem a nefakturovanym skutecnym podilem na te same
+    # polozce ma dva radky (billing/engine.py, 3) sestaveni) - popisek
+    # rekne, ktery je k uhrade a ktery jen pro informaci.
+    _pocet = {}
+    for line in lines:
+        _pocet[(line.client_card_id, line.service_item_id)] = _pocet.get(
+            (line.client_card_id, line.service_item_id), 0) + 1
+
+    def _nazev(line):
+        if _pocet[(line.client_card_id, line.service_item_id)] < 2:
+            return line.service_item.name
+        if not line.is_billed:
+            return f"{line.service_item.name} – skutečná spotřeba"
+        if line.share is None:
+            return f"{line.service_item.name} – paušál"
+        return line.service_item.name
+
     # Poradi i nazvy Trid z DB az za behu - viz client_card_generator.
     class_labels = InvoiceClassColor.label_map()
     class_order = [code for code, _ in InvoiceClassColor.choices()]
@@ -292,7 +309,7 @@ def build_statement_data(client, period):
             "price_basis": _cena_odvozena(class_lines),
             "lines": [
                 {
-                    "item": line.service_item.name,
+                    "item": _nazev(line),
                     "card": _card_label(line.client_card),
                     "amount": line.amount,
                     "is_billed": line.is_billed,

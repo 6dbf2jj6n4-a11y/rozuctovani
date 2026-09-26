@@ -6,7 +6,9 @@
     <p style="color:#888; margin-bottom:16px;">
         Klienti se službami/energiemi zahrnutými přímo v nájmu (aspoň jedna položka
         "v paušálu" v daném období). Náklad = co by je stálo služby, kdyby se fakturovaly
-        zvlášť. Výnos = co od nich reálně vybíráme (typicky nájem).
+        zvlášť. Výnos = co od nich reálně vybíráme: nájem, nebo paušál, pokud ho karta
+        za energie/služby platí. U paušálu záporný rozdíl znamená, že je nastavený nízko
+        a je potřeba ho v dalších obdobích zvednout.
     </p>
 
     {% if not rows %}
@@ -63,7 +65,7 @@
                                                     <td style="padding:3px 8px; text-align:right;">{% if amount != None %}{{ amount|floatformat:2 }}{% else %}<span style="color:#555;">—</span>{% endif %}</td>
                                                 {% endfor %}
                                                 <td style="padding:3px 8px; text-align:right;">{{ cr.naklad|floatformat:2 }}</td>
-                                                <td style="padding:3px 8px; text-align:right;">{{ cr.vynos|floatformat:2 }}</td>
+                                                <td style="padding:3px 8px; text-align:right;">{{ cr.vynos|floatformat:2 }} <span style="color:#888; font-size:11px;">{{ cr.zdroj }}</span></td>
                                                 <td style="padding:3px 8px; text-align:right; font-weight:600; {% if cr.rozdil < 0 %}color:#c0392b;{% endif %}">{{ cr.rozdil|floatformat:2 }}</td>
                                             </tr>
                                         {% endfor %}
@@ -117,7 +119,7 @@
                             <td style="padding:6px 8px; text-align:right;">{% if amount != None %}{{ amount|floatformat:2 }}{% else %}<span style="color:#555;">—</span>{% endif %}</td>
                         {% endfor %}
                         <td style="padding:6px 8px; text-align:right;">{{ yr.naklad|floatformat:2 }}</td>
-                        <td style="padding:6px 8px; text-align:right;">{{ yr.vynos|floatformat:2 }}</td>
+                        <td style="padding:6px 8px; text-align:right;">{{ yr.vynos|floatformat:2 }} <span style="color:#888; font-size:11px;">{{ yr.zdroj }}</span></td>
                         <td style="padding:6px 8px; text-align:right; font-weight:600; {% if yr.rozdil < 0 %}color:#c0392b;{% endif %}">
                             {{ yr.rozdil|floatformat:2 }} Kč
                         </td>
