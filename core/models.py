@@ -1052,6 +1052,12 @@ class Meter(models.Model):
     class ReadingMode(models.TextChoices):
         STATE = "state", "Stavy (kumulativní odečet, spotřeba = rozdíl mezi obdobími)"
         CONSUMPTION = "consumption", "Spotřeba za období (dodavatel hlásí rovnou spotřebu, ne stav)"
+        # Pseudomeridla pro deleni tepla NJ na spolecnou a individualni cast
+        # (Daniel 2026-09-27): "spotreba" = soucet vytapenych m2 Prostoru
+        # arealu, pocita se sama, zadne odecty. Pomer spolecne/ostatni se
+        # tak srovna sam, kdyz pribude nebo se zmeni Prostor.
+        VYTAPENA_SPOLECNA = "vyt_spolecna", "Vytápěná plocha společných prostor (m², počítá se sama)"
+        VYTAPENA_OSTATNI = "vyt_ostatni", "Vytápěná plocha ostatních prostor (m², počítá se sama)"
 
     site = models.ForeignKey(Site, on_delete=models.CASCADE, related_name="meters", verbose_name="Areál")
     parent_meter = models.ForeignKey(
@@ -1238,10 +1244,28 @@ class Meter(models.Model):
             return None
         return raw * (self.coefficient if self.coefficient is not None else Decimal("1"))
 
+    @property
+    def plocha_z_prostoru(self):
+        """True u pseudomeridla, ktere misto odectu secte vytapenou plochu
+        Prostoru arealu (ReadingMode.VYTAPENA_*)."""
+        return self.reading_mode in (self.ReadingMode.VYTAPENA_SPOLECNA, self.ReadingMode.VYTAPENA_OSTATNI)
+
+    def vytapena_plocha_prostoru(self):
+        """Soucet vytapenych m2 Prostoru arealu - spolecnych, nebo ostatnich
+        podle rezimu. Vytapena plocha zadana na Prostoru ma prednost pred
+        celou vymerou (stejne jako CardUnit.vytapena_plocha)."""
+        spolecne = self.reading_mode == self.ReadingMode.VYTAPENA_SPOLECNA
+        return sum(
+            (u.heated_area_m2 if u.heated_area_m2 is not None else u.area_m2) or Decimal("0")
+            for u in Unit.objects.filter(site_id=self.site_id, is_heated=True, is_common=spolecne)
+        )
+
     def _raw_meter_consumption(self, period, readings_cache=None):
         """Surova spotreba realneho meridla z odectu, JESTE bez koeficientu -
         bud primo zadana Spotreba (reading_mode CONSUMPTION), nebo rozdil
         stavu (vc. vymeny meridla pres reset_from_value). Viz consumption_for."""
+        if self.plocha_z_prostoru:
+            return self.vytapena_plocha_prostoru()
         if readings_cache is not None:
             current = readings_cache.get((self.id, period.id))
         else:

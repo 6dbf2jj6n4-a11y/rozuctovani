@@ -109,6 +109,8 @@ def _meter_provides_consumption(meter, cache=None):
         return cache[meter.id]
     if meter.is_virtual:
         result = bool(meter.formula.strip())
+    elif meter.plocha_z_prostoru:
+        result = True  # vytapena plocha Prostoru, odecty nema
     else:
         result = meter.readings.exists()
     if cache is not None:
@@ -609,7 +611,7 @@ def _rozpad_po_meridlech(klice, by_meter, by_key_local, by_key, total_consumptio
             "jednotky": str((podil * spotreba).quantize(Decimal("0.001"))),
         }
         if not meter.is_virtual:
-            if meter.reading_mode != meter.ReadingMode.CONSUMPTION:
+            if meter.reading_mode == meter.ReadingMode.STATE:
                 akt = readings_cache.get((meter.id, period.id))
                 if akt is not None:
                     if akt.reset_from_value is not None:
