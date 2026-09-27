@@ -1,0 +1,226 @@
+{% extends "admin/base_site.html" %}
+{% load l10n %}
+
+{% block content %}
+{% comment %}
+Report Naklady pronajimatele - vypocet v billing/naklady_pronajimatele.py.
+Pozor: viceradkovy komentar MUSI byt {% comment %}, ne {# #}.
+{% endcomment %}
+<style>
+    .rx-np table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    .rx-np th { padding: 6px 8px; text-align: right; border-bottom: 2px solid #666; white-space: nowrap; }
+    .rx-np th:first-child, .rx-np td:first-child { text-align: left; }
+    .rx-np td { padding: 4px 8px; text-align: right; border-bottom: 1px solid rgba(128,128,128,.25); white-space: nowrap; vertical-align: top; }
+    .rx-np tr.celkem td { font-weight: 600; border-top: 2px solid #666; }
+    .rx-np .zap { color: #c0392b; }
+    .rx-np .kl { color: #27ae60; }
+    .rx-np .mala { color: #888; font-size: 11px; }
+    .rx-np h3 { margin: 18px 0 6px; font-size: 14px; }
+    .rx-np details { margin: 10px 0; border: 1px solid rgba(128,128,128,.3); border-radius: 8px; padding: 6px 12px; }
+    .rx-np summary { cursor: pointer; font-weight: 600; padding: 4px 0; }
+    .rx-np .skup { text-align: center !important; border-bottom: 1px solid #666; }
+</style>
+<div class="rx-np">
+    <form method="get" class="rx-filters">
+        <div>
+            <label for="id_site">Areál</label>
+            <select name="site" id="id_site" onchange="this.form.submit()" style="padding:8px; min-width:160px;">
+                {% for s in sites %}<option value="{{ s.pk }}" {% if site and s.pk == site.pk %}selected{% endif %}>{{ s.name }}</option>{% endfor %}
+            </select>
+        </div>
+        <div>
+            <label for="id_od">Od</label>
+            <select name="od" id="id_od" onchange="this.form.submit()" style="padding:8px; min-width:120px;">
+                {% for p in vsechna %}<option value="{{ p.pk }}" {% if od and p.pk == od.pk %}selected{% endif %}>{{ p }}</option>{% endfor %}
+            </select>
+        </div>
+        <div>
+            <label for="id_do">Do</label>
+            <select name="do" id="id_do" onchange="this.form.submit()" style="padding:8px; min-width:120px;">
+                {% for p in vsechna %}<option value="{{ p.pk }}" {% if do and p.pk == do.pk %}selected{% endif %}>{{ p }}</option>{% endfor %}
+            </select>
+        </div>
+    </form>
+
+    <p style="color:#888; margin:12px 0 16px; max-width:900px;">
+        Kolik v jednotlivých obdobích nese pronajímatel a součet za vybraný rozsah.
+        <strong>Paušální klienti</strong>: skutečný podíl (kolik by platili podle spotřeby) proti vybraným paušálům –
+        kladný rozdíl je zisk, záporný ztráta (paušál je nízko).
+        <strong>V nájmu</strong>: nefakturované podíly nájemců bez paušálu.
+        <strong>Volné plochy</strong>: Karta pronajímatele (neobsazené prostory, vlastní kancelář).
+        <strong>Služby za pevnou cenu</strong> (internet, srážkové): náklad minus vybráno – záporné = zisk.
+        <strong>Nerozúčtováno</strong>: část nákladu, kterou nepokryl žádný klíč (záporné = přebytek).
+    </p>
+
+    {% if not data or not data.obdobi %}
+        <p>Ve vybraných obdobích zatím není nic spočítané.</p>
+    {% else %}
+    <div style="overflow-x:auto;">
+    <table>
+        <thead>
+            <tr>
+                <th></th>
+                <th colspan="3" class="skup">Paušální klienti</th>
+                <th></th><th></th><th></th><th></th><th></th>
+            </tr>
+            <tr>
+                <th>Období</th>
+                <th>skutečný podíl</th><th>paušály</th><th>rozdíl</th>
+                <th>V nájmu</th><th>Volné plochy</th><th>Služby za pevnou cenu</th><th>Nerozúčtováno</th><th>Pronajímatel nese</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for o in data.obdobi %}
+                <tr>
+                    <td><a href="#o{{ o.period.pk }}">{{ o.period }}</a>{% if o.nespocitano %} <span class="mala" title="Některé položky se v tomto období nerozpočítávaly – viz rozpad">⚠ nespočítáno</span>{% endif %}</td>
+                    <td>{{ o.b1_podil|floatformat:2 }}</td>
+                    <td>{{ o.b1_pausal|floatformat:2 }}</td>
+                    <td class="{% if o.b1_rozdil < 0 %}zap{% elif o.b1_rozdil > 0 %}kl{% endif %}">{{ o.b1_rozdil|floatformat:2 }}</td>
+                    <td>{{ o.b2|floatformat:2 }}</td>
+                    <td>{{ o.b3|floatformat:2 }}</td>
+                    <td class="{% if o.b5 < 0 %}kl{% endif %}">{{ o.b5|floatformat:2 }}</td>
+                    <td class="{% if o.b4 < 0 %}kl{% endif %}">{{ o.b4|floatformat:2 }}</td>
+                    <td><strong>{{ o.celkem|floatformat:2 }}</strong></td>
+                </tr>
+            {% endfor %}
+            <tr class="celkem">
+                <td>Celkem {{ od }} – {{ do }}</td>
+                <td>{{ data.celkem.b1_podil|floatformat:2 }}</td>
+                <td>{{ data.celkem.b1_pausal|floatformat:2 }}</td>
+                <td class="{% if data.celkem.b1_rozdil < 0 %}zap{% elif data.celkem.b1_rozdil > 0 %}kl{% endif %}">{{ data.celkem.b1_rozdil|floatformat:2 }}</td>
+                <td>{{ data.celkem.b2|floatformat:2 }}</td>
+                <td>{{ data.celkem.b3|floatformat:2 }}</td>
+                <td>{{ data.celkem.b5|floatformat:2 }}</td>
+                <td>{{ data.celkem.b4|floatformat:2 }}</td>
+                <td>{{ data.celkem.celkem|floatformat:2 }} Kč</td>
+            </tr>
+        </tbody>
+    </table>
+    </div>
+
+    {% if data.rocne %}
+        <h3>Paušály po kartách za {{ od }} – {{ do }}</h3>
+        <p class="mala">Součet vybraných období – zimní ztráta na teple se tu srovná s letním ziskem, takže je vidět, jestli je paušál opravdu ztrátový. V buňce Třídy: skutečný podíl / paušál.</p>
+        <div style="overflow-x:auto;">
+        <table>
+            <thead><tr>
+                <th>Karta</th><th>měsíců</th>
+                {% for t in data.tridy %}<th>{{ t.label }}</th>{% endfor %}
+                <th>skutečný podíl</th><th>paušály</th><th>rozdíl</th>
+            </tr></thead>
+            <tbody>
+            {% for z in data.rocne %}
+                <tr>
+                    <td><a href="/admin/core/clientcard/{{ z.card.pk }}/change/">{{ z.card.client.name }}</a> <span class="mala">{{ z.card.description }}</span></td>
+                    <td>{{ z.mesicu }}</td>
+                    {% for b in z.bunky %}<td>{% if b.podil != None or b.pausal != None %}{{ b.podil|default:0|floatformat:2 }}<br><span class="mala">paušál {{ b.pausal|default:0|floatformat:2 }}</span>{% else %}<span class="mala">—</span>{% endif %}</td>{% endfor %}
+                    <td>{{ z.podil|floatformat:2 }}</td>
+                    <td>{{ z.pausal|floatformat:2 }}</td>
+                    <td class="{% if z.rozdil < 0 %}zap{% elif z.rozdil > 0 %}kl{% endif %}"><strong>{{ z.rozdil|floatformat:2 }}</strong></td>
+                </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+        </div>
+    {% endif %}
+
+    <h3 style="margin-top:24px;">Rozpad po obdobích</h3>
+    {% for o in data.obdobi %}
+        <details id="o{{ o.period.pk }}">
+            <summary>{{ o.period }} – pronajímatel nese {{ o.celkem|floatformat:2 }} Kč</summary>
+
+            {% if o.pausalni %}
+                <h3>Paušální klienti</h3>
+                <div style="overflow-x:auto;"><table>
+                    <thead><tr><th>Karta</th>{% for t in data.tridy %}<th>{{ t.label }}</th>{% endfor %}<th>skutečný podíl</th><th>paušály</th><th>rozdíl</th></tr></thead>
+                    <tbody>
+                    {% for r in o.pausalni %}
+                        <tr>
+                            <td><a href="/admin/core/clientcard/{{ r.card.pk }}/change/">{{ r.card.client.name }}</a></td>
+                            {% for b in r.bunky %}<td>{% if b.podil != None or b.pausal != None %}{{ b.podil|default:0|floatformat:2 }}<br><span class="mala">paušál {{ b.pausal|default:0|floatformat:2 }}</span>{% else %}<span class="mala">—</span>{% endif %}</td>{% endfor %}
+                            <td>{{ r.podil_celkem|floatformat:2 }}</td>
+                            <td>{{ r.pausal_celkem|floatformat:2 }}</td>
+                            <td class="{% if r.rozdil < 0 %}zap{% elif r.rozdil > 0 %}kl{% endif %}"><strong>{{ r.rozdil|floatformat:2 }}</strong></td>
+                        </tr>
+                    {% endfor %}
+                    </tbody>
+                </table></div>
+            {% endif %}
+
+            {% if o.v_najmu %}
+                <h3>Energie a služby v nájmu</h3>
+                <div style="overflow-x:auto;"><table>
+                    <thead><tr><th>Karta</th>{% for t in data.tridy %}<th>{{ t.label }}</th>{% endfor %}<th>celkem</th><th>nájem</th><th>nájem − náklad</th></tr></thead>
+                    <tbody>
+                    {% for r in o.v_najmu %}
+                        <tr>
+                            <td><a href="/admin/core/clientcard/{{ r.card.pk }}/change/">{{ r.card.client.name }}</a></td>
+                            {% for b in r.bunky %}<td>{% if b.podil != None %}{{ b.podil|floatformat:2 }}{% else %}<span class="mala">—</span>{% endif %}</td>{% endfor %}
+                            <td><strong>{{ r.podil_celkem|floatformat:2 }}</strong></td>
+                            <td>{{ r.najem|floatformat:2 }}</td>
+                            <td class="{% if r.rozdil < 0 %}zap{% endif %}">{{ r.rozdil|floatformat:2 }}</td>
+                        </tr>
+                    {% endfor %}
+                    </tbody>
+                </table></div>
+            {% endif %}
+
+            {% if o.b3 %}
+                <h3>Volné plochy (Karta pronajímatele)</h3>
+                <div style="overflow-x:auto;"><table>
+                    <thead><tr><th></th>{% for t in data.tridy %}<th>{{ t.label }}</th>{% endfor %}<th>celkem</th></tr></thead>
+                    <tbody><tr>
+                        <td>{{ site.landlord.name|default:"pronajímatel" }}</td>
+                        {% for v in o.volne_bunky %}<td>{% if v != None %}{{ v|floatformat:2 }}{% else %}<span class="mala">—</span>{% endif %}</td>{% endfor %}
+                        <td><strong>{{ o.b3|floatformat:2 }}</strong></td>
+                    </tr></tbody>
+                </table></div>
+            {% endif %}
+
+            {% if o.sluzby %}
+                <h3>Služby za pevnou cenu</h3>
+                <div style="overflow-x:auto;"><table>
+                    <thead><tr><th>Položka</th><th>náklad</th><th>vybráno od nájemců</th><th>výsledek</th></tr></thead>
+                    <tbody>
+                    {% for s in o.sluzby %}
+                        <tr>
+                            <td>{{ s.item.name }}</td>
+                            <td>{{ s.naklad|floatformat:2 }}</td>
+                            <td>{{ s.vybrano|floatformat:2 }}</td>
+                            <td class="{% if s.vysledek < 0 %}zap{% elif s.vysledek > 0 %}kl{% endif %}"><strong>{{ s.vysledek|floatformat:2 }}</strong></td>
+                        </tr>
+                    {% endfor %}
+                    </tbody>
+                </table></div>
+            {% endif %}
+
+            {% if o.nespocitano %}
+                <h3>Nespočítáno (do součtu nejde)</h3>
+                <p class="mala">Položka má platné klíče, ale v tomto období se nerozpočítávala – náklad z faktury tu jen informativně.</p>
+                <div style="overflow-x:auto;"><table>
+                    <thead><tr><th>Položka</th><th>náklad</th></tr></thead>
+                    <tbody>{% for n in o.nespocitano %}<tr><td>{{ n.item.name }}</td><td>{{ n.naklad|floatformat:2 }}</td></tr>{% endfor %}</tbody>
+                </table></div>
+            {% endif %}
+
+            {% if o.zbytek %}
+                <h3>Nerozúčtovaný zbytek</h3>
+                <div style="overflow-x:auto;"><table>
+                    <thead><tr><th>Položka</th><th>náklad</th><th>pokryto klíči</th><th>zbytek</th></tr></thead>
+                    <tbody>
+                    {% for z in o.zbytek %}
+                        <tr>
+                            <td>{{ z.item.name }}</td>
+                            <td>{{ z.naklad|floatformat:2 }}</td>
+                            <td>{{ z.pokryto|floatformat:2 }}</td>
+                            <td class="{% if z.zbytek < 0 %}kl{% endif %}"><strong>{{ z.zbytek|floatformat:2 }}</strong></td>
+                        </tr>
+                    {% endfor %}
+                    </tbody>
+                </table></div>
+            {% endif %}
+        </details>
+    {% endfor %}
+    {% endif %}
+</div>
+{% endblock %}

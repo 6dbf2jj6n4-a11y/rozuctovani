@@ -954,6 +954,10 @@ def calculate_period(period, site=None):
             # karta, ktera je ma ruzne, dostane dva radky (viz 3) nize).
             fixed_by_group = {}
             fixed_units_by_group = {}
+            # Kolik z pevnych castek se odecetlo z nakladu - report Naklady
+            # pronajimatele z toho pozna nerozuctovany zbytek (bez toho
+            # nejde rict, kolik naklad pokryly pausaly odectene z poolu).
+            odecteno_by_group = {}
             # PAUSAL SE SKUTECNYM PODILEM (model 2, Daniel 2026-09-26): karta
             # ma na polozce nefakturovany podil (spotreba se meri, nese ji
             # pronajimatel) a k tomu fakturovanou pevnou castku. Ostatni
@@ -1001,6 +1005,7 @@ def calculate_period(period, site=None):
                 # Viz InvoiceClassColor.deduct_fixed_from_pool.
                 if key.deduct_from_pool and deduct_fixed_allowed and key.client_card_id not in s_nefakt_podilem:
                     remaining_cost -= amount
+                    odecteno_by_group[skupina] = odecteno_by_group.get(skupina, Decimal("0")) + amount
 
             if remaining_cost < 0:
                 # Decimal("0E-7") se do hlasky tiskl doslova (0 kWh krat cena
@@ -1122,6 +1127,7 @@ def calculate_period(period, site=None):
                         card_id, billed_by_card.get(card_id, True), amount, shares.get(card_id),
                         klice_karty, fixed_amounts.get(card_id, Decimal("0")),
                         fixed_units.get(card_id),
+                        sum((v for (c, _b), v in odecteno_by_group.items() if c == card_id), Decimal("0")),
                     ))
                     continue
                 for fakturovat in skupiny:
@@ -1134,9 +1140,10 @@ def calculate_period(period, site=None):
                     radky_karet.append((
                         card_id, fakturovat, fixed + remaining_cost * (share or Decimal("0")), share,
                         klice, fixed, fixed_units_by_group.get((card_id, fakturovat)),
+                        odecteno_by_group.get((card_id, fakturovat), Decimal("0")),
                     ))
 
-            for card_id, is_billed, amount, share, klice_radku, fixed_radku, fixed_units_radku in radky_karet:
+            for card_id, is_billed, amount, share, klice_radku, fixed_radku, fixed_units_radku, odecteno_radku in radky_karet:
                 units = None
                 price_per_unit = None
                 unit_of_measure = None
@@ -1196,6 +1203,7 @@ def calculate_period(period, site=None):
                         "total_cost": str(total_cost),
                         "cost_source": cost_source,
                         "fixed_amount": str(fixed_radku),
+                        "fixed_odecteno": str(odecteno_radku),
                         "remaining_cost": str(remaining_cost),
                         "share": str(share) if share is not None else None,
                         "price_per_unit": str(price_per_unit) if price_per_unit is not None else None,

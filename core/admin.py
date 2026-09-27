@@ -5306,8 +5306,42 @@ class BillingLineAdmin(PodlePronajimatele, DefaultToCurrentPeriodMixin, ModelAdm
                 self.admin_site.admin_view(self.report_pausalni_klienti_view),
                 name="core_billingline_report_pausalni",
             ),
+            path(
+                "report/naklady-pronajimatele/",
+                self.admin_site.admin_view(self.report_naklady_pronajimatele_view),
+                name="core_billingline_report_naklady_pronajimatele",
+            ),
         ]
         return custom + urls
+
+    def report_naklady_pronajimatele_view(self, request):
+        """Report (Reporty v menu): kolik za obdobi nese pronajimatel arealu -
+        pausalni klienti (skutecny podil vs pausaly), energie v najmu, volne
+        plochy a nerozuctovany zbytek. Vypocet v billing/naklady_pronajimatele.py
+        (Daniel 2026-09-27)."""
+        from django.shortcuts import render
+        from django.utils import timezone
+
+        from billing.naklady_pronajimatele import rozsah_arealu
+
+        sites = list(pronajimatele.arealy(request).order_by("name"))
+        site = next((s for s in sites if str(s.pk) == request.GET.get("site")), sites[0] if sites else None)
+        vsechna = list(Period.objects.order_by("year", "month"))
+        rok = timezone.localdate().year
+        letos = [p for p in vsechna if p.year == rok] or vsechna[-12:]
+        od = next((p for p in vsechna if str(p.pk) == request.GET.get("od")), letos[0] if letos else None)
+        do = next((p for p in vsechna if str(p.pk) == request.GET.get("do")), letos[-1] if letos else None)
+        if od and do and (od.year, od.month) > (do.year, do.month):
+            od, do = do, od
+        vybrana = [p for p in vsechna if od and do and (od.year, od.month) <= (p.year, p.month) <= (do.year, do.month)]
+        data = rozsah_arealu(site, vybrana) if site else None
+        context = {
+            **self.admin_site.each_context(request),
+            "title": f"Paušální klienti a náklady pronajímatele – {site.name if site else ''}",
+            "sites": sites, "site": site, "vsechna": vsechna, "od": od, "do": do, "data": data,
+            "opts": self.model._meta,
+        }
+        return render(request, "admin/core/billingline/report_naklady_pronajimatele.html", context)
 
     def report_pausalni_klienti_view(self, request):
         """Report (Reporty v menu): pro KARTY, ktere maji sluzby/energie
