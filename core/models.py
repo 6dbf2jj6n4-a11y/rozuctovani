@@ -895,6 +895,10 @@ class ClientCard(models.Model):
             description=f"{self.description} (kopie)",
             external_id=None,
             is_active=is_active,
+            # Bez nich by kopie mela u vody/TUV vahu 0 - klice s vahou
+            # z Poctu osob ctou jen pole na Karte (Daniel 2026-09-27).
+            pocet_osob=self.pocet_osob,
+            pocet_osob_tuv=self.pocet_osob_tuv,
         )
         new_card.save()
 
@@ -902,6 +906,10 @@ class ClientCard(models.Model):
             CardUnit(
                 card=new_card, unit=cu.unit,
                 rate_per_m2=cu.rate_per_m2, area_m2_override=cu.area_m2_override,
+                # Bez nich by kopie prisla o pevne sjednany najem (KJO,
+                # INNEXUM...) - Daniel 2026-09-27.
+                monthly_rent_override=cu.monthly_rent_override,
+                rent_not_invoiced=cu.rent_not_invoiced,
             )
             for cu in units
         ])
@@ -1631,6 +1639,16 @@ class ServicePoolItem(models.Model):
             "různých vážených skupin s různým významem váhy, např. "
             "'hlavní odběr elektro FM'). Jen informativní, na samotný "
             "výpočet nemá vliv."
+        ),
+    )
+    pausal_tridy = models.BooleanField(
+        "Paušál za celou Třídu", default=False,
+        help_text=(
+            "Položka nemá vlastní náklad - drží jen paušál, který klient platí za "
+            "všechny položky své Třídy dohromady (např. paušál za ostatní služby: "
+            "úklid, odpad, sníh...). Report Paušální klienti pak porovná tenhle "
+            "paušál se skutečnými náklady celé Třídy. Nastav i Výchozí částku 0 Kč, "
+            "jinak se položka bez nákladu v rozúčtování přeskočí."
         ),
     )
 

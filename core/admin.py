@@ -5368,17 +5368,30 @@ class BillingLineAdmin(PodlePronajimatele, DefaultToCurrentPeriodMixin, ModelAdm
             if not pausal_lines:
                 continue
             card_ids_pausal = {line.client_card_id for line in pausal_lines}
-            # Pausaly: fakturovana pevna castka na teze polozce, kde karta
-            # ma nefakturovany podil.
+            # Pausaly po Tridach: (a) fakturovana pevna castka na teze
+            # polozce, kde karta ma nefakturovany podil (elektro, teplo,
+            # voda), (b) cely radek polozky "Pausal za celou Tridu"
+            # (O_PAUSAL - kryje uklid, odpad, snih... dohromady, porovnava
+            # se se skutecnymi naklady cele Tridy). Internet a jine pevne
+            # castky s vlastnim nakladem se sem nepocitaji.
             s_podilem = {(line.client_card_id, line.service_item_id) for line in pausal_lines}
             pausaly = {}
+            pausaly_tridy = {}
             for line in BillingLine.objects.filter(
                 period=period, is_billed=True, client_card_id__in=card_ids_pausal,
-            ):
-                if (line.client_card_id, line.service_item_id) in s_podilem:
+            ).select_related("service_item"):
+                if line.service_item.pausal_tridy:
+                    castka = line.amount
+                elif (line.client_card_id, line.service_item_id) in s_podilem:
                     castka = Decimal((line.calc_detail or {}).get("fixed_amount") or "0")
-                    if castka:
-                        pausaly[line.client_card_id] = pausaly.get(line.client_card_id, Decimal("0")) + castka
+                else:
+                    continue
+                if castka:
+                    cls = line.service_item.invoice_class
+                    pausaly[line.client_card_id] = pausaly.get(line.client_card_id, Decimal("0")) + castka
+                    po_tridach = pausaly_tridy.setdefault(line.client_card_id, {})
+                    po_tridach[cls] = po_tridach.get(cls, Decimal("0")) + castka
+                    used_classes.add(cls)
 
             naklad = sum((line.amount for line in pausal_lines), Decimal("0"))
 
@@ -5413,9 +5426,11 @@ class BillingLineAdmin(PodlePronajimatele, DefaultToCurrentPeriodMixin, ModelAdm
                     card_vynos_amount = card_vynos(detail["card"], period)
                     zdroj = "nájem"
                 vynos += card_vynos_amount
+                pausal_po_tridach = pausaly_tridy.get(detail["card"].id, {})
                 card_rows.append({
                     "card": detail["card"],
                     "by_class": detail["by_class"],
+                    "pausal_by_class": pausal_po_tridach,
                     "naklad": detail["naklad"],
                     "vynos": card_vynos_amount,
                     "zdroj": zdroj,
@@ -5425,9 +5440,11 @@ class BillingLineAdmin(PodlePronajimatele, DefaultToCurrentPeriodMixin, ModelAdm
                 year_row = year_by_card.setdefault(detail["card"].id, {
                     "card": detail["card"], "by_class": {},
                     "naklad": Decimal("0"), "vynos": Decimal("0"), "mesicu": 0,
-                    "zdroje": set(),
+                    "zdroje": set(), "pausal_by_class": {},
                 })
                 year_row["zdroje"].add(zdroj)
+                for cls, amount in pausal_po_tridach.items():
+                    year_row["pausal_by_class"][cls] = year_row["pausal_by_class"].get(cls, Decimal("0")) + amount
                 for cls, amount in detail["by_class"].items():
                     year_row["by_class"][cls] = year_row["by_class"].get(cls, Decimal("0")) + amount
                 year_row["naklad"] += detail["naklad"]
@@ -5463,15 +5480,29 @@ class BillingLineAdmin(PodlePronajimatele, DefaultToCurrentPeriodMixin, ModelAdm
 
         # Castky po Tridach jako SEZNAM v poradi sloupcu - sablona se do
         # dictu klicem ze smycky dostat neumi.
+        # U karty s pausalem je v bunce Tridy i pausal a rozdil (pausal -
+        # skutecny naklad Tridy) - tak je videt, ktery z pausalu je
+        # nastaveny nizko (Daniel 2026-09-27).
+        def bunky(radek):
+            vysledek = []
+            for c in classes:
+                naklad_tridy = radek["by_class"].get(c["key"])
+                pausal_tridy = radek["pausal_by_class"].get(c["key"])
+                vysledek.append({
+                    "naklad": naklad_tridy,
+                    "pausal": pausal_tridy,
+                    "rozdil": (
+                        (pausal_tridy or Decimal("0")) - (naklad_tridy or Decimal("0"))
+                        if pausal_tridy is not None else None
+                    ),
+                })
+            return vysledek
+
         for row in rows:
             for card_row in row["card_rows"]:
-                card_row["class_amounts"] = [
-                    card_row["by_class"].get(c["key"]) for c in classes
-                ]
+                card_row["class_amounts"] = bunky(card_row)
         for year_row in year_rows:
-            year_row["class_amounts"] = [
-                year_row["by_class"].get(c["key"]) for c in classes
-            ]
+            year_row["class_amounts"] = bunky(year_row)
 
         context = {
             **self.admin_site.each_context(request),

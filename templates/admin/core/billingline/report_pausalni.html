@@ -8,7 +8,8 @@
         "v paušálu" v daném období). Náklad = co by je stálo služby, kdyby se fakturovaly
         zvlášť. Výnos = co od nich reálně vybíráme: nájem, nebo paušál, pokud ho karta
         za energie/služby platí. U paušálu záporný rozdíl znamená, že je nastavený nízko
-        a je potřeba ho v dalších obdobích zvednout.
+        a je potřeba ho v dalších obdobích zvednout. V buňce Třídy je u paušálu pod skutečným
+        nákladem i paušál a rozdíl – paušál za ostatní služby se porovnává s náklady celé Třídy.
     </p>
 
     {% if not rows %}
@@ -61,8 +62,8 @@
                                                     <a href="/admin/core/clientcard/{{ cr.card.pk }}/change/">{{ cr.card.client.name }}</a>
                                                     {% if cr.card.description %} <span style="color:#888;">– {{ cr.card.description }}</span>{% endif %}
                                                 </td>
-                                                {% for amount in cr.class_amounts %}
-                                                    <td style="padding:3px 8px; text-align:right;">{% if amount != None %}{{ amount|floatformat:2 }}{% else %}<span style="color:#555;">—</span>{% endif %}</td>
+                                                {% for b in cr.class_amounts %}
+                                                    <td style="padding:3px 8px; text-align:right;">{% include "admin/core/billingline/_pausal_bunka.html" %}</td>
                                                 {% endfor %}
                                                 <td style="padding:3px 8px; text-align:right;">{{ cr.naklad|floatformat:2 }}</td>
                                                 <td style="padding:3px 8px; text-align:right;">{{ cr.vynos|floatformat:2 }} <span style="color:#888; font-size:11px;">{{ cr.zdroj }}</span></td>
@@ -115,8 +116,8 @@
                             {% if yr.card.description %} <span style="color:#888;">– {{ yr.card.description }}</span>{% endif %}
                         </td>
                         <td style="padding:6px 8px; text-align:right; color:#888;">{{ yr.mesicu }}</td>
-                        {% for amount in yr.class_amounts %}
-                            <td style="padding:6px 8px; text-align:right;">{% if amount != None %}{{ amount|floatformat:2 }}{% else %}<span style="color:#555;">—</span>{% endif %}</td>
+                        {% for b in yr.class_amounts %}
+                            <td style="padding:6px 8px; text-align:right;">{% include "admin/core/billingline/_pausal_bunka.html" %}</td>
                         {% endfor %}
                         <td style="padding:6px 8px; text-align:right;">{{ yr.naklad|floatformat:2 }}</td>
                         <td style="padding:6px 8px; text-align:right;">{{ yr.vynos|floatformat:2 }} <span style="color:#888; font-size:11px;">{{ yr.zdroj }}</span></td>
