@@ -788,9 +788,17 @@ class ClientCard(models.Model):
         najemcu a kazdy ma na sve karte svuj dil (F 2.01 na FM je 322 m2,
         z toho Artalo 151, LogicVision 151 a Detektivo 20)."""
         return sum(
-            (Decimal(str(cu.area_m2 or 0)) for cu in self.card_units.select_related("unit")),
+            (Decimal(str(cu.area_m2 or 0)) for cu in self._plochy_karty()),
             Decimal("0"),
         )
+
+    def _plochy_karty(self):
+        """Plochy karty i s Prostorem - z prefetch_related, kdyz je
+        nachystany (sloupec podil v adminu pocita vahy desitek karet
+        najednou), jinak jednim dotazem."""
+        if "card_units" in getattr(self, "_prefetched_objects_cache", {}):
+            return self.card_units.all()
+        return self.card_units.select_related("unit")
 
     @property
     def vytapena_plocha(self):
@@ -800,7 +808,7 @@ class ClientCard(models.Model):
         zapnutym "Vaha = vytapena plocha karty"), takze ho ma smysl videt
         i ve formulari Karty pod sekci Teplo - Daniel 2026-09-05."""
         return sum(
-            (cu.vytapena_plocha for cu in self.card_units.select_related("unit")),
+            (cu.vytapena_plocha for cu in self._plochy_karty()),
             Decimal("0"),
         )
 

@@ -658,7 +658,9 @@ class AllocationKeyInlineBase(TabularInline):
             pamet = self._pamet_sourozencu = {}
         if obj.service_item_id not in pamet:
             podle_meridla = {}
-            qs = AllocationKey.objects.select_related("client_card").filter(
+            qs = AllocationKey.objects.select_related("client_card").prefetch_related(
+                "client_card__card_units__unit",
+            ).filter(
                 service_item_id=obj.service_item_id,
             ).exclude(allocation_type__in=("fixed_amount", "area_price"))
             for klic in qs:
@@ -719,14 +721,18 @@ class AllocationKeyInlineBase(TabularInline):
             )
             if arealy:
                 qs = qs.filter(site__in=arealy)
-            kwargs["queryset"] = qs.order_by("site__name", "name")
+            # select_related("site"): nazev Polozky/Meridla/Prostoru obsahuje
+            # areal - bez nej se v kazdem radku klice dotahoval areal pro
+            # kazdou nabizenou volbu zvlast (Karta s 28 klici = 3 000 dotazu,
+            # 17 s). Daniel 2026-09-27.
+            kwargs["queryset"] = qs.select_related("site").order_by("site__name", "name")
         elif db_field.name == "meter":
             qs = pronajimatele.omez(
                 Meter.objects.filter(meter_type=self.invoice_class), "site", request
             )
             if arealy:
                 qs = qs.filter(site__in=arealy)
-            kwargs["queryset"] = qs.order_by("site__name", "code")
+            kwargs["queryset"] = qs.select_related("site").order_by("site__name", "code")
         elif db_field.name == "unit":
             # Plocha musi byt z arealu Karty - klic na plochu z jineho
             # arealu je nesmysl a v rozuctovani by se projevil az jako
@@ -734,7 +740,7 @@ class AllocationKeyInlineBase(TabularInline):
             qs = pronajimatele.omez(Unit.objects, "site", request)
             if arealy:
                 qs = qs.filter(site__in=arealy)
-            kwargs["queryset"] = qs.order_by("site__name", "name")
+            kwargs["queryset"] = qs.select_related("site").order_by("site__name", "name")
         formfield = super().formfield_for_foreignkey(db_field, request, **kwargs)
         if db_field.name in ("meter", "unit") and hasattr(formfield.widget, "can_delete_related"):
             formfield.widget.can_delete_related = False
@@ -1828,6 +1834,51 @@ class ClientCardActiveFilter(admin.SimpleListFilter):
         return queryset
 
 
+class ClientCardPlatnostFilter(admin.SimpleListFilter):
+    """Platnost Karty podle dat Plati od/do, ne podle priznaku Aktivni.
+    Vychozi je "Platne a budouci" - skoncene Karty (Aktiv Novostav...)
+    v seznamu jen prekazely. Daniel 2026-09-27."""
+    title = "Platnost"
+    parameter_name = "platnost"
+    VYCHOZI = "nekonci"
+
+    def lookups(self, request, model_admin):
+        return (
+            ("nekonci", "Platné a budoucí"),
+            ("dnes", "Platné dnes"),
+            ("budouci", "Začnou později"),
+            ("skoncene", "Skončené"),
+            ("vse", "Všechny"),
+        )
+
+    def value(self):
+        return super().value() or self.VYCHOZI
+
+    def choices(self, changelist):
+        for hodnota, popis in self.lookup_choices:
+            yield {
+                "selected": self.value() == hodnota,
+                "query_string": changelist.get_query_string({self.parameter_name: hodnota}),
+                "display": popis,
+            }
+
+    def queryset(self, request, queryset):
+        from django.db.models import Q
+        from django.utils import timezone
+
+        dnes = timezone.localdate()
+        nekonci = Q(valid_to__isnull=True) | Q(valid_to__gte=dnes)
+        if self.value() == "nekonci":
+            return queryset.filter(nekonci)
+        if self.value() == "dnes":
+            return queryset.filter(nekonci, valid_from__lte=dnes)
+        if self.value() == "budouci":
+            return queryset.filter(valid_from__gt=dnes)
+        if self.value() == "skoncene":
+            return queryset.filter(valid_to__lt=dnes)
+        return queryset
+
+
 @admin.register(ClientCard)
 class ClientCardAdmin(PodlePronajimatele, ModelAdmin):
     # Unfoldova funkce warn_unsaved_form (zaplá globálně na ModelAdmin) rozbíjí
@@ -1852,7 +1903,7 @@ class ClientCardAdmin(PodlePronajimatele, ModelAdmin):
     class Media:
         js = ("core/js/warn_unsaved.js",)
     list_select_related = ("client",)
-    list_filter = (ClientCardClientActiveFilter, ClientCardActiveFilter, ClientCardSiteFilter)
+    list_filter = (ClientCardPlatnostFilter, ClientCardClientActiveFilter, ClientCardActiveFilter, ClientCardSiteFilter)
     autocomplete_fields = ("client",)
     search_fields = ("client__name", "description")
     fieldsets = (
