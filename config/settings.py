@@ -76,7 +76,9 @@ if os.environ.get("DJANGO_DB_ENGINE") == "sqlite3":
     DATABASES = {
         "default": {
             "ENGINE": "django.db.backends.sqlite3",
-            "NAME": BASE_DIR / "db.sqlite3",
+            # Vlastni soubor pro testovaci prostredi (napr. zkouska prace
+            # s Kartami) - at se nemicha s jinou lokalni databazi.
+            "NAME": os.environ.get("DJANGO_SQLITE_PATH") or BASE_DIR / "db.sqlite3",
         }
     }
 elif os.environ.get("DATABASE_URL"):
@@ -170,7 +172,7 @@ SESSION_SAVE_EVERY_REQUEST = True
 # 2027.0), i kdyby se nekdo zapomnel APP_VERSION_YEAR rucne prepsat -
 # dohoda s Danielem 2026-08-15.
 APP_VERSION_YEAR = 2026
-APP_VERSION_SEQUENCE = 317
+APP_VERSION_SEQUENCE = 318
 APP_VERSION = (
     f"{APP_VERSION_YEAR}.{APP_VERSION_SEQUENCE}"
     if date.today().year == APP_VERSION_YEAR

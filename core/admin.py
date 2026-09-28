@@ -138,6 +138,14 @@ class PodlePronajimatele:
         qs = qs.filter(podminka)
         return qs.distinct() if self.potrebuje_distinct else qs
 
+    def delete_queryset(self, request, queryset):
+        # Django odmitne smazat vyber po .distinct() ("Cannot call delete()
+        # after .distinct()") - hromadne mazani ze seznamu Karet padalo.
+        # Maze se tedy podle ID. Daniel 2026-09-28.
+        if self.potrebuje_distinct:
+            queryset = queryset.model.objects.filter(pk__in=list(queryset.values_list("pk", flat=True)))
+        super().delete_queryset(request, queryset)
+
     def formfield_for_foreignkey(self, db_field, request, **kwargs):
         """Nabidnout jen to, co je ve zvolenem kontextu videt.
 
@@ -2803,6 +2811,36 @@ class ClientCardAdmin(PodlePronajimatele, ModelAdmin):
         extra_context["kopie_klient_url"] = f"/admin/core/clientcard/kopie-klient/{object_id}/"
         extra_context["invoice_class_colors"] = InvoiceClassColor.objects.all()
         return super().change_view(request, object_id, form_url, extra_context)
+
+    # Karta pronajimatele (neobsazene plochy) se nemaze, jen ukoncuje datem
+    # Plati do - smazanim by plochy zustaly bez Karty a nove by nebylo
+    # z ceho zalozit (kopiruje se i s klici). Daniel 2026-09-28.
+    def delete_view(self, request, object_id, extra_context=None):
+        from django.shortcuts import redirect
+
+        karta = ClientCard.objects.filter(pk=object_id).select_related("client").first()
+        if karta is not None and karta.client.is_landlord:
+            self.message_user(
+                request,
+                "Kartu pronajímatele nejde smazat - ukonči ji datem Platí do "
+                "(plochy by jinak zůstaly bez Karty).",
+                messages.WARNING,
+            )
+            return redirect(f"/admin/core/clientcard/{object_id}/change/")
+        return super().delete_view(request, object_id, extra_context)
+
+    def delete_queryset(self, request, queryset):
+        ids = list(queryset.values_list("pk", flat=True))
+        pronajimatele_karty = list(ClientCard.objects.filter(pk__in=ids, client__is_landlord=True))
+        if pronajimatele_karty:
+            self.message_user(
+                request,
+                "Karty pronajímatele se nemažou, jen ukončují datem Platí do - vynechány: %s"
+                % ", ".join(k.description for k in pronajimatele_karty),
+                messages.WARNING,
+            )
+        super().delete_queryset(
+            request, ClientCard.objects.filter(pk__in=ids).exclude(client__is_landlord=True))
 
     def response_change(self, request, obj):
         from django.http import HttpResponseRedirect
