@@ -8,12 +8,15 @@ poznamkovemu prehledu k podpisu, ne reprezentativnimu dokumentu.
 Klient/Karta/Platnost od jsou vyrazeny tucne a o neco vetsim pismem
 nez zbytek.
 """
+import math
 from decimal import ROUND_CEILING, Decimal
+from xml.sax.saxutils import escape
 
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import ParagraphStyle
 from reportlab.lib.units import mm
+from reportlab.pdfbase.pdfmetrics import stringWidth
 from reportlab.pdfgen import canvas as _canvas
 from reportlab.platypus import (
     PageBreak, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle,
@@ -59,6 +62,13 @@ class _NumberedCanvas(_canvas.Canvas):
 
 _STYLE_HEADER = ParagraphStyle("CardHeader", fontName=FONT_BOLD, fontSize=_FONT_SIZE, alignment=2)  # 2 = right
 _STYLE_INFO = ParagraphStyle("CardInfo", fontName=FONT_BOLD, fontSize=_FONT_SIZE + 2, leading=_FONT_SIZE + 5)
+# Nazev Karty - nadpis hlavicky, vetsi nez udaje pod nim (Daniel 2026-09-29).
+_STYLE_NAZEV_KARTY = ParagraphStyle(
+    "CardNazev", fontName=FONT_BOLD, fontSize=_FONT_SIZE + 6, leading=_FONT_SIZE + 9,
+)
+# Krok tabulatoru jako ve Wordu (1,25 cm). Udaje v hlavicce zacinaji na
+# nejblizsi zarazce za popiskem - "za dvojteckou odrazit jednim tabem".
+_TAB = 12.5 * mm
 _STYLE_H2 = ParagraphStyle("CardH2", fontName=FONT_BOLD, fontSize=_FONT_SIZE + 1, spaceBefore=4 * mm, spaceAfter=1 * mm)
 _STYLE_SIG_LABEL = ParagraphStyle("CardSigLabel", fontName=FONT_BOLD, fontSize=_FONT_SIZE, alignment=1)  # 1 = center
 _STYLE_SIG_LINE = ParagraphStyle("CardSigLine", fontName=FONT_REGULAR, fontSize=_FONT_SIZE, alignment=1)
@@ -227,6 +237,67 @@ def _planek_stranky(card, sirka, vyska):
     return out
 
 
+def _na_tab(sirka):
+    """Sirka sloupce zaokrouhlena na zarazku tabulatoru - aspon 2 mm
+    mezera za nejdelsim textem, pak skok na nejblizsi nasobek _TAB."""
+    return math.ceil((sirka + 2 * mm) / _TAB) * _TAB
+
+
+def _hlavicka_karty(card):
+    """Hlavicka Karty: zvyrazneny nazev, volny radek, pak udaje.
+
+    Daniel 2026-09-29: klient v hlavicce uz neni (je v nazvu Karty
+    i v podpisech), Platnost od/do na jeden radek, oba pocty osob na
+    jeden radek a hodnoty za dvojteckou odrazene tabem.
+
+    Tabulator v PDF neexistuje - Paragraph ho vykresli jako mezeru. Proto
+    je to tabulka o ctyrech sloupcich (popisek, hodnota, popisek,
+    hodnota) a sirka kazdeho sloupce konci na zarazce tabulatoru; hodnoty
+    pod sebou tak lici stejne jako ve Wordu."""
+    nazev = card.description or f"Karta {card.client}"
+    prvky = [
+        Paragraph(escape(nazev), _STYLE_NAZEV_KARTY),
+        Spacer(1, _STYLE_INFO.leading),  # 1 volny radek
+    ]
+
+    radky = []
+    platnost = ["Platnost od:", format_date_cz(card.valid_from)]
+    if card.valid_to:
+        platnost += ["Platnost do:", format_date_cz(card.valid_to)]
+    radky.append(platnost)
+    # Pocty osob - klice na vodu, TUV a dalsi z nich berou vahu, takze musi
+    # byt na Karte videt (Daniel 2026-09-25). Jsou to dve samostatna pole.
+    osoby = []
+    if card.pocet_osob is not None:
+        osoby += ["Počet osob:", str(card.pocet_osob)]
+    if card.pocet_osob_tuv is not None:
+        osoby += ["Počet osob pro TUV:", str(card.pocet_osob_tuv)]
+    if osoby:
+        radky.append(osoby)
+    # Platcovstvi rozhoduje, jestli se najem dani (viz poznamka pod
+    # Pronajatymi plochami) - Daniel 2026-09-29.
+    radky.append(["Plátce DPH:", "ano" if card.client.vat_payer else "ne"])
+    radky = [r + [""] * (4 - len(r)) for r in radky]
+
+    font, velikost = _STYLE_INFO.fontName, _STYLE_INFO.fontSize
+    sirky = [
+        _na_tab(max(stringWidth(r[i], font, velikost) for r in radky))
+        for i in range(4)
+    ]
+    tabulka = Table(radky, colWidths=sirky, hAlign="LEFT")
+    tabulka.setStyle(TableStyle([
+        ("FONTNAME", (0, 0), (-1, -1), font),
+        ("FONTSIZE", (0, 0), (-1, -1), velikost),
+        ("LEADING", (0, 0), (-1, -1), _STYLE_INFO.leading),
+        ("LEFTPADDING", (0, 0), (-1, -1), 0),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 0),
+        ("TOPPADDING", (0, 0), (-1, -1), 0),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 1),
+    ]))
+    prvky.append(tabulka)
+    return prvky
+
+
 def generate_client_card_document(card, output_path):
     """Vygeneruje Kartu nájemce (Příloha č. 1) pro danou ClientCard jako PDF
     a uloží do output_path (cesta nebo zapisovatelný stream, např. BytesIO)."""
@@ -236,23 +307,7 @@ def generate_client_card_document(card, output_path):
     )
     elements = [Paragraph("Příloha č. 1 ke Smlouvě o nájmu", _STYLE_HEADER), Spacer(1, 4 * mm)]
 
-    info_lines = [
-        f"Klient: {card.client}",
-        # Platcovstvi rozhoduje, jestli se najem dani (viz poznamka pod
-        # Pronajatymi plochami) - Daniel 2026-09-29.
-        f"Plátce DPH: {'ano' if card.client.vat_payer else 'ne'}",
-        f"Karta: {card.description or f'Karta {card.client}'}",
-        f"Platnost od: {format_date_cz(card.valid_from)}",
-    ]
-    if card.valid_to:
-        info_lines.append(f"Platnost do: {format_date_cz(card.valid_to)}")
-    # Pocty osob - klice na vodu, TUV a dalsi z nich berou vahu, takze musi
-    # byt na Karte videt (Daniel 2026-09-25). Jsou to dve samostatna pole.
-    if card.pocet_osob is not None:
-        info_lines.append(f"Počet osob: {card.pocet_osob}")
-    if card.pocet_osob_tuv is not None:
-        info_lines.append(f"Počet osob pro TUV: {card.pocet_osob_tuv}")
-    elements.append(Paragraph("<br/>".join(info_lines), _STYLE_INFO))
+    elements.extend(_hlavicka_karty(card))
 
     # --- Plochy ---
     elements.append(Paragraph("Pronajaté plochy", _STYLE_H2))
