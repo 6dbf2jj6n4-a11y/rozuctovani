@@ -2129,24 +2129,9 @@ class ClientCardAdmin(PodlePronajimatele, ModelAdmin):
 
     @staticmethod
     def _plocha_se_dani(card_unit, klient):
-        """Da se najem za tuhle Plochu zdanit?
-
-        Najem je podle §56a od DPH osvobozeny a zdanit ho lze jen tehdy,
-        kdyz jsou platci OBE strany - pronajimatel, ktery sam platcem
-        neni, DPH naucovat nemuze a nema z ceho (areal DV je vedeny na
-        fyzickou osobu neplatce). U stavby pro bydleni to neplati vubec:
-        byt se podle §56a odst. 3 zdanit neda ani platci.
-
-        Rozhoduje se za plochu, ne za kartu - karta muze mit plochy ve
-        dvou arealech s ruznymi pronajimateli, nebo byt i nebytovy prostor
-        zaroven. Viz Daniel 2026-08-24 (klient POKUS)."""
-        unit = card_unit.unit
-        pronajimatel = unit.site.landlord if unit.site.landlord_id else None
-        return bool(
-            klient.vat_payer
-            and pronajimatel and pronajimatel.vat_payer
-            and not unit.is_residential
-        )
+        """Viz CardUnit.najem_lze_zdanit - pravidlo zije na modelu, aby ho
+        sdilela i Karta v PDF."""
+        return card_unit.najem_lze_zdanit(klient)
 
     def _zdanitelny_podil(self, card_units, klient):
         """Jaka cast najmu za dane Plochy se dani (0 az 1).

@@ -2761,6 +2761,32 @@ class CardUnit(models.Model):
             return self.area_m2_override
         return self.unit.area_m2
 
+    def najem_lze_zdanit(self, klient=None):
+        """Da se najem za tuhle Plochu zdanit?
+
+        Najem je podle §56a od DPH osvobozeny a zdanit ho lze jen tehdy,
+        kdyz jsou platci OBE strany - pronajimatel, ktery sam platcem
+        neni, DPH naucovat nemuze a nema z ceho (areal DV je vedeny na
+        fyzickou osobu neplatce). U stavby pro bydleni to neplati vubec:
+        byt se podle §56a odst. 3 zdanit neda ani platci.
+
+        Rozhoduje se za plochu, ne za kartu - karta muze mit plochy ve
+        dvou arealech s ruznymi pronajimateli, nebo byt i nebytovy prostor
+        zaroven. Viz Daniel 2026-08-24 (klient POKUS).
+
+        Presunuto sem z core.admin (ClientCardAdmin._plocha_se_dani), aby
+        stejne pravidlo pouzivala i Karta v PDF - poznamka "najemne je bez
+        DPH" se tiskne podle nej. `klient` jde predat, kdyz ho volajici uz
+        ma nacteneho."""
+        klient = klient or self.card.client
+        unit = self.unit
+        pronajimatel = unit.site.landlord if unit.site.landlord_id else None
+        return bool(
+            klient.vat_payer
+            and pronajimatel and pronajimatel.vat_payer
+            and not unit.is_residential
+        )
+
     @property
     def vytapena_plocha(self):
         """Kolik m² se topí z TÉHLE plochy na kartě - 0 u nevytápěné.

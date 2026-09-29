@@ -63,6 +63,11 @@ _STYLE_H2 = ParagraphStyle("CardH2", fontName=FONT_BOLD, fontSize=_FONT_SIZE + 1
 _STYLE_SIG_LABEL = ParagraphStyle("CardSigLabel", fontName=FONT_BOLD, fontSize=_FONT_SIZE, alignment=1)  # 1 = center
 _STYLE_SIG_LINE = ParagraphStyle("CardSigLine", fontName=FONT_REGULAR, fontSize=_FONT_SIZE, alignment=1)
 _STYLE_SIG_NAME = ParagraphStyle("CardSigName", fontName=FONT_REGULAR, fontSize=_FONT_SIZE, alignment=1)
+# Poznamky pod tabulkami (DPH) - obycejne pismo, maly odstup od tabulky.
+_STYLE_POZNAMKA = ParagraphStyle(
+    "CardPoznamka", fontName=FONT_REGULAR, fontSize=_FONT_SIZE,
+    leading=_FONT_SIZE + 3, spaceBefore=1.5 * mm,
+)
 _SIG_GAP = 3 * _FONT_SIZE * 1.2  # >= 3 blank lines between "Pronajímatel/Nájemce" heading and the signature line
 
 _TABLE_BASE_STYLE = [
@@ -233,6 +238,9 @@ def generate_client_card_document(card, output_path):
 
     info_lines = [
         f"Klient: {card.client}",
+        # Platcovstvi rozhoduje, jestli se najem dani (viz poznamka pod
+        # Pronajatymi plochami) - Daniel 2026-09-29.
+        f"Plátce DPH: {'ano' if card.client.vat_payer else 'ne'}",
         f"Karta: {card.description or f'Karta {card.client}'}",
         f"Platnost od: {format_date_cz(card.valid_from)}",
     ]
@@ -303,6 +311,14 @@ def generate_client_card_document(card, output_path):
         ("ALIGN", (1, 0), (-1, -1), "RIGHT"),
     ]))
     elements.append(units_table)
+    # Najem je podle §56a osvobozeny a dani se jen, kdyz jsou platci obe
+    # strany a nejde o byt (CardUnit.najem_lze_zdanit). Jen tehdy ma
+    # poznamka smysl - u neplatce by "bez DPH" budilo dojem, ze se DPH
+    # jeste pripocte, a to nejde. Staci jedna zdanitelna plocha: karta
+    # s bytem i kancelari (vzacne) ma cenu kancelare taky bez DPH.
+    if any(cu.najem_lze_zdanit(card.client)
+           for cu in card.card_units.select_related("unit__site__landlord")):
+        elements.append(Paragraph("Cena nájmu je uvedena bez DPH.", _STYLE_POZNAMKA))
 
     # --- Klíče - jedna souvislá tabulka, třídy oddělené silnější linkou ---
     elements.append(Paragraph("Klíče rozúčtování služeb", _STYLE_H2))
@@ -365,6 +381,10 @@ def generate_client_card_document(card, output_path):
         keys_table = Table(key_rows, repeatRows=1, hAlign="LEFT")
         keys_table.setStyle(TableStyle(keys_style))
         elements.append(keys_table)
+    # Plati pro kazdou Kartu bez ohledu na platcovstvi - Daniel 2026-09-29:
+    # "Karty najemcu musi obsahovat poznamku, ze vsechny ceny sluzeb jsou
+    # uvedeny bez DPH."
+    elements.append(Paragraph("Všechny ceny služeb jsou uvedeny bez DPH.", _STYLE_POZNAMKA))
 
     # --- Podpisy: datum podpisu / nadpis strany / čára / jméno zástupce pod čarou ---
     elements.append(Spacer(1, 10 * mm))
