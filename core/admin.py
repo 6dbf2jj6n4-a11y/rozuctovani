@@ -2600,7 +2600,13 @@ class ClientCardAdmin(PodlePronajimatele, ModelAdmin):
             return self._presmeruj_cizi_kartu(request)
         buf = BytesIO()
         generate_client_card_document(card, buf)
-        filename = f"karta_najemce_{card.client.code or card.client.pk}_{card.pk}.pdf"
+        # Na konci Platnost od (ddmmrrrr) misto id karty - z nazvu souboru
+        # je hned poznat, od kdy karta plati, a karty jednoho klienta se
+        # v adresari seradi po sobe. Daniel 2026-09-29.
+        filename = (
+            f"karta_najemce_{card.client.code or card.client.pk}_"
+            f"{card.valid_from.strftime('%d%m%Y')}.pdf"
+        )
         card.document.save(filename, ContentFile(buf.getvalue()), save=True)
 
         response = HttpResponse(buf.getvalue(), content_type="application/pdf")
