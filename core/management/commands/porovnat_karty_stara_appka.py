@@ -2,7 +2,7 @@
 najem, klice, pausaly. Jen cte, nic nezapisuje. Daniel 2026-09-27/29.
 
 Export ma sloupce: Karta, DatumOd, Kod, TYP_Polozky, PevnaKC, Jednotek,
-Plocha, m2, KCzaM, Fakturovat, Trida. Pevne castky jsou ROCNI (PevnaKC/12),
+Plocha, m2, KCzaM, Fakturovat, Trida (a volitelne IDFIRMA = kod klienta). Pevne castky jsou ROCNI (PevnaKC/12),
 najem = m2 x KCzaM / 12, Fakturovat -1 = ano.
 
 Parovani Karet: podle kodu klienta v nazvu ("Karta GEHER 2026 - 1" ->
@@ -73,13 +73,16 @@ class Command(BaseCommand):
         for nazev in sorted(po_kartach):
             rr = po_kartach[nazev]
             od = rr[0][1].date() if hasattr(rr[0][1], "date") else rr[0][1]
-            karta = self._najdi(nazev, od, dnes, site)
+            idfirma = (rr[0][11] or "").strip() if len(rr[0]) > 11 else ""
+            karta = self._najdi(nazev, od, dnes, site, idfirma)
             if karta is None:
                 self.stdout.write(self.style.WARNING(f"\n=== {nazev} (od {od:%d.%m.%Y}) → u nás NENÍ"))
                 celkem += 1
                 continue
             sparovane.add(karta.pk)
             rozdily = self._porovnej(rr, karta, I)
+            if idfirma and idfirma != karta.client.code:
+                rozdily.insert(0, f"IDFIRMA stará {idfirma} | kód klienta u nás {karta.client.code}")
             celkem += len(rozdily)
             self.stdout.write(f"\n=== {nazev} (od {od:%d.%m.%Y}) → #{karta.pk} {karta.client.name} "
                               f"{karta.description} [{karta.valid_from} – {karta.valid_to or '…'}]")
@@ -96,12 +99,15 @@ class Command(BaseCommand):
                                   f"{' | pronajímatel' if k.client_id == site.landlord_id else ''}")
         self.stdout.write(f"\nrozdílů celkem: {celkem}")
 
-    def _najdi(self, nazev, od, dnes, site):
+    def _najdi(self, nazev, od, dnes, site, idfirma=""):
         m = re.match(r"Karta\s+(\S+)\s", nazev)
         kod = m.group(1) if m else ""
-        # klient podle nasi Karty se stejnym popisem, pak podle kodu
-        stejna = ClientCard.objects.filter(description=nazev).select_related("client").first()
-        klient = stejna.client if stejna else Client.objects.filter(code=kod).first()
+        # klient podle IDFIRMA (= kod klienta = kod v ABRA), pak podle nasi
+        # Karty se stejnym popisem, pak podle kodu v nazvu Karty
+        klient = Client.objects.filter(code=idfirma).first() if idfirma else None
+        if klient is None:
+            stejna = ClientCard.objects.filter(description=nazev).select_related("client").first()
+            klient = stejna.client if stejna else Client.objects.filter(code=kod).first()
         if klient is None and kod in ("CALAMARI", "CSE"):
             klient = site.landlord
         if klient is None:
