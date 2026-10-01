@@ -691,6 +691,11 @@ def surcharge_split(share, units, remaining_cost, reported_units, total_consumpt
     }
 
 
+def _datum(d):
+    """31. 8. 2026 - ceske datum do hlaseni (drive se tiskl ISO 2026-08-31)."""
+    return f"{d.day}. {d.month}. {d.year}" if d else ""
+
+
 def sync_card_activity(period, site=None):
     """Pred vypoctem rozuctovani automaticky zkontroluje a opravi
     ClientCard.is_active podle Platnost od/do vuci pocitanemu obdobi -
@@ -726,7 +731,7 @@ def sync_card_activity(period, site=None):
     for card in to_deactivate:
         card.is_active = False
         card.save(update_fields=["is_active"])
-        results.append(("success", f"{card.client} ({card}): automaticky DEAKTIVOVÁNO (platnost do {card.valid_to})"))
+        results.append(("success", f"{card.client} ({card.description}): automaticky DEAKTIVOVÁNO (platnost do {_datum(card.valid_to)})"))
 
     to_check = [
         c for c in cards
@@ -742,7 +747,7 @@ def sync_card_activity(period, site=None):
         if not card.client.is_active:
             results.append((
                 "warning",
-                f"{card.client} ({card}): platnost od {card.valid_from} už začala, ale klient "
+                f"{card.client} ({card.description}): platnost od {_datum(card.valid_from)} už začala, ale klient "
                 f"je Neaktivní - karta zůstává Neaktivní. Až nájem opravdu začne, zapni "
                 f"nejdřív klienta."
             ))
@@ -751,11 +756,11 @@ def sync_card_activity(period, site=None):
         if conflict is None:
             card.is_active = True
             card.save(update_fields=["is_active"])
-            results.append(("success", f"{card.client} ({card}): automaticky AKTIVOVÁNO (platnost od {card.valid_from})"))
+            results.append(("success", f"{card.client} ({card.description}): automaticky AKTIVOVÁNO (platnost od {_datum(card.valid_from)})"))
         else:
             results.append((
                 "warning",
-                f"{card.client} ({card}): platnost od {card.valid_from} už začala, ale je Neaktivní - "
+                f"{card.client} ({card.description}): platnost od {_datum(card.valid_from)} už začala, ale je Neaktivní - "
                 f"NEaktivováno automaticky, protože koliduje s aktivní kartou {conflict} - zkontroluj ručně."
             ))
 
