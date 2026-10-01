@@ -569,8 +569,12 @@ class Contract(models.Model):
         help_text="Např. 'jednatel', 'na základě plné moci'.",
     )
 
+    # Soubor na Cloudflare R2, ne na disk kontejneru - ten se pri kazdem
+    # nasazeni vymaze a smlouvy (i rucne upravene a nahrane) mizely.
+    # Daniel 2026-10-01.
     document = models.FileField(
-        "Vygenerovaný dokument", upload_to="smlouvy/", null=True, blank=True
+        "Dokument smlouvy", upload_to="smlouvy/", null=True, blank=True,
+        storage=R2MediaStorage(),
     )
     note = models.TextField("Poznámka", blank=True)
 
@@ -635,8 +639,10 @@ class ClientCard(models.Model):
             "s klíči na TUV musí být vyplněné, i když je číslo stejné."
         ),
     )
+    # Na R2 ze stejneho duvodu jako Contract.document (Daniel 2026-10-01).
     document = models.FileField(
-        "Vygenerovaný dokument (Karta nájemce)", upload_to="karty/", null=True, blank=True
+        "Vygenerovaný dokument (Karta nájemce)", upload_to="karty/", null=True, blank=True,
+        storage=R2MediaStorage(),
     )
     po_number_rent = models.CharField(
         "Číslo objednávky - nájemné", max_length=100, blank=True,
