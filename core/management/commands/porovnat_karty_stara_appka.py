@@ -26,7 +26,9 @@ from core.models import Client, ClientCard, ServicePoolItem, Site
 POLOZKY = {
     "ODKL_SNEHU": "odklizení sněhu v zimních obdobích", "ODPADY_SP": "odvoz komunálního odpadu NJ",
     "UKLID_SPOL": "úklidové služby společných prostor NJ", "OSTRAHA": "ostraha areálu NJ",
-    "POZ_OCHR": "pult ochrany ALSYKO", "EZS": "pult ochrany ALSYKO",
+    # EZS = pult ochrany ALSYKO (ma jen ONE KLIMA). POZ_OCHR je pozarni
+    # ochrana / revize - u CALAMARI pevna castka 0 Kc, NE pult (Daniel 2026-10-01).
+    "POZ_OCHR": "revize hasících přístrojů", "EZS": "pult ochrany ALSYKO",
 }
 PAUSALY = {"E_PAUSAL": "hlavní odběr elektro NJ", "T_PAUSAL": "hlavní odběr teplo NJ",
            "W_PAUSAL": "hlavní odběr voda NJ", "O_PAUSAL": "paušál ostatní služby NJ"}
@@ -61,6 +63,10 @@ class Command(BaseCommand):
             raise CommandError("Areál %s neexistuje." % o["areal"])
         ws = openpyxl.load_workbook(o["soubor"], data_only=True).active
         radky = [r for r in list(ws.iter_rows(values_only=True))[1:] if r and r[0]]
+        # radky bez penez se neporovnavaji (pevna castka 0 Kc, plocha x 0 Kc/m2)
+        radky = [r for r in radky if not (
+            (r[3] == "PEVNA_KC" and not _d(r[4])) or (r[3] == "K_PLOSE" and r[2] != "W_SRAZKOV" and not _d(r[8]))
+        )]
         po_kartach = defaultdict(list)
         for r in radky:
             po_kartach[r[0].strip()].append(r)
@@ -215,6 +221,8 @@ class Command(BaseCommand):
             r = next((x for x in rr if x[2] == kod), None)
             pol = I.get(nazev)
             k = next((k for k in klice if pol and k.service_item_id == pol.id), None)
+            if k is not None and not (k.vaha or 0):
+                k = None  # nulova vaha (revize bez poctu pristroju) - nic neovlivni
             if r is None:
                 if k is not None and nazev not in videno and not any(x[2] in (kk for kk, nn in POLOZKY.items() if nn == nazev) for x in rr):
                     out.append(f"{nazev}: jen u nás (váha {k.vaha}, fakt={_f(k.is_billed)})")
