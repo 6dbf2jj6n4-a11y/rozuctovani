@@ -208,7 +208,19 @@ class DuplicateModelAdminMixin:
 
     @admin.action(description="Kopírovat vybrané záznamy")
     def duplicate_selected(self, request, queryset):
-        count = 0
+        """Po kopii vede rovnou k ni: jedna kopie -> otevre se jeji
+        formular, vic kopii -> hlaska s odkazem na kazdou.
+
+        Driv akce jen ohlasila "Zkopirovano X zaznamu" a nechala uzivatele
+        v seznamu - u Meridel kopie mela prazdny Kod, tedy prazdny prvni
+        sloupec s odkazem, takze nebyla k nalezeni a vypadalo to, ze se nic
+        nezkopirovalo. Daniel 2026-10-01. Kopie se stejne vzdy dela proto,
+        aby se hned upravila."""
+        from django.http import HttpResponseRedirect
+        from django.urls import reverse
+        from django.utils.html import format_html, format_html_join
+
+        kopie = []
         for original in queryset:
             copy = self.model.objects.get(pk=original.pk)
             copy.pk = None
@@ -216,8 +228,32 @@ class DuplicateModelAdminMixin:
             self.prepare_duplicate(copy, original)
             copy.save()
             self.after_duplicate(copy, original)
-            count += 1
-        self.message_user(request, f"Zkopírováno {count} záznam(ů) - zkontroluj a uprav podle potřeby.", level=messages.SUCCESS)
+            kopie.append(copy)
+        if not kopie:
+            return None
+
+        meta = self.model._meta
+        adresa = lambda obj: reverse(
+            f"admin:{meta.app_label}_{meta.model_name}_change", args=[obj.pk]
+        )
+        if len(kopie) == 1:
+            self.message_user(
+                request,
+                f"Vytvořena kopie „{kopie[0]}“ - zkontroluj a uprav ji.",
+                level=messages.SUCCESS,
+            )
+            return HttpResponseRedirect(adresa(kopie[0]))
+        self.message_user(
+            request,
+            format_html(
+                "Zkopírováno {} záznamů - zkontroluj a uprav je: {}",
+                len(kopie),
+                format_html_join(", ", '<a href="{}">{}</a>',
+                                 ((adresa(k), str(k)) for k in kopie)),
+            ),
+            level=messages.SUCCESS,
+        )
+        return None
 
     def prepare_duplicate(self, copy, original):
         """Vychozi chovani: nic dalsiho needit - cisty field-by-field klon."""
@@ -2908,7 +2944,9 @@ class MeterAdmin(PodlePronajimatele, DuplicateModelAdminMixin, ModelAdmin):
 
     @display(description="Kód", ordering="code")
     def code_colored(self, obj):
-        return colored_by_meter_type(obj.code, obj.meter_type)
+        # Kod je odkaz na meridlo (prvni sloupec seznamu) - u meridla bez
+        # kodu by byl prazdny a radek by nemel na co kliknout.
+        return colored_by_meter_type(obj.code or "— bez kódu —", obj.meter_type)
 
     @display(description="Podřízená měřidla")
     def podrizena_meridla(self, obj):
@@ -2995,13 +3033,26 @@ class MeterAdmin(PodlePronajimatele, DuplicateModelAdminMixin, ModelAdmin):
         )
 
     def prepare_duplicate(self, copy, original):
-        """Kod se NEKOPIRUJE (necha se prazdny) - je to kratky kod pro
-        odkazovani ve vzorcich virtualnich meridel (Meter.formula), dve
-        meridla se stejnym kodem by byla nejednoznacna (viz
-        Meter._formula_tokens - Meter.objects.filter(site=..., code=...)
-        by mohlo vratit spatne meridlo)."""
+        """Kopie dostane vlastni kod <puvodni>_KOPIE (pripadne _KOPIE2,
+        _KOPIE3 ...), ne stejny a ne prazdny.
+
+        Stejny byt nesmi: kod je odkaz ve vzorcich virtualnich meridel
+        a v ramci arealu musi byt jedinecny (omezeni
+        meridlo_kod_jedinecny_v_arealu). Prazdny byl drive - jenze Kod je
+        v seznamu prvni sloupec s odkazem, takze kopie bez nej nemela na
+        co kliknout, nedala se dohledat a vypadalo to, ze se nic
+        nezkopirovalo (Daniel 2026-10-01). Kod s _KOPIE je videt hned
+        a sam rika, ze ho jeste je potreba prepsat."""
         copy.name = f"{original.name} (kopie)"
-        copy.code = ""
+        zaklad = f"{original.code or 'MERIDLO'}_KOPIE"
+        obsazene = set(
+            Meter.objects.filter(site_id=original.site_id, code__startswith=zaklad)
+            .values_list("code", flat=True)
+        )
+        kod, poradi = zaklad, 2
+        while kod in obsazene:
+            kod, poradi = f"{zaklad}{poradi}", poradi + 1
+        copy.code = kod
     # U virtualniho meridla se spotreba pocita ze vzorce (viz
     # Meter.consumption_for) - "Zpusob zadavani odectu" se pak vubec
     # nepouziva, takze pole schovame (Unfold Alpine.js x-show).
