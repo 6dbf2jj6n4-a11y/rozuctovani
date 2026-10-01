@@ -23,15 +23,6 @@ from django.utils import timezone
 
 from core.models import Client, ClientCard, ServicePoolItem, Site
 
-POLOZKY = {
-    "ODKL_SNEHU": "odklizení sněhu v zimních obdobích", "ODPADY_SP": "odvoz komunálního odpadu NJ",
-    "UKLID_SPOL": "úklidové služby společných prostor NJ", "OSTRAHA": "ostraha areálu NJ",
-    # EZS = pult ochrany ALSYKO (ma jen ONE KLIMA). POZ_OCHR je pozarni
-    # ochrana / revize - u CALAMARI pevna castka 0 Kc, NE pult (Daniel 2026-10-01).
-    "POZ_OCHR": "revize hasících přístrojů", "EZS": "pult ochrany ALSYKO",
-}
-PAUSALY = {"E_PAUSAL": "hlavní odběr elektro NJ", "T_PAUSAL": "hlavní odběr teplo NJ",
-           "W_PAUSAL": "hlavní odběr voda NJ", "O_PAUSAL": "paušál ostatní služby NJ"}
 
 
 def _d(x):
@@ -72,6 +63,7 @@ class Command(BaseCommand):
             po_kartach[r[0].strip()].append(r)
         I = {p.name: p for p in ServicePoolItem.objects.filter(site=site)}
         dnes = date.fromisoformat(o["k_datu"]) if o.get("k_datu") else timezone.localdate()
+        self._k_datu = dnes
         self.stdout.write(f"Karty platné k {dnes:%d. %m. %Y}")
         sparovane = set()
         celkem = 0
@@ -125,22 +117,64 @@ class Command(BaseCommand):
                  if k.valid_from <= k_datu and (k.valid_to is None or k.valid_to >= k_datu)]
         return sorted(karty, key=lambda k: k.valid_from)[-1] if karty else None
 
+    def _polozka(self, I, *zacatky):
+        for z in zacatky:
+            for nazev, pol in I.items():
+                if nazev.startswith(z):
+                    return pol
+        return None
+
     def _porovnej(self, rr, karta, I):
+        """Obecne pro NJ i FM: klice na meridlech podle kodu meridla, sluzby
+        podle nazvu polozky, pausaly a internet po Kc za mesic."""
+        from billing.engine import ABSOLUTE_AMOUNT_TYPES, _fixed_amount_for
+        from core.models import Period
+
         out = []
         klice = list(karta.allocation_keys.select_related("service_item", "meter"))
-        EL, TE, VO = I.get("hlavní odběr elektro NJ"), I.get("hlavní odběr teplo NJ"), I.get("hlavní odběr voda NJ")
+        trida = {
+            "ELEKTRO": self._polozka(I, "hlavní odběr elektro"),
+            "TEPLO": self._polozka(I, "hlavní odběr teplo"),
+            "VODA": self._polozka(I, "hlavní odběr voda"),
+        }
+        SRAZ = self._polozka(I, "srážkové")
+        INTERNET = self._polozka(I, "připojení k internetu")
+        EAN668 = self._polozka(I, "odběr EAN 668")
+        O_PAUSAL = next((p for p in I.values() if p.pausal_tridy), None)
+        SLUZBY = {
+            "ODKL_SNEHU": "odklizení sněhu", "ODPADY_SP": "odvoz komunál", "OSTRAHA": "ostraha areálu",
+            "UKLID_SPOL": "úklidové služby společných", "UKLID_A": "úklidové služby budova A",
+            "UKLID_B": "úklidové služby budova B", "UKLID_D": "úklidové služby budova D",
+            "UKLID_N": "úklidové služby budova N", "SERVIS_VYT": "servis výtahů",
+            "POZ_OCHR": "revize hasících", "EZS": "pult ochrany",
+        }
+        PAUSAL_TRIDA = {"E_PAUSAL": "ELEKTRO", "E_PAUS": "ELEKTRO", "T_PAUSAL": "TEPLO",
+                        "W_PAUSAL": "VODA", "O_PAUSAL": None}
+        obdobi = Period.objects.filter(year=self._k_datu.year, month=self._k_datu.month).first()
 
-        # plochy a najem
-        stare = {}
-        for r in rr:
-            if r[10] == "NAJEM":
-                stare[r[2]] = r
+        # --- plochy a najem
+        stare = {r[2]: r for r in rr if r[10] == "NAJEM"}
         nase = {cu.unit.name: cu for cu in karta.card_units.select_related("unit")}
         for jmeno in list(stare):
-            if jmeno not in nase and jmeno.startswith("A ") and "AB " + jmeno[2:] in nase:
+            if jmeno in nase:
+                continue
+            if jmeno.startswith("A ") and "AB " + jmeno[2:] in nase:
                 stare["AB " + jmeno[2:]] = stare.pop(jmeno)
+                continue
+            # stara aplikace nazev plochy orezava na 10 znaku ("F 2.01 SKL")
+            kandidati = [n for n in nase if n not in stare and n.startswith(jmeno.rstrip())]
+            if not kandidati:
+                kandidati = [n for n in nase if n not in stare and jmeno.startswith(n + " ")]
+            if len(kandidati) == 1:
+                stare[kandidati[0]] = stare.pop(jmeno)
         for u in sorted(set(stare) | set(nase)):
             r, cu = stare.get(u), nase.get(u)
+            if r is not None and cu is not None and u.startswith("VÝTAH"):
+                # vytah ma ve stare aplikaci "1 m2" jako pocet, u nas 0 m2 - porovna se jen najem
+                najem = _kc(_d(r[7]) * _d(r[8]) / 12)
+                if abs(najem - (cu.monthly_rent or D(0))) > D("0.5"):
+                    out.append(f"plocha {u}: nájem stará {najem} Kč/měs | naše {cu.monthly_rent}")
+                continue
             if cu is None:
                 out.append(f"plocha {u}: CHYBÍ u nás (stará {r[7]} m², {_kc(_d(r[7]) * _d(r[8]) / 12)} Kč/měs)")
                 continue
@@ -153,90 +187,83 @@ class Command(BaseCommand):
             if abs(najem - (cu.monthly_rent or D(0))) > D("0.5"):
                 out.append(f"plocha {u}: nájem stará {najem} Kč/měs | naše {cu.monthly_rent}")
 
-        # elektro po meridlech
-        e_stare = {r[2]: r for r in rr if r[10] == "ELEKTRO" and r[3] == "K_CELKU"}
-        e_nase = {k.meter.code: k for k in klice if k.meter and EL and k.service_item_id == EL.id}
-        for kod in sorted(set(e_stare) | set(e_nase)):
-            r, k = e_stare.get(kod), e_nase.get(kod)
-            if k is None:
-                out.append(f"elektro {kod}: CHYBÍ u nás (stará váha {r[5]}, fakt={_f(r[9])})")
-            elif r is None:
-                out.append(f"elektro {kod}: jen u nás (váha {k.vaha}, fakt={_f(k.is_billed)})")
-            elif _d(r[5]) != (k.vaha or 0) or bool(r[9]) != k.is_billed:
-                out.append(f"elektro {kod}: stará {r[5]} fakt={_f(r[9])} | naše {k.vaha} fakt={_f(k.is_billed)}")
-
-        # pausaly a internet
-        for kod, nazev in PAUSALY.items():
-            r = next((x for x in rr if x[2] == kod), None)
-            pol = I.get(nazev)
-            ks = [k for k in klice if pol and k.service_item_id == pol.id and k.allocation_type == "fixed_amount"]
-            nase_kc = sum((k.value or 0 for k in ks), D(0))
-            if r and (not ks or _kc(nase_kc) != _kc(_d(r[4]) / 12) or any(k.is_billed != bool(r[9]) for k in ks)):
-                out.append(f"paušál {kod}: stará {_kc(_d(r[4]) / 12)} Kč/měs fakt={_f(r[9])} | naše {_kc(nase_kc) if ks else '–'}")
-            elif not r and ks:
-                out.append(f"paušál {kod}: jen u nás {_kc(nase_kc)} Kč/měs")
-        r = next((x for x in rr if x[2] == "INTERNET" and _d(x[4])), None)
-        pol = I.get("připojení k internetu NONSTOP")
-        k = next((k for k in klice if pol and k.service_item_id == pol.id), None)
-        if r and (k is None or _kc(k.value) != _kc(_d(r[4]) / 12) or k.is_billed != bool(r[9])):
-            out.append(f"internet: stará {_kc(_d(r[4]) / 12)} fakt={_f(r[9])} | naše {k and _kc(k.value)} fakt={k and _f(k.is_billed)}")
-        elif not r and k:
-            out.append(f"internet: jen u nás {_kc(k.value)} fakt={_f(k.is_billed)}")
-
-        # teplo: T_CELKEM = vytapene m2 (T_INDIVIDUALNI), T_SPOLECNA = osoby
-        for kod, mer in (("T_CELKEM", "T_INDIVIDUALNI"), ("T_SPOLECNA", "T_SPOLECNA")):
-            r = next((x for x in rr if x[2] == kod and _d(x[5])), None)
-            k = next((k for k in klice if TE and k.service_item_id == TE.id and k.meter and k.meter.code == mer), None)
-            if r and k is None:
-                out.append(f"teplo {kod}: stará {r[5]} fakt={_f(r[9])} | u nás klíč {mer} není")
-            elif k is not None and r is None:
-                out.append(f"teplo {kod}: jen u nás {mer} {k.vaha} fakt={_f(k.is_billed)}")
-            elif r and ((k.vaha or 0) != _d(r[5]) or k.is_billed != bool(r[9])):
-                out.append(f"teplo {kod}: stará {r[5]} fakt={_f(r[9])} | naše {k.vaha} fakt={_f(k.is_billed)}")
-
-        # voda
-        r = next((x for x in rr if x[2] == "W_CELKEM"), None)
-        k = next((k for k in klice if VO and k.service_item_id == VO.id and k.allocation_type != "fixed_amount"), None)
-        if r and k is None:
-            out.append(f"voda: CHYBÍ u nás (stará {r[5]} osob)")
-        elif r and ((k.vaha or 0) != _d(r[5]) or k.is_billed != bool(r[9])):
-            out.append(f"voda: stará {r[5]} fakt={_f(r[9])} | naše {k.vaha} ({k.weight_source or 'ručně'}) fakt={_f(k.is_billed)}")
-        elif k is not None and r is None:
-            out.append(f"voda: jen u nás {k.vaha}")
-
-        # srazkove
-        r = next((x for x in rr if x[2] == "W_SRAZKOV"), None)
-        pol = I.get("srážkové vody NJ")
-        k = next((k for k in klice if pol and k.service_item_id == pol.id), None)
-        if r and k is None:
-            out.append(f"srážkové: CHYBÍ u nás ({r[7]} m²)")
-        elif r and ((k.vaha or 0) != _d(r[7]) or k.is_billed != bool(r[9])):
-            out.append(f"srážkové: stará {r[7]} m² fakt={_f(r[9])} | naše {k.vaha} fakt={_f(k.is_billed)}")
-        elif k is not None and r is None:
-            out.append(f"srážkové: jen u nás {k.vaha} m²")
-
-        # ostatni sluzby
-        videno = set()
-        for kod, nazev in POLOZKY.items():
-            r = next((x for x in rr if x[2] == kod), None)
-            pol = I.get(nazev)
-            k = next((k for k in klice if pol and k.service_item_id == pol.id), None)
-            if k is not None and not (k.vaha or 0):
-                k = None  # nulova vaha (revize bez poctu pristroju) - nic neovlivni
-            if r is None:
-                if k is not None and nazev not in videno and not any(x[2] in (kk for kk, nn in POLOZKY.items() if nn == nazev) for x in rr):
-                    out.append(f"{nazev}: jen u nás (váha {k.vaha}, fakt={_f(k.is_billed)})")
-                    videno.add(nazev)
+        # --- ocekavane vahy z exportu: (polozka, meridlo) -> (vaha, fakt, kod)
+        cekam, pausaly_stare, bez = {}, defaultdict(lambda: D(0)), []
+        pausal_fakt = {}
+        for r in rr:
+            kod, typ, trida_r = r[2], r[3], r[10]
+            if trida_r == "NAJEM":
                 continue
-            videno.add(nazev)
-            if k is None:
-                out.append(f"{kod}: CHYBÍ u nás klíč '{nazev}' (stará váha {r[5]}, fakt={_f(r[9])})")
+            if kod in PAUSAL_TRIDA or kod == "INTERNET":
+                pol = INTERNET if kod == "INTERNET" else (O_PAUSAL if PAUSAL_TRIDA[kod] is None else trida[PAUSAL_TRIDA[kod]])
+                castka = _d(r[4]) / 12 if typ == "PEVNA_KC" else _d(r[7]) * _d(r[8]) / 12
+                if pol is not None:
+                    pausaly_stare[pol.id] += castka
+                    pausal_fakt[pol.id] = bool(r[9])
                 continue
-            stara = _d(r[5]) if r[3] == "K_CELKU" else _d(r[4]) / 12
-            if (k.vaha or 0) != stara or k.is_billed != bool(r[9]):
-                out.append(f"{kod}: stará {stara.normalize()} fakt={_f(r[9])} | naše {k.vaha} ({k.weight_source or 'ručně'}) fakt={_f(k.is_billed)}")
-        for kod in ("W_VLASTNI", "E_VLASTNI", "UKLID_SLUZ"):
-            r = next((x for x in rr if x[2] == kod), None)
-            if r:
-                out.append(f"{kod}: ve staré ({r[3]}, váha {r[5]}, m² {r[7]}) - u nás bez protějšku")
-        return out
+            if kod.startswith("W_SRAZ"):
+                cekam[(SRAZ and SRAZ.id, None)] = (_d(r[7]), bool(r[9]), kod)
+                continue
+            if typ == "PEVNA_KC" and kod in SLUZBY:
+                pol = self._polozka(I, SLUZBY[kod])
+                if pol is not None:
+                    pausaly_stare[pol.id] += _d(r[4]) / 12
+                    pausal_fakt[pol.id] = bool(r[9])
+                continue
+            if kod in SLUZBY:
+                pol = self._polozka(I, SLUZBY[kod])
+                vaha = _d(r[5]) if typ == "K_CELKU" else (_d(r[7]) if typ == "K_PLOSE" else _d(r[4]) / 12)
+                cekam[(pol and pol.id, None)] = (vaha, bool(r[9]), kod)
+                continue
+            if kod.startswith("668"):
+                cekam[(EAN668 and EAN668.id, "668")] = (_d(r[5]), bool(r[9]), kod)
+                continue
+            if kod.endswith("_VLASTNI") or kod == "UKLID_SLUZ":
+                bez.append(f"{kod}: ve staré ({typ}, váha {r[5]}, m² {r[7]}) - u nás bez protějšku")
+                continue
+            pol = trida.get(trida_r)
+            meridlo = {"T_CELKEM": "T_INDIVIDUALNI"}.get(kod, kod)
+            if kod == "W_CELKEM":
+                meridlo = None
+            cekam[(pol and pol.id, meridlo)] = (_d(r[5]), bool(r[9]), kod)
+
+        # --- nase vahy
+        mame = {}
+        for k in klice:
+            if k.allocation_type in ABSOLUTE_AMOUNT_TYPES and k.service_item_id != (SRAZ and SRAZ.id):
+                continue
+            if not (k.vaha or 0):
+                continue  # nulova vaha (revize bez poctu) nic neovlivni
+            mer = k.meter.code if k.meter else None
+            if EAN668 and k.service_item_id == EAN668.id:
+                mer = "668"
+            mame[(k.service_item_id, mer)] = (k.vaha, k.is_billed, k)
+
+        jmena = {p.id: p.name for p in I.values()}
+        for klic in sorted(set(cekam) | set(mame), key=lambda x: (jmena.get(x[0], ""), x[1] or "")):
+            c, m = cekam.get(klic), mame.get(klic)
+            popis = f"{jmena.get(klic[0], '?')}{' ' + klic[1] if klic[1] else ''}"
+            if m is None:
+                out.append(f"{popis}: CHYBÍ u nás (stará {c[2]} váha {c[0].normalize()}, fakt={_f(c[1])})")
+            elif c is None:
+                out.append(f"{popis}: jen u nás (váha {m[0]}, fakt={_f(m[1])})")
+            elif _d(m[0]) != c[0] or m[1] != c[1]:
+                out.append(f"{popis}: stará {c[0].normalize()} fakt={_f(c[1])} | naše {m[0]} "
+                           f"({m[2].weight_source or 'ručně'}) fakt={_f(m[1])}")
+
+        # --- pausaly a internet po Kc za mesic
+        nase_pausaly, nase_fakt = defaultdict(lambda: D(0)), {}
+        for k in klice:
+            if k.allocation_type not in ABSOLUTE_AMOUNT_TYPES or (SRAZ and k.service_item_id == SRAZ.id):
+                continue
+            castka = _fixed_amount_for(k, k.service_item, obdobi, []) if obdobi else k.value
+            nase_pausaly[k.service_item_id] += castka or D(0)
+            nase_fakt[k.service_item_id] = k.is_billed
+        for pid in sorted(set(pausaly_stare) | set(nase_pausaly), key=lambda x: jmena.get(x, "")):
+            s, n = _kc(pausaly_stare.get(pid, 0)), _kc(nase_pausaly.get(pid, 0))
+            if s == 0 and n == 0:
+                continue
+            if abs(s - n) > D("0.5") or (pid in pausal_fakt and pid in nase_fakt and pausal_fakt[pid] != nase_fakt[pid]):
+                out.append(f"pevná částka {jmena.get(pid, '?')}: stará {s} Kč/měs fakt={_f(pausal_fakt.get(pid))} "
+                           f"| naše {n} fakt={_f(nase_fakt.get(pid))}")
+        return out + bez
