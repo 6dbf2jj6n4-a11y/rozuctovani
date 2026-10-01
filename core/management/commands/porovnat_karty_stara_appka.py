@@ -50,6 +50,8 @@ class Command(BaseCommand):
     def add_arguments(self, parser):
         parser.add_argument("--soubor", default=os.path.expanduser("~/Desktop/klice_NJ.xlsx"))
         parser.add_argument("--areal", default="NJ")
+        parser.add_argument("--k-datu", help="Den, ke kteremu se Karty paruji (RRRR-MM-DD), napr. stred "
+                                             "pocitaneho obdobi; vychozi dnes.")
 
     def handle(self, *args, **o):
         import openpyxl
@@ -63,7 +65,8 @@ class Command(BaseCommand):
         for r in radky:
             po_kartach[r[0].strip()].append(r)
         I = {p.name: p for p in ServicePoolItem.objects.filter(site=site)}
-        dnes = timezone.localdate()
+        dnes = date.fromisoformat(o["k_datu"]) if o.get("k_datu") else timezone.localdate()
+        self.stdout.write(f"Karty platné k {dnes:%d. %m. %Y}")
         sparovane = set()
         celkem = 0
 
@@ -82,11 +85,12 @@ class Command(BaseCommand):
                               f"{karta.description} [{karta.valid_from} – {karta.valid_to or '…'}]")
             self.stdout.write("   " + ("\n   ".join(rozdily) if rozdily else self.style.SUCCESS("✓ sedí")))
 
-        # nase Karty platne dnes nebo pozdeji, ktere v exportu nejsou
-        nase = (ClientCard.objects.filter(card_units__unit__site=site).distinct().select_related("client")
-                .exclude(valid_to__lt=dnes).exclude(pk__in=sparovane).order_by("client__name", "valid_from"))
+        # nase Karty platne k datu, ktere v exportu nejsou
+        nase = (ClientCard.objects.filter(card_units__unit__site=site, valid_from__lte=dnes).distinct()
+                .select_related("client").exclude(valid_to__lt=dnes).exclude(pk__in=sparovane)
+                .order_by("client__name", "valid_from"))
         if nase:
-            self.stdout.write(self.style.WARNING("\n=== U nás navíc (platné dnes nebo později, v exportu nejsou):"))
+            self.stdout.write(self.style.WARNING(f"\n=== U nás navíc (platné k {dnes:%d. %m. %Y}, v exportu nejsou):"))
             for k in nase:
                 self.stdout.write(f"   #{k.pk} {k.client.name} | {k.description} | {k.valid_from} – {k.valid_to or '…'}"
                                   f"{' | pronajímatel' if k.client_id == site.landlord_id else ''}")
