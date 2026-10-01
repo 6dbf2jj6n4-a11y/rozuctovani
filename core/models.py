@@ -796,6 +796,13 @@ class ClientCard(models.Model):
         """Plochy karty i s Prostorem - z prefetch_related, kdyz je
         nachystany (sloupec podil v adminu pocita vahy desitek karet
         najednou), jinak jednim dotazem."""
+        # Neulozena karta (formular Pridat kartu) jeste zadne Plochy nema -
+        # a Django se na plochy neulozeneho zaznamu odmita zeptat
+        # (ValueError "needs to have a primary key value"). Sablona sekce
+        # Vytapene plochy se pta na vytapena_plocha i u nove karty, takze
+        # Pridat kartu koncilo chybou 500. Daniel 2026-10-01.
+        if self.pk is None:
+            return []
         if "card_units" in getattr(self, "_prefetched_objects_cache", {}):
             return self.card_units.all()
         return self.card_units.select_related("unit")

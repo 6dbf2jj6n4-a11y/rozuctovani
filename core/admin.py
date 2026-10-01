@@ -1952,7 +1952,7 @@ class ClientCardAdmin(PodlePronajimatele, ModelAdmin):
     search_fields = ("client__name", "description")
     fieldsets = (
         ("Základní údaje", {
-            "fields": (("client", "description"), ("valid_from", "valid_to"),
+            "fields": (("client", "platce_dph", "description"), ("valid_from", "valid_to"),
                        "contract", ("pocet_osob", "pocet_osob_tuv"), "is_active", "note")
         }),
         ("Čísla objednávek (na faktury)", {
@@ -1965,7 +1965,17 @@ class ClientCardAdmin(PodlePronajimatele, ModelAdmin):
             "fields": (("signed_on", "generate_card_button"), "document")
         }),
     )
-    readonly_fields = ("generate_card_button",)
+    readonly_fields = ("generate_card_button", "platce_dph")
+
+    @display(description="Plátce DPH")
+    def platce_dph(self, obj):
+        """Platcovstvi klienta primo na Karte - rozhoduje, jestli se najem
+        dani a jestli Karta v PDF tiskne "cena najmu bez DPH" (viz
+        CardUnit.najem_lze_zdanit). Udaj patri Klientovi, tady je jen
+        k nahlednuti; meni se v Klientech. Daniel 2026-10-01."""
+        if obj is None or not obj.client_id:
+            return "—"
+        return "ano" if obj.client.vat_payer else "ne"
 
     def formfield_for_foreignkey(self, db_field, request, **kwargs):
         """V poli Smlouva nabidnout jen smlouvy tohoto klienta.
