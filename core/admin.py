@@ -99,6 +99,46 @@ def invoice_class_choice_field(db_field):
     )
 
 
+def _patri_arealu(model):
+    """Patri zaznamy modelu nekteremu Arealu? Areal sam, nebo model
+    s cizim klicem `site` na Areal (Meridlo, Odberne misto, Polozka
+    zasobniku, Prostor ...)."""
+    if model is Site:
+        return True
+    try:
+        pole = model._meta.get_field("site")
+    except Exception:
+        return False
+    return pole.is_relation and pole.related_model is Site
+
+
+class _FiltrPodlePronajimatele(admin.RelatedFieldListFilter):
+    """Bocni filtr nabizi jen to, co patri arealum zvoleneho pronajimatele.
+
+    Vestaveny filtr cizi klic vypise vsechny zaznamy cilove tabulky, takze
+    v kontextu CALAMARI (FM, NJ) nabizel i areal DV a jeho odberna mista,
+    ktera tu stejne nic nenajdou. Daniel 2026-10-02.
+
+    Zaznamy bez arealu zustavaji - stejne jako je ukazuje sam seznam
+    (PodlePronajimatele.zahrnout_neprirazene)."""
+
+    def field_choices(self, field, request, model_admin):
+        from django.db.models import Q
+
+        from core import pronajimatele
+
+        id_arealu = pronajimatele.id_arealu(request)
+        if field.related_model is Site:
+            omezeni = Q(pk__in=id_arealu)
+        else:
+            omezeni = Q(site__in=id_arealu) | Q(site__isnull=True)
+        return field.get_choices(
+            include_blank=False,
+            ordering=self.field_admin_ordering(field, request, model_admin),
+            limit_choices_to=omezeni,
+        )
+
+
 class PodlePronajimatele:
     """Omezi seznam na data pronajimatele, se kterym uzivatel prave pracuje.
 
@@ -137,6 +177,26 @@ class PodlePronajimatele:
             podminka |= navic
         qs = qs.filter(podminka)
         return qs.distinct() if self.potrebuje_distinct else qs
+
+    def get_list_filter(self, request):
+        """Filtry na Areal a na veci, ktere k arealu patri (Odberne misto,
+        Polozka zasobniku ...), nabizeji jen areal(y) zvoleneho
+        pronajimatele - viz _FiltrPodlePronajimatele. Vlastni filtry
+        (tridy) a sdilene ciselniky (Obdobi, Trida) zustavaji, jak jsou."""
+        from django.contrib.admin.utils import get_fields_from_path
+
+        filtry = []
+        for filtr in super().get_list_filter(request):
+            if isinstance(filtr, str):
+                try:
+                    pole = get_fields_from_path(self.model, filtr)[-1]
+                except Exception:
+                    pole = None
+                if (pole is not None and pole.is_relation and pole.many_to_one
+                        and _patri_arealu(pole.related_model)):
+                    filtr = (filtr, _FiltrPodlePronajimatele)
+            filtry.append(filtr)
+        return filtry
 
     def delete_queryset(self, request, queryset):
         # Django odmitne smazat vyber po .distinct() ("Cannot call delete()
@@ -273,7 +333,8 @@ class SiteAdmin(PodlePronajimatele, ModelAdmin):
     zahrnout_neprirazene = False
     list_display = ("name", "address", "landlord", "v_koeficientu_dph", "aktivnich_klientu")
     list_select_related = ("landlord",)
-    list_filter = ("landlord",)
+    # Filtr Pronajimatel tu neni: seznam ukazuje jen arealy zvoleneho
+    # pronajimatele, takze volba druheho by vratila prazdno. Daniel 2026-10-02.
     search_fields = ("name",)
     autocomplete_fields = ("landlord",)
     inlines = [UnitInline]
