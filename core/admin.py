@@ -3491,7 +3491,19 @@ class MeterAdmin(PodlePronajimatele, DuplicateModelAdminMixin, ModelAdmin):
                     namereno = podmery + spolecne
                     total_namereno += namereno
 
-                    dodano = owned_consumption(sp.main_meter) if sp.main_meter_id else None
+                    # Odecet spravce na privodnim meridle se uklada a ukazuje
+                    # pro srovnani, ale NEPOCITA se s nim - presnejsi odecet ma
+                    # vzdy dodavatel, takze zakladem kaskady je fakturovane
+                    # mnozstvi z Nakladu (zadava Daniel z faktury). Privod
+                    # slouzi jako "dodano" jen tam, kde faktura v jednotkach
+                    # chybi. Bez toho Mínářova 0 u E_NJ_CELKEM (09/2026)
+                    # vynulovala zakonne ztraty v reportu. Viz Daniel 2026-10-14.
+                    odecet_privodu = owned_consumption(sp.main_meter) if sp.main_meter_id else None
+                    fakturovano = None
+                    if sp.cost_item_id:
+                        fakturovano = CostEntry.totals_for(sp.cost_item, period)["units"]
+                    dodano = fakturovano if fakturovano is not None else odecet_privodu
+                    dodano_z_faktury = fakturovano is not None
                     main_leaves = None
                     if sp.main_meter and sp.main_meter.is_virtual:
                         main_leaves = [
@@ -3535,24 +3547,23 @@ class MeterAdmin(PodlePronajimatele, DuplicateModelAdminMixin, ModelAdmin):
                             skutecne_pct = skutecne / realne * Decimal("100")
 
                     # Porovnani faktury s vlastnim privodnim meridlem.
-                    # "Dodano" je nas odecet, "Fakturovano" je mnozstvi od
+                    # "Odecet privodu" je odecet spravce, "Fakturovano" je mnozstvi od
                     # dodavatele - dve nezavisla cisla, ktera se dosud nedala
                     # postavit vedle sebe (privodni meridlo bylo bud jedno,
                     # nebo druhe). Odhali spatne opsany odecet, chybu
                     # dodavatele i unik. Rozdil bude vzdycky nejaky, protoze
                     # fakturacni obdobi dodavatele nesedi na kalendarni mesic
                     # - sleduje se trend, ne jeden mesic. Daniel 2026-09-04.
-                    fakturovano = rozdil = rozdil_pct = None
-                    if sp.cost_item_id:
-                        fakturovano = CostEntry.totals_for(sp.cost_item, period)["units"]
-                    if fakturovano is not None and dodano is not None:
-                        rozdil = dodano - fakturovano
+                    rozdil = rozdil_pct = None
+                    if fakturovano is not None and odecet_privodu is not None:
+                        rozdil = odecet_privodu - fakturovano
                         if fakturovano:
                             rozdil_pct = rozdil / fakturovano * Decimal("100")
 
                     supply_blocks.append({
                         "supply": sp, "dodano": dodano, "zakonne": zakonne,
                         "fakturovano": fakturovano, "rozdil": rozdil,
+                        "odecet_privodu": odecet_privodu, "dodano_z_faktury": dodano_z_faktury,
                         "rozdil_pct": rozdil_pct,
                         "realne": realne, "podmery": podmery, "spolecne": spolecne,
                         "vahou": vahou, "skutecne": skutecne,
@@ -3571,7 +3582,14 @@ class MeterAdmin(PodlePronajimatele, DuplicateModelAdminMixin, ModelAdmin):
 
                 # Jednotka se bere z reálných měřidel dané skupiny (ne napevno) -
                 # respektuje skutečnou jednotku (teplo FM = kWh, jinde třeba GJ).
+                # Přednost má přívod odběrného místa: teplo NJ má mezi
+                # členskými i T_SPOLECNA/T_INDIVIDUALNI v m² (vytápěná plocha),
+                # pelety by se jinak vykázaly v m² místo kg.
                 type_unit = next(
+                    (b["main_meter"].unit_of_measure for b in supply_blocks
+                     if b["main_meter"] and b["main_meter"].unit_of_measure),
+                    None,
+                ) or next(
                     (m.unit_of_measure for m in meters
                      if m.meter_type == type_code and m.unit_of_measure),
                     unit_defaults.get(type_code, ""),
