@@ -28,26 +28,21 @@ rozúčtovává červenec.
 Tlačítko **Zadat odečty** v řádku období otevře zadávací formulář rovnou
 pro tohle období.
 
-Nezapomenout na měřidla, která nejsou fyzická, ale nesou počty:
-
-| měřidlo | co se do něj píše |
-|---|---|
-| `T_SPOLECNA` (NJ) | počet radiátorů ve společných prostorách (trvale 10) |
-| `T_INDIVIDUALNI` (NJ) | počet radiátorů v pronajatých kancelářích (mění se) |
-
-Obě jsou v režimu **Spotřeba za období**, takže odečet *je* ten počet.
-Když se počet změní, zapíše se nová hodnota do toho období, kde ke změně
-došlo — starší období si drží svou historii.
+Teplo NJ se od 09/2026 dělí na společnou a individuální část podle
+vytápěných m² Prostorů — měřidla `T_SPOLECNA` a `T_INDIVIDUALNI` se
+počítají sama, žádné odečty se do nich nezadávají.
 
 ## 4. Zadat náklady za období
 
-**Náklady za období → Přidat**, nebo si nejdřív nechat vygenerovat prázdné
-řádky:
+**[A] „Připravit Náklady k vyplnění"** založí prázdný náklad (poznámka
+`K DOPLNĚNÍ`) pro každou položku, která má v období platné klíče a náklad
+ještě nemá. Zpráva po akci má odkaz **otevřít k vyplnění** — seznam
+Nákladů filtrovaný na období a stav Nevyplněno, kde se čísla dopisují
+přímo v tabulce (sloupce Fakturované množství a Částka) a pak Uložit.
 
-- **[A] „Vygenerovat chybějící Náklady za období"** založí prázdný náklad
-  pro každou položku, která ho ještě nemá, s poznámkou `K DOPLNĚNÍ`.
-  Pak stačí v seznamu filtrovat na období a čísla dopsat přímo v tabulce
-  (sloupce Fakturované množství a Částka jsou editovatelné).
+Položky s Výchozí měsíční částkou (úklid, ostraha… s pevnou cenou) se
+nepřipravují, počítají se samy. Další fakturu ke stejné položce (jiný
+dodavatel) přidej přes **Náklady za období → Přidat**.
 
 Pro měřené služby se vyplňuje **Fakturované množství** (kWh, m³, GJ) a Kč
 se dopočítá z Ceníku. Pro neměřené (úklid, ostraha…) se vyplňuje **Částka

@@ -3785,9 +3785,10 @@ class PeriodAdmin(ModelAdmin):
     # Jen akce, ktere nemaji tlacitko v radku tabulky. Vypocet (i po
     # arealech), Zavrit a Otevrit jsou tlacitka v kazdem radku - v
     # rozbalovatku byly jen duplikaty a akci bylo 11 (Daniel 2026-09-25).
-    # Vygenerovani prazdnych Nakladu Daniel nepouzival, zruseno taky.
+    # Pripravu prazdnych Nakladu jsme 2026-09-25 omylem zrusili - Daniel ji
+    # potrebuje, aby polozky nezakladal rucne a jen dopsal cisla (2026-10-14).
     actions = [
-        "zkontrolovat_co_zadat", "dotahnout_fakturovana_mnozstvi",
+        "pripravit_naklady", "zkontrolovat_co_zadat", "dotahnout_fakturovana_mnozstvi",
         "propojit_podkladove_faktury", "nastavit_jako_aktualni",
     ]
     # Tlacitko "Generovat pro celý rok" nad tabulkou - puvodne zkoušeno
@@ -4129,6 +4130,48 @@ class PeriodAdmin(ModelAdmin):
         if bez_prilohy:
             text += " Bez PDF přílohy v ABRA: " + ", ".join(sorted({r[2] for r in bez_prilohy})) + "."
         self.message_user(request, text, level=messages.WARNING if bez_prilohy else messages.SUCCESS)
+
+    @admin.action(description="Připravit Náklady k vyplnění (prázdné řádky pro všechny položky)")
+    def pripravit_naklady(self, request, queryset):
+        """Pro vybrana Obdobi zalozi PRAZDNY Naklad (bez mnozstvi i castky,
+        s poznamkou 'K DOPLNĚNÍ') pro kazdou polozku, ktera v obdobi ma
+        aspon jeden platny klic a Naklad jeste nema - Daniel pak jen
+        dopise cisla primo v seznamu Nakladu za obdobi.
+
+        Preskakuje: polozky s Vychozi mesicni castkou (pocitaji se samy),
+        Pausal za celou Tridu (nema vlastni naklad) a polozky bez platnych
+        klicu (napr. internet FM bez klientu).
+
+        ZAMERNE se nevyplnuje 0 - prazdny Naklad pri vypoctu hlasi
+        "chybí náklad", takze zapomenuty radek nikdy tise neuctuje 0 Kc."""
+        from django.urls import reverse
+        from django.utils.html import format_html
+
+        for period in queryset:
+            created = []
+            for item in pronajimatele.omez(ServicePoolItem.objects, "site", request).select_related("site"):
+                if item.default_amount_czk is not None or item.pausal_tridy:
+                    continue
+                if CostEntry.objects.filter(service_item=item, period=period).exists():
+                    continue
+                klice = item.allocation_keys.select_related("client_card")
+                if not any(k.is_valid_for_period(period) for k in klice):
+                    continue
+                CostEntry.objects.create(service_item=item, period=period, note=CostEntry.NOTE_K_DOPLNENI)
+                created.append(item)
+
+            odkaz = reverse("admin:core_costentry_changelist") + f"?period__id__exact={period.pk}&stav=nevyplneno"
+            if created:
+                self.message_user(request, format_html(
+                    "{}: připraveno {} prázdných Nákladů - <a href=\"{}\">otevřít k vyplnění</a> "
+                    "(množství nebo částku dopiš přímo v tabulce a ulož).",
+                    period, len(created), odkaz,
+                ), messages.SUCCESS)
+            else:
+                self.message_user(request, format_html(
+                    "{}: všechny položky už Náklad mají - <a href=\"{}\">nevyplněné</a>.",
+                    period, odkaz,
+                ), messages.INFO)
 
     @admin.action(description="Zkontrolovat, co je potřeba zadat (Náklady/Ceník)")
     def zkontrolovat_co_zadat(self, request, queryset):
