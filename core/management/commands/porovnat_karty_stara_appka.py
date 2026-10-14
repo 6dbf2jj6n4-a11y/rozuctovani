@@ -131,7 +131,15 @@ class Command(BaseCommand):
         from core.models import Period
 
         out = []
-        klice = list(karta.allocation_keys.select_related("service_item", "meter"))
+        # Jen klice platne k datu - Karta muze mit stare klice ukoncene
+        # (napr. teplo NJ do 31. 8. bez meridla, od 1. 9. T_INDIVIDUALNI)
+        # a ty by se hlasily jako "jen u nas".
+        k_dni = self._k_datu
+        klice = [
+            k for k in karta.allocation_keys.select_related("service_item", "meter")
+            if (k.valid_from is None or k.valid_from <= k_dni)
+            and (k.valid_to is None or k.valid_to >= k_dni)
+        ]
         trida = {
             "ELEKTRO": self._polozka(I, "hlavní odběr elektro"),
             "TEPLO": self._polozka(I, "hlavní odběr teplo"),
@@ -256,6 +264,9 @@ class Command(BaseCommand):
                 mame[(k.service_item_id, mer)] = (k.vaha, k.is_billed, k)
 
         jmena = {p.id: p.name for p in I.values()}
+        # Nulova vaha ve stare appce (FSL T_CELKEM 0) nic neovlivni - stejne
+        # jako u nas se preskoci.
+        cekam = {k: v for k, v in cekam.items() if v[0]}
         for klic in sorted(set(cekam) | set(mame), key=lambda x: (jmena.get(x[0], ""), x[1] or "")):
             c, m = cekam.get(klic), mame.get(klic)
             popis = f"{jmena.get(klic[0], '?')}{' ' + klic[1] if klic[1] else ''}"
