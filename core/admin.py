@@ -4635,14 +4635,6 @@ class MeterReadingAdmin(PodlePronajimatele, DefaultToCurrentPeriodMixin, ModelAd
     readonly_fields = ("created_by",)
     list_before_template = "admin/core/meterreading/nad_seznamem.html"
 
-    def changelist_view(self, request, extra_context=None):
-        """Preda pruhu nad tabulkou seznam Obdobi pro tlacitko exportu."""
-        extra_context = extra_context or {}
-        extra_context["obdobi_exportu"] = Period.objects.order_by("-year", "-month")
-        vybrane = request.GET.get(self.default_period_filter_param)
-        extra_context["vybrane_obdobi"] = int(vybrane) if (vybrane or "").isdigit() else (
-            Period.current().pk if Period.current() else None)
-        return super().changelist_view(request, extra_context)
 
     def get_urls(self):
         from django.urls import path
@@ -4658,8 +4650,11 @@ class MeterReadingAdmin(PodlePronajimatele, DefaultToCurrentPeriodMixin, ModelAd
         return custom + urls
 
     def export_view(self, request):
-        """Odecty za jedno Obdobi do XLSX - Areal, Meridlo, Stav, Jednotka,
-        Datum odectu.
+        """Odecty do XLSX - Areal, Meridlo, Stav, Jednotka, Datum odectu,
+        Obdobi. Exportuje presne to, co je videt v seznamu: stejne filtry,
+        vyhledavani i razeni (tlacitko posila querystring seznamu), jen
+        bez strankovani. Drive se vybiralo jedno Obdobi zvlast a filtry
+        se ignorovaly. Viz Daniel 2026-10-14.
 
         Jednotka je ta, ve ktere se odecet fyzicky CTE z displeje
         (Meter.reading_unit_of_measure), ne ta vykazovana - u tepla se cte
@@ -4670,25 +4665,27 @@ class MeterReadingAdmin(PodlePronajimatele, DefaultToCurrentPeriodMixin, ModelAd
         from openpyxl import Workbook
         from openpyxl.styles import Border, Font, PatternFill, Side
 
-        period = Period.objects.filter(pk=request.GET.get("period")).first() or Period.current()
-        if period is None:
-            self.message_user(request, "Není z čeho vybrat období.", messages.ERROR)
-            from django.shortcuts import redirect
-            return redirect("admin:core_meterreading_changelist")
+        from django.contrib.admin.options import IncorrectLookupParameters
+        from django.shortcuts import redirect
 
-        # get_queryset drzi kontext pronajimatele (PodlePronajimatele) -
-        # export tak nikdy nevytahne odecty druhe osoby.
-        radky = (
-            self.get_queryset(request)
-            .filter(period=period)
-            .select_related("meter", "meter__site")
-            .order_by("meter__site__name", "meter__code")
-        )
+        # ChangeList postaveny ze stejneho querystringu jako seznam - tim
+        # export dostane identicke filtry, hledani i razeni. get_queryset
+        # pod nim drzi kontext pronajimatele (PodlePronajimatele), takze
+        # export nikdy nevytahne odecty druhe osoby.
+        try:
+            cl = self.get_changelist_instance(request)
+        except IncorrectLookupParameters:
+            self.message_user(request, "Neplatný filtr - export se nepodařil.", messages.ERROR)
+            return redirect("admin:core_meterreading_changelist")
+        radky = cl.get_queryset(request).select_related("meter", "meter__site", "period")
+
+        obdobi = {r.period for r in radky}
+        period = next(iter(obdobi)) if len(obdobi) == 1 else None
 
         wb = Workbook()
         ws = wb.active
-        ws.title = "Odečty {:02d}-{}".format(period.month, period.year)
-        ws.append(["Areál", "Měřidlo", "Stav", "Jednotka", "Datum odečtu"])
+        ws.title = "Odečty {:02d}-{}".format(period.month, period.year) if period else "Odečty"
+        ws.append(["Areál", "Měřidlo", "Stav", "Jednotka", "Datum odečtu", "Období"])
         for bunka in ws[1]:
             bunka.font = Font(bold=True)
             bunka.fill = PatternFill("solid", fgColor="DDDDDD")
@@ -4701,8 +4698,9 @@ class MeterReadingAdmin(PodlePronajimatele, DefaultToCurrentPeriodMixin, ModelAd
                 float(r.value) if r.value is not None else None,
                 m.reading_unit_of_measure or m.unit_of_measure or "",
                 r.reading_date,
+                str(r.period) if r.period_id else "",
             ])
-        for sloupec, sirka in zip("ABCDE", (10, 20, 14, 12, 15)):
+        for sloupec, sirka in zip("ABCDEF", (10, 20, 14, 12, 15, 10)):
             ws.column_dimensions[sloupec].width = sirka
         for radek in ws.iter_rows(min_row=2, min_col=3, max_col=3):
             for bunka in radek:
@@ -4714,8 +4712,8 @@ class MeterReadingAdmin(PodlePronajimatele, DefaultToCurrentPeriodMixin, ModelAd
 
         odpoved = HttpResponse(
             content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
-        odpoved["Content-Disposition"] = 'attachment; filename="odecty_{:02d}_{}.xlsx"'.format(
-            period.month, period.year)
+        odpoved["Content-Disposition"] = 'attachment; filename="{}.xlsx"'.format(
+            "odecty_{:02d}_{}".format(period.month, period.year) if period else "odecty")
         wb.save(odpoved)
         return odpoved
 
