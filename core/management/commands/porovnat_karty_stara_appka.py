@@ -188,7 +188,19 @@ class Command(BaseCommand):
                 out.append(f"plocha {u}: nájem stará {najem} Kč/měs | naše {cu.monthly_rent}")
 
         # --- ocekavane vahy z exportu: (polozka, meridlo) -> (vaha, fakt, kod)
+        # Stara appka ma u Karty na jednom meridle casto vic radku - jeden
+        # za kazdou mistnost (KYSLIK T_A1S = 11 + 16 + 18 m2). Vahy se proto
+        # SCITAJI; drive posledni radek prepsal predchozi a porovnani hlasilo
+        # shodu s chybne prevedenym klicem (16 misto 45). Viz Daniel 2026-10-14.
         cekam, pausaly_stare, bez = {}, defaultdict(lambda: D(0)), []
+
+        def _ocekavam(klic, vaha, fakt, kod):
+            # 668NT a 668VT jsou dve meridla tehoz odberu se stejnou vahou -
+            # u nas jeden klic na polozce EAN 668, takze se nescitaji.
+            if klic in cekam and klic[1] != "668":
+                vaha = cekam[klic][0] + vaha
+            cekam[klic] = (vaha, fakt, kod)
+
         pausal_fakt = {}
         for r in rr:
             kod, typ, trida_r = r[2], r[3], r[10]
@@ -202,7 +214,7 @@ class Command(BaseCommand):
                     pausal_fakt[pol.id] = bool(r[9])
                 continue
             if kod.startswith("W_SRAZ"):
-                cekam[(SRAZ and SRAZ.id, None)] = (_d(r[7]), bool(r[9]), kod)
+                _ocekavam((SRAZ and SRAZ.id, None), _d(r[7]), bool(r[9]), kod)
                 continue
             if typ == "PEVNA_KC" and kod in SLUZBY:
                 pol = self._polozka(I, SLUZBY[kod])
@@ -213,10 +225,10 @@ class Command(BaseCommand):
             if kod in SLUZBY:
                 pol = self._polozka(I, SLUZBY[kod])
                 vaha = _d(r[5]) if typ == "K_CELKU" else (_d(r[7]) if typ == "K_PLOSE" else _d(r[4]) / 12)
-                cekam[(pol and pol.id, None)] = (vaha, bool(r[9]), kod)
+                _ocekavam((pol and pol.id, None), vaha, bool(r[9]), kod)
                 continue
             if kod.startswith("668"):
-                cekam[(EAN668 and EAN668.id, "668")] = (_d(r[5]), bool(r[9]), kod)
+                _ocekavam((EAN668 and EAN668.id, "668"), _d(r[5]), bool(r[9]), kod)
                 continue
             if kod.endswith("_VLASTNI") or kod == "UKLID_SLUZ":
                 bez.append(f"{kod}: ve staré ({typ}, váha {r[5]}, m² {r[7]}) - u nás bez protějšku")
@@ -225,7 +237,7 @@ class Command(BaseCommand):
             meridlo = {"T_CELKEM": "T_INDIVIDUALNI"}.get(kod, kod)
             if kod == "W_CELKEM":
                 meridlo = None
-            cekam[(pol and pol.id, meridlo)] = (_d(r[5]), bool(r[9]), kod)
+            _ocekavam((pol and pol.id, meridlo), _d(r[5]), bool(r[9]), kod)
 
         # --- nase vahy
         mame = {}
@@ -237,7 +249,11 @@ class Command(BaseCommand):
             mer = k.meter.code if k.meter else None
             if EAN668 and k.service_item_id == EAN668.id:
                 mer = "668"
-            mame[(k.service_item_id, mer)] = (k.vaha, k.is_billed, k)
+            # I u nas muze byt na jednom meridle vic klicu Karty - secist.
+            if (k.service_item_id, mer) in mame and mer != "668":
+                mame[(k.service_item_id, mer)] = (mame[(k.service_item_id, mer)][0] + k.vaha, k.is_billed, k)
+            else:
+                mame[(k.service_item_id, mer)] = (k.vaha, k.is_billed, k)
 
         jmena = {p.id: p.name for p in I.values()}
         for klic in sorted(set(cekam) | set(mame), key=lambda x: (jmena.get(x[0], ""), x[1] or "")):
