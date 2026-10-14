@@ -4356,11 +4356,12 @@ class InvoiceClassColorAdmin(ModelAdmin):
 
     list_display = (
         "nazev", "default_unit_of_measure", "sort_order",
-        "ma_sekci_klicu", "deduct_fixed_from_pool", "pocet_pouziti",
+        "ma_sekci_klicu", "deduct_fixed_from_pool", "ztraty_do_jednotek", "pocet_pouziti",
         "color_light", "color_dark", "text_color_light", "text_color_dark",
     )
     list_editable = (
         "default_unit_of_measure", "sort_order", "ma_sekci_klicu", "deduct_fixed_from_pool",
+        "ztraty_do_jednotek",
     )
     ordering = ("sort_order", "invoice_class")
 
@@ -5998,6 +5999,8 @@ class BillingLineAdmin(PodlePronajimatele, DefaultToCurrentPeriodMixin, ModelAdm
 
         groups_by_class = {key: [] for key, _ in InvoiceClassColor.choices()}
         grand_total = Decimal("0")
+        from billing.zobrazeni_ztrat import jednotky_a_cena
+        do_jednotek_map = InvoiceClassColor.ztraty_do_jednotek_map()
 
         if period is not None:
             qs = (
@@ -6038,6 +6041,13 @@ class BillingLineAdmin(PodlePronajimatele, DefaultToCurrentPeriodMixin, ModelAdm
                     total_consumption = cached["total_consumption"]
 
                 calc = line.calc_detail or {}
+                # Jednotky x cena podle prepinace Tridy (ztraty do ceny / do
+                # jednotek) - castka se nemeni, viz billing/zobrazeni_ztrat.py.
+                _d = lambda k: Decimal(calc[k]) if calc.get(k) not in (None, "") else None
+                jednotky, cena = jednotky_a_cena(
+                    line.units, _d("price_per_unit"), _d("base_price_per_unit"),
+                    _d("surcharge_units"), do_jednotek_map.get(si.invoice_class, False),
+                )
 
                 row = {
                     "client": line.client_card.client.name,
@@ -6049,9 +6059,9 @@ class BillingLineAdmin(PodlePronajimatele, DefaultToCurrentPeriodMixin, ModelAdm
                     "current_state": current_state,
                     "total_consumption": total_consumption,
                     "share": line.share,
-                    "units": line.units,
+                    "units": jednotky,
                     "unit_of_measure": calc.get("unit_of_measure") or "",
-                    "price_per_unit": calc.get("price_per_unit"),
+                    "price_per_unit": cena,
                     "amount": line.amount,
                     "is_billed": line.is_billed,
                 }

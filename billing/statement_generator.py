@@ -18,6 +18,7 @@ from reportlab.lib.styles import ParagraphStyle
 from reportlab.lib.units import mm
 from reportlab.platypus import Paragraph, SimpleDocTemplate, Table, TableStyle
 
+from billing.zobrazeni_ztrat import jednotky_a_cena
 from core.models import BillingLine, InvoiceClassColor, ServicePoolItem
 from core.pdf_fonts import FONT_BOLD, FONT_REGULAR
 
@@ -139,11 +140,23 @@ def price_basis_text(zaklad):
             f"{format_units(zaklad['measured_units'], mj)} "
             f"(o {format_units(abs(rozdil), mj)} {smer}{pct_text})"
         )
-        radky.append(
-            f"Rozúčtovací cena: {_fmt_czk(zaklad['cost'])} ÷ "
-            f"{format_units(zaklad['measured_units'], mj)} = "
-            f"{format_price_per_unit(zaklad['price_per_unit'], mj, decimals=4)}"
-        )
+        if zaklad.get("do_jednotek") and zaklad["measured_units"]:
+            # Ztraty do jednotek (InvoiceClassColor.ztraty_do_jednotek):
+            # cena zustava z faktury, navysi se jednotky - viz
+            # billing/zobrazeni_ztrat.py.
+            koef = zaklad["reported_units"] / zaklad["measured_units"]
+            radky.append(
+                f"Rozdíl se rozpočítává do jednotek: naměřená spotřeba každého "
+                f"odběratele × {koef:.4f} (fakturované ÷ naměřené množství), "
+                f"účtuje se cenou dle faktury "
+                f"{format_price_per_unit(zaklad['base_price_per_unit'], mj, decimals=4)}"
+            )
+        else:
+            radky.append(
+                f"Rozúčtovací cena: {_fmt_czk(zaklad['cost'])} ÷ "
+                f"{format_units(zaklad['measured_units'], mj)} = "
+                f"{format_price_per_unit(zaklad['price_per_unit'], mj, decimals=4)}"
+            )
     return radky
 
 
@@ -225,12 +238,13 @@ def build_statement_data(client, period):
     # Poradi i nazvy Trid z DB az za behu - viz client_card_generator.
     class_labels = InvoiceClassColor.label_map()
     class_order = [code for code, _ in InvoiceClassColor.choices()]
+    do_jednotek_map = InvoiceClassColor.ztraty_do_jednotek_map()
 
     def _dec(calc_detail, field):
         raw = calc_detail.get(field)
         return Decimal(raw) if raw is not None else None
 
-    def _cena_odvozena(class_lines):
+    def _cena_odvozena(class_lines, do_jednotek=False):
         """Odvozeni ceny za jednotku pro tridu - jeden zaznam za kazdou
         polozku zasobniku, ktera se delila podle namerene spotreby.
         Klient musi videt obe cisla: cenu z faktury dodavatele (tu si
@@ -279,6 +293,7 @@ def build_statement_data(client, period):
                 ),
                 "price_per_unit": _dec(cd, "price_per_unit"),
                 "legal_loss_pct": _dec(cd, "legal_loss_pct"),
+                "do_jednotek": do_jednotek,
             })
         for zaznam in zaznamy:
             zaznam["text"] = price_basis_text(zaznam)
@@ -304,21 +319,30 @@ def build_statement_data(client, period):
         if any(Decimal(line.calc_detail["surcharge_amount"]) < 0
                for line in class_lines if line.calc_detail.get("surcharge_amount")):
             any_vyrovnani = True
+        do_jednotek = do_jednotek_map.get(class_code, False)
         classes.append({
             "label": class_labels[class_code],
-            "price_basis": _cena_odvozena(class_lines),
+            "price_basis": _cena_odvozena(class_lines, do_jednotek),
             "lines": [
                 {
                     "item": _nazev(line),
                     "card": _card_label(line.client_card),
                     "amount": line.amount,
                     "is_billed": line.is_billed,
-                    "units": line.units,
+                    # Jednotky x cena podle prepinace Tridy (ztraty do ceny /
+                    # do jednotek) - castka je v obou pripadech stejna.
+                    **dict(zip(("units", "price_per_unit"), jednotky_a_cena(
+                        line.units,
+                        _dec(line.calc_detail, "price_per_unit"),
+                        _dec(line.calc_detail, "base_price_per_unit"),
+                        _dec(line.calc_detail, "surcharge_units"),
+                        do_jednotek,
+                    ))),
+                    # Namerene jednotky karty - do rozpadu "z toho vlastni
+                    # namerena spotreba", i kdyz "units" uz obsahuje podil
+                    # na rozdilu (ztraty do jednotek).
+                    "own_units": line.units,
                     "unit_of_measure": line.calc_detail.get("unit_of_measure"),
-                    "price_per_unit": (
-                        Decimal(line.calc_detail["price_per_unit"])
-                        if line.calc_detail.get("price_per_unit") else None
-                    ),
                     # Rozpad castky na vlastni namerenou spotrebu a priplatek
                     # za spolecne prostory + ztraty (viz billing/engine.py
                     # surcharge_split). U starsich obdobi, spocitanych jeste
@@ -414,7 +438,7 @@ def generate_client_statement_pdf(client, period, output_path):
 
             if line["surcharge_amount"]:
                 breakdown = (
-                    ("z toho vlastní naměřená spotřeba", line["units"], line["own_amount"]),
+                    ("z toho vlastní naměřená spotřeba", line["own_units"], line["own_amount"]),
                     (line["surcharge_label"], line["surcharge_units"], line["surcharge_amount"]),
                 )
                 for label, sub_units, sub_amount in breakdown:

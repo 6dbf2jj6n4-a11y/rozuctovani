@@ -14,7 +14,9 @@ vysledek je vzdy konzistentni se skutecnym vypoctem.
 """
 from decimal import Decimal
 
-from core.models import AllocationKey, BillingLine, CostEntry, PriceList
+from core.models import AllocationKey, BillingLine, CostEntry, InvoiceClassColor, PriceList
+
+from .zobrazeni_ztrat import jednotky_a_cena
 from .engine import (
     ABSOLUTE_AMOUNT_TYPES,
     _consumption_shares,
@@ -54,6 +56,8 @@ def get_key_rows_for_client(client, period):
     )
 
     seen_items = set()
+    # Ztraty do ceny / do jednotek - jen zobrazeni, viz billing/zobrazeni_ztrat.py.
+    do_jednotek_map = InvoiceClassColor.ztraty_do_jednotek_map()
     prev_period = period.previous_period()
 
     for line in lines:
@@ -273,6 +277,14 @@ def get_key_rows_for_client(client, period):
                             "surcharge_units": split["surcharge_units"],
                             "surcharge_amount": split["surcharge_amount"],
                         })
+                    # Namerene jednotky zustavaji pro rozpad "z toho vlastni
+                    # namerena spotreba"; "units"/"price_per_unit" se ridi
+                    # prepinacem Tridy.
+                    row["own_units"] = row["units"]
+                    row["units"], row["price_per_unit"] = jednotky_a_cena(
+                        row["units"], row["price_per_unit"], row.get("base_price_per_unit"),
+                        row.get("surcharge_units"), do_jednotek_map.get(si.invoice_class, False),
+                    )
 
             rows.append(row)
 

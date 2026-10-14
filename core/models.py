@@ -1819,6 +1819,16 @@ class InvoiceClassColor(models.Model):
             "jednotlivý klíč může odečítání vypnout i tak, zapnout ale ne."
         ),
     )
+    ztraty_do_jednotek = models.BooleanField(
+        "Ztráty rozpouštět do jednotek", default=False,
+        help_text=(
+            "Jen jak se rozdíl mezi fakturovaným a naměřeným množstvím "
+            "(ztráty, společné prostory) UKÁŽE ve vyúčtování - částky klientům "
+            "jsou v obou případech stejné. Vypnuto (výchozí): naměřené jednotky "
+            "× upravená cena (náklad ÷ naměřené). Zapnuto: jednotky navýšené "
+            "o podíl na rozdílu × cena z faktury dodavatele."
+        ),
+    )
     ma_sekci_klicu = models.BooleanField(
         "Vlastní sekce v Kartě klienta a na Ploše", default=True,
         help_text=(
@@ -1839,6 +1849,13 @@ class InvoiceClassColor(models.Model):
         z celkoveho nakladu. Trida, ktera v tabulce neni, se chova jako
         zapnuta (puvodni chovani). Viz konverzace s Danielem 2026-08-16."""
         return dict(cls.objects.values_list("invoice_class", "deduct_fixed_from_pool"))
+
+    @classmethod
+    def ztraty_do_jednotek_map(cls):
+        """{invoice_class: bool} - jestli se ztraty ve vyuctovani ukazuji
+        v jednotkach (zapnuto) nebo v cene (vypnuto, vychozi). Jen
+        zobrazeni, castky se nemeni. Viz billing/zobrazeni_ztrat.py."""
+        return dict(cls.objects.values_list("invoice_class", "ztraty_do_jednotek"))
 
     @classmethod
     def choices(cls):
