@@ -1723,7 +1723,7 @@ class NastaveniRozuctovani(models.Model):
     kladne_ztraty_pronajimateli = models.BooleanField(
         "Kladné ztráty si nechává pronajímatel", default=False,
         help_text=(
-            "Kladná ztráta = naše podměry naměřily VÍC, než fakturoval "
+            "Kladná ztráta = naše podružná měřidla naměřila VÍC, než fakturoval "
             "dodavatel.\n"
             "Vypnuto (výchozí): rozdělí se celá faktura mezi naměřené podíly, "
             "takže cena za jednotku klesne a rozdíl je bonusem nájemců.\n"

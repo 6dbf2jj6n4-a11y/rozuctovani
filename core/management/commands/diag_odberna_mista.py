@@ -134,7 +134,7 @@ class Command(BaseCommand):
                         self.stdout.write(
                             f"        dodáno {dodano if dodano is not None else '—'} / "
                             f"naměřeno {podmery + spolecne} "
-                            f"(podměry {podmery} + měřená společná {spolecne})"
+                            f"(podružné spotřeby {podmery} + měřená společná {spolecne})"
                         )
 
                 unassigned = [

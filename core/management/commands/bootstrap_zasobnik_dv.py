@@ -123,7 +123,7 @@ class Command(BaseCommand):
                     if podmer is None:
                         self.stderr.write("      ✗ {:4} měřidlo {} neexistuje".format(plocha, kod))
                         continue
-                    popis = "podměr {}".format(kod)
+                    popis = "podružné měřidlo {}".format(kod)
                     udaje = dict(allocation_type=AllocationKey.AllocationType.WEIGHTED_COUNT,
                                  meter=podmer)
                 else:
