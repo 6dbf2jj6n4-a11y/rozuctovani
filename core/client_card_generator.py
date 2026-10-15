@@ -76,6 +76,10 @@ _STYLE_SEKCE = ParagraphStyle(
     "CardSekce", parent=_STYLE_H2, backColor=colors.HexColor("#e5e7eb"),
     borderPadding=(2, 3, 2, 3), spaceBefore=5 * mm, spaceAfter=2 * mm,
 )
+# Vycet meridel pod Evidenci - obycejne pismo, radky pod sebou.
+_STYLE_MERIDLA = ParagraphStyle(
+    "CardMeridla", fontName=FONT_REGULAR, fontSize=_FONT_SIZE, leading=_FONT_SIZE + 3,
+)
 # Podnadpis uvnitr sekce (Poskytovane sluzby: a) / b)) - Daniel 2026-10-15.
 _STYLE_H3 = ParagraphStyle("CardH3", fontName=FONT_BOLD, fontSize=_FONT_SIZE, spaceBefore=2.5 * mm, spaceAfter=1 * mm)
 _STYLE_SIG_LABEL = ParagraphStyle("CardSigLabel", fontName=FONT_BOLD, fontSize=_FONT_SIZE, alignment=1)  # 1 = center
@@ -200,6 +204,14 @@ def _fmt_key_value(key, sdilene_meridlo=False):
 _STYLE_PLAN_POPIS = ParagraphStyle(
     "CardPlanPopis", fontName=FONT_REGULAR, fontSize=_FONT_SIZE, leading=_FONT_SIZE + 3,
 )
+
+
+def _pronajimatel_platce(card):
+    """Je pronajimatel arealu Karty platce DPH? (Site.landlord, DV ne.)"""
+    try:
+        return bool(get_landlord(card.site).vat_payer)
+    except ValueError:
+        return False
 
 
 def _pausal_za_mesic(key, obdobi):
@@ -441,8 +453,8 @@ def generate_client_card_document(card, output_path):
     class_labels = InvoiceClassColor.label_map()
     class_order = [code for code, _ in InvoiceClassColor.choices()]
 
-    # a) Účtované služby vždy za měsíc
-    elements.append(Paragraph("a) Účtované služby vždy za měsíc", _STYLE_H3))
+    # a) Účtované služby ("za měsíc" je ve sloupci Kč/měsíc - Daniel 2026-10-15)
+    elements.append(Paragraph("a) Účtované služby", _STYLE_H3))
     if pausalni:
         obdobi = Period.current()
         pausal_rows = [["Položka", "Výpočet", "Kč/měsíc"]]
@@ -462,15 +474,16 @@ def generate_client_card_document(card, output_path):
             ("ALIGN", (2, 0), (-1, -1), "RIGHT"),
         ]))
         elements.append(pausal_table)
+        # Sluzby se dani vzdy, kdyz je pronajimatel platce - na rozdil od
+        # najmu nezalezi na platcovstvi najemce. U neplatce (DV) DPH neni.
+        # Daniel 2026-10-15.
+        if _pronajimatel_platce(card):
+            elements.append(Paragraph(
+                "K výše uvedeným částkám bude připočtena DPH.", _STYLE_POZNAMKA))
     else:
         elements.append(Paragraph("Karta nemá žádné pevné částky ani paušály.", _STYLE_POZNAMKA))
 
     # b) Evidence pro výpočet
-    # Od tohoto mista az po podpisy drzet pohromade (KeepTogether nize):
-    # jinak se stavalo, ze na posledni strane zbyly jen podpisy (MI Roads).
-    # Kdyz se blok na stranu nevejde, presune se cely na dalsi; delsi nez
-    # strana se rozdeli normalne. Daniel 2026-10-15.
-    zaver_od = len(elements)
     elements.append(Paragraph("b) Evidence pro výpočet", _STYLE_H3))
     # Ktera meridla karta s nekym sdili - rozhoduje o tom, jestli se
     # u klice tiskne vaha, nebo pomlcka (viz _fmt_key_value).
@@ -515,7 +528,33 @@ def generate_client_card_document(card, output_path):
     # Plati pro kazdou Kartu bez ohledu na platcovstvi - Daniel 2026-09-29:
     # "Karty najemcu musi obsahovat poznamku, ze vsechny ceny sluzeb jsou
     # uvedeny bez DPH."
+    # Od teto poznamky az po podpisy drzet pohromade (KeepTogether nize),
+    # aby na posledni strane nezustaly jen podpisy (MI Roads). Drive se
+    # drzela i cela tabulka Evidence - s Popisem meridel uz byl blok tak
+    # vysoky, ze odskocil na dalsi stranu a prvni zustala z pulky prazdna.
+    # Daniel 2026-10-15.
+    zaver_od = len(elements)
     elements.append(Paragraph("Všechny ceny služeb jsou uvedeny bez DPH.", _STYLE_POZNAMKA))
+
+    # Popis měřidel - výčet měřidel použitých v klíčích Karty s jejich
+    # popisem, at nájemce ví, co se pod kódem (E_AB3, T_A1S...) skrývá.
+    # Text, ne tabulka. Daniel 2026-10-15.
+    meridla = {}
+    for k in keys:
+        if k.meter_id and k.meter_id not in meridla:
+            meridla[k.meter_id] = (k.service_item.invoice_class, k.meter)
+    if meridla:
+        poradi = {code: i for i, code in enumerate(class_order)}
+        elements.append(Paragraph("Popis měřidel", _STYLE_H3))
+        radky = [
+            # <b> by vyzadovalo registrovanou rodinu pisma - tucny rez se
+            # proto zadava primo jmenem fontu.
+            f'<font name="{FONT_BOLD}">{escape(m.code)}</font> – {escape(m.name)}'
+            if m.code else escape(m.name)
+            for _trida, m in sorted(
+                meridla.values(), key=lambda x: (poradi.get(x[0], 99), x[1].code or x[1].name))
+        ]
+        elements.append(Paragraph("<br/>".join(radky), _STYLE_MERIDLA))
 
     # --- Podpisy: datum podpisu / nadpis strany / čára / jméno zástupce pod čarou ---
     elements.append(Spacer(1, 10 * mm))
