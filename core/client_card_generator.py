@@ -25,7 +25,7 @@ from reportlab.platypus import (
 from django.db.models import F
 
 from core.contract_generator import format_date_cz, get_landlord
-from core.models import AllocationKey, InvoiceClassColor, ServicePoolItem
+from core.models import AllocationKey, InvoiceClassColor, Period, PriceList, ServicePoolItem
 from core.pdf_fonts import FONT_CARD_BOLD as FONT_BOLD
 from core.pdf_fonts import FONT_CARD_REGULAR as FONT_REGULAR
 
@@ -70,6 +70,8 @@ _STYLE_NAZEV_KARTY = ParagraphStyle(
 # nejblizsi zarazce za popiskem - "za dvojteckou odrazit jednim tabem".
 _TAB = 12.5 * mm
 _STYLE_H2 = ParagraphStyle("CardH2", fontName=FONT_BOLD, fontSize=_FONT_SIZE + 1, spaceBefore=4 * mm, spaceAfter=1 * mm)
+# Podnadpis uvnitr sekce (Poskytovane sluzby: a) / b)) - Daniel 2026-10-15.
+_STYLE_H3 = ParagraphStyle("CardH3", fontName=FONT_BOLD, fontSize=_FONT_SIZE, spaceBefore=2.5 * mm, spaceAfter=1 * mm)
 _STYLE_SIG_LABEL = ParagraphStyle("CardSigLabel", fontName=FONT_BOLD, fontSize=_FONT_SIZE, alignment=1)  # 1 = center
 _STYLE_SIG_LINE = ParagraphStyle("CardSigLine", fontName=FONT_REGULAR, fontSize=_FONT_SIZE, alignment=1)
 _STYLE_SIG_NAME = ParagraphStyle("CardSigName", fontName=FONT_REGULAR, fontSize=_FONT_SIZE, alignment=1)
@@ -192,6 +194,26 @@ _STYLE_PLAN_POPIS = ParagraphStyle(
 )
 
 
+def _pausal_za_mesic(key, obdobi):
+    """(popis vypoctu, Kc za mesic) pro klic typu Pevna castka / Dle vymery.
+
+    Stejny vypocet jako billing/engine.py _fixed_amount_for, jen bez kraceni
+    dny - Karta uvadi sjednanou mesicni castku, ne vyuctovani konkretniho
+    mesice. Cena za m2 se bere z klice, jinak z Ceniku polozky platneho
+    v aktualnim obdobi (pripadne posledniho drivejsiho)."""
+    t = AllocationKey.AllocationType
+    if key.allocation_type == t.FIXED_AMOUNT:
+        return "pevná částka", key.value
+    vymera = key.vaha or Decimal("0")
+    cena = key.unit_price
+    if cena is None and obdobi is not None:
+        cena = PriceList.get_price_for_period(key.service_item, obdobi)
+    if cena is None:
+        return f"{_strip_trailing_zeros(vymera)} m² × cena dle Ceníku", None
+    popis = f"{_strip_trailing_zeros(vymera)} m² × {_fmt_kc(cena)}/m²/rok"
+    return popis, (vymera * cena / 12).quantize(Decimal("0.01"))
+
+
 def _planek_stranky(card, sirka, vyska):
     """Stranky s pudorysy pater, na kterych ma Karta plochy.
 
@@ -243,6 +265,15 @@ def _na_tab(sirka):
     return math.ceil((sirka + 2 * mm) / _TAB) * _TAB
 
 
+def najem_s_dph(card):
+    """Pripocita se k najemnemu DPH? Ano, kdyz aspon jedna Plocha karty
+    jde zdanit - obe strany platci a nejde o byt (CardUnit.najem_lze_zdanit).
+    Tiskne se v hlavicce Karty a urcuje poznamku pod Pronajatymi plochami;
+    stejny udaj ukazuje admin Karty. Daniel 2026-10-15."""
+    return any(cu.najem_lze_zdanit(card.client)
+               for cu in card.card_units.select_related("unit__site__landlord"))
+
+
 def _hlavicka_karty(card):
     """Hlavicka Karty: zvyrazneny nazev, volny radek, pak udaje.
 
@@ -276,7 +307,8 @@ def _hlavicka_karty(card):
         radky.append(osoby)
     # Platcovstvi rozhoduje, jestli se najem dani (viz poznamka pod
     # Pronajatymi plochami) - Daniel 2026-09-29.
-    radky.append(["Plátce DPH:", "ano" if card.client.vat_payer else "ne"])
+    radky.append(["Plátce DPH:", "ano" if card.client.vat_payer else "ne",
+                  "Nájemné s DPH:", "ano" if najem_s_dph(card) else "ne"])
     radky = [r + [""] * (4 - len(r)) for r in radky]
 
     font, velikost = _STYLE_INFO.fontName, _STYLE_INFO.fontSize
@@ -315,7 +347,7 @@ def generate_client_card_document(card, output_path):
     # plochu - u karet, kde se to neresi (sklady, DV), by jen zabiral misto
     # a mlcky tvrdil, ze se nikde netopi. Daniel 2026-09-05.
     ma_vytapene = any(cu.vytapena_plocha for cu in card.card_units.all())
-    zahlavi = ["Plocha", "Výměra"]
+    zahlavi = ["Plocha", "Účel", "Výměra"]
     if ma_vytapene:
         zahlavi.append("Vytápěno")
     zahlavi += ["Cena (Kč/m²/rok)", "Nájemné/rok", "Nájemné/měsíc"]
@@ -335,7 +367,9 @@ def generate_client_card_document(card, output_path):
         month_rent = cu.monthly_rent
         year_rent = (month_rent * 12) if month_rent is not None else None
 
-        radek = [str(cu.unit) if cu.unit else "—", _fmt_m2(area)]
+        # Ucel plochy (Unit.purpose) - Daniel 2026-10-15.
+        radek = [str(cu.unit) if cu.unit else "—",
+                 (cu.unit.purpose if cu.unit and cu.unit.purpose else "—"), _fmt_m2(area)]
         if ma_vytapene:
             vytapeno = cu.vytapena_plocha
             # Pomlcka misto "0,00 m2" - u nevytapene plochy je to jasnejsi
@@ -352,7 +386,7 @@ def generate_client_card_document(card, output_path):
         total_year += year_rent or Decimal("0")
         total_month += month_rent or Decimal("0")
 
-    celkem = ["Celkem", _fmt_m2(total_area)]
+    celkem = ["Celkem", "", _fmt_m2(total_area)]
     if ma_vytapene:
         celkem.append(_fmt_m2(total_heated))
     celkem += ["", _fmt_kc(total_year, whole=True), _fmt_kc(total_month, whole=True)]
@@ -363,7 +397,7 @@ def generate_client_card_document(card, output_path):
         *_TABLE_BASE_STYLE,
         ("FONTNAME", (0, 0), (-1, 0), FONT_BOLD),
         ("FONTNAME", (0, -1), (-1, -1), FONT_BOLD),
-        ("ALIGN", (1, 0), (-1, -1), "RIGHT"),
+        ("ALIGN", (2, 0), (-1, -1), "RIGHT"),
     ]))
     elements.append(units_table)
     # Najem je podle §56a osvobozeny a dani se jen, kdyz jsou platci obe
@@ -371,12 +405,19 @@ def generate_client_card_document(card, output_path):
     # poznamka smysl - u neplatce by "bez DPH" budilo dojem, ze se DPH
     # jeste pripocte, a to nejde. Staci jedna zdanitelna plocha: karta
     # s bytem i kancelari (vzacne) ma cenu kancelare taky bez DPH.
-    if any(cu.najem_lze_zdanit(card.client)
-           for cu in card.card_units.select_related("unit__site__landlord")):
-        elements.append(Paragraph("Cena nájmu je uvedena bez DPH.", _STYLE_POZNAMKA))
+    # Text upravil Daniel 2026-10-15 (drive "Cena najmu je uvedena bez DPH.").
+    if najem_s_dph(card):
+        elements.append(Paragraph(
+            "K výše uvedeným částkám nájemného bude připočtena DPH.", _STYLE_POZNAMKA))
 
-    # --- Klíče - jedna souvislá tabulka, třídy oddělené silnější linkou ---
-    elements.append(Paragraph("Klíče rozúčtování služeb", _STYLE_H2))
+    # --- Poskytované služby (Daniel 2026-10-15) ---
+    # a) Účtované služby vždy za měsíc - pevné částky a paušály (Pevná
+    #    částka, Dle výměry), klient je platí každý měsíc bez ohledu na
+    #    spotřebu;
+    # b) Evidence pro výpočet - všechny ostatní klíče (podíly podle váhy
+    #    a měřidel), podle kterých se rozúčtovává skutečný náklad.
+    # Dřív to byla jedna tabulka "Klíče rozúčtování služeb".
+    elements.append(Paragraph("Poskytované služby", _STYLE_H2))
     # Stejne razeni jako sekce Klicu v adminu (core.admin
     # AllocationKeyInlineBase.get_queryset): v ramci Polozky zasobniku
     # jeste podle Podruzneho meridla, klic bez meridla prvni - at Karta
@@ -386,27 +427,60 @@ def generate_client_card_document(card, output_path):
     # vzestupnem razeni na KONEC, sqlite na zacatek.
     keys = list(
         card.allocation_keys
-        .select_related("service_item", "meter")
+        .select_related("service_item", "meter", "client_card")
         .order_by(
             "service_item__invoice_class", "service_item__name",
             F("meter__code").asc(nulls_first=True), "pk",
         )
     )
-    # Ktera meridla karta s nekym sdili - rozhoduje o tom, jestli se
-    # u klice tiskne vaha, nebo pomlcka (viz _fmt_key_value).
-    sdilena = _sdilena_meridla(keys)
+    t = AllocationKey.AllocationType
+    pausalni = [k for k in keys if k.allocation_type in (t.FIXED_AMOUNT, t.AREA_PRICE)]
+    evidence = [k for k in keys if k not in pausalni]
 
     # Poradi i nazvy Trid se berou z DB (Nastaveni -> Tridy) az za behu -
     # na urovni modulu by to byl dotaz uz pri importu (pada pri migrate).
     class_labels = InvoiceClassColor.label_map()
     class_order = [code for code, _ in InvoiceClassColor.choices()]
 
+    # a) Účtované služby vždy za měsíc
+    elements.append(Paragraph("a) Účtované služby vždy za měsíc", _STYLE_H3))
+    if pausalni:
+        obdobi = Period.current()
+        pausal_rows = [["Položka", "Výpočet", "Kč/měsíc", "Fakturovat"]]
+        celkem_mesic = Decimal("0")
+        for class_code in class_order:
+            for key in [k for k in pausalni if k.service_item.invoice_class == class_code]:
+                vypocet, mesicne = _pausal_za_mesic(key, obdobi)
+                pausal_rows.append([
+                    key.service_item.name, vypocet, _fmt_kc(mesicne),
+                    "Ano" if key.is_billed else "V paušálu",
+                ])
+                if key.is_billed and mesicne is not None:
+                    celkem_mesic += mesicne
+        pausal_rows.append(["Celkem za měsíc", "", _fmt_kc(celkem_mesic), ""])
+        pausal_table = Table(pausal_rows, repeatRows=1, hAlign="LEFT")
+        pausal_table.setStyle(TableStyle([
+            *_TABLE_BASE_STYLE,
+            ("FONTNAME", (0, 0), (-1, 0), FONT_BOLD),
+            ("FONTNAME", (0, -1), (-1, -1), FONT_BOLD),
+            ("ALIGN", (2, 0), (-1, -1), "RIGHT"),
+        ]))
+        elements.append(pausal_table)
+    else:
+        elements.append(Paragraph("Karta nemá žádné pevné částky ani paušály.", _STYLE_POZNAMKA))
+
+    # b) Evidence pro výpočet
+    elements.append(Paragraph("b) Evidence pro výpočet", _STYLE_H3))
+    # Ktera meridla karta s nekym sdili - rozhoduje o tom, jestli se
+    # u klice tiskne vaha, nebo pomlcka (viz _fmt_key_value).
+    sdilena = _sdilena_meridla(evidence)
+
     key_rows = [["Položka", "Měřidlo", "Typ výpočtu", "Hodnota", "Fakturovat"]]
     type_labels = dict(AllocationKey.AllocationType.choices)
     class_header_rows = []  # indexy radku s nazvem tridy - pro silnejsi linku/tucne pismo
 
     for class_code in class_order:
-        class_keys = [k for k in keys if k.service_item.invoice_class == class_code]
+        class_keys = [k for k in evidence if k.service_item.invoice_class == class_code]
         if not class_keys:
             continue
         class_header_rows.append(len(key_rows))
@@ -436,6 +510,8 @@ def generate_client_card_document(card, output_path):
         keys_table = Table(key_rows, repeatRows=1, hAlign="LEFT")
         keys_table.setStyle(TableStyle(keys_style))
         elements.append(keys_table)
+    else:
+        elements.append(Paragraph("Karta nemá žádné další klíče rozúčtování.", _STYLE_POZNAMKA))
     # Plati pro kazdou Kartu bez ohledu na platcovstvi - Daniel 2026-09-29:
     # "Karty najemcu musi obsahovat poznamku, ze vsechny ceny sluzeb jsou
     # uvedeny bez DPH."

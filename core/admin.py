@@ -2013,7 +2013,7 @@ class ClientCardAdmin(PodlePronajimatele, ModelAdmin):
     search_fields = ("client__name", "description")
     fieldsets = (
         ("Základní údaje", {
-            "fields": (("client", "platce_dph", "description"), ("valid_from", "valid_to"),
+            "fields": (("client", "platce_dph", "najem_s_dph", "description"), ("valid_from", "valid_to"),
                        "contract", ("pocet_osob", "pocet_osob_tuv"), "is_active", "note")
         }),
         ("Čísla objednávek (na faktury)", {
@@ -2026,7 +2026,7 @@ class ClientCardAdmin(PodlePronajimatele, ModelAdmin):
             "fields": (("signed_on", "generate_card_button"), "document")
         }),
     )
-    readonly_fields = ("generate_card_button", "platce_dph")
+    readonly_fields = ("generate_card_button", "platce_dph", "najem_s_dph")
 
     @display(description="Plátce DPH")
     def platce_dph(self, obj):
@@ -2037,6 +2037,16 @@ class ClientCardAdmin(PodlePronajimatele, ModelAdmin):
         if obj is None or not obj.client_id:
             return "—"
         return "ano" if obj.client.vat_payer else "ne"
+
+    @display(description="Nájemné s DPH")
+    def najem_s_dph(self, obj):
+        """Pripocita se k najemnemu DPH - obe strany platci a aspon jedna
+        Plocha neni byt (core.client_card_generator.najem_s_dph, stejne
+        pravidlo jako Karta v PDF). Daniel 2026-10-15."""
+        if obj is None or not obj.pk or not obj.client_id:
+            return "—"
+        from core.client_card_generator import najem_s_dph
+        return "ano" if najem_s_dph(obj) else "ne"
 
     def formfield_for_foreignkey(self, db_field, request, **kwargs):
         """V poli Smlouva nabidnout jen smlouvy tohoto klienta.
