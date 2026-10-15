@@ -2013,7 +2013,8 @@ class ClientCardAdmin(PodlePronajimatele, ModelAdmin):
     search_fields = ("client__name", "description")
     fieldsets = (
         ("Základní údaje", {
-            "fields": (("client", "platce_dph", "najem_s_dph", "description"), ("valid_from", "valid_to"),
+            "fields": (("client", "platce_dph", "description"), ("valid_from", "valid_to"),
+                       ("najem_bez_dph", "najem_s_dph"),
                        "contract", ("pocet_osob", "pocet_osob_tuv"), "is_active", "note")
         }),
         ("Čísla objednávek (na faktury)", {

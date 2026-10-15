@@ -19,7 +19,7 @@ from reportlab.lib.units import mm
 from reportlab.pdfbase.pdfmetrics import stringWidth
 from reportlab.pdfgen import canvas as _canvas
 from reportlab.platypus import (
-    PageBreak, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle,
+    KeepTogether, PageBreak, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle,
 )
 
 from django.db.models import F
@@ -70,6 +70,12 @@ _STYLE_NAZEV_KARTY = ParagraphStyle(
 # nejblizsi zarazce za popiskem - "za dvojteckou odrazit jednim tabem".
 _TAB = 12.5 * mm
 _STYLE_H2 = ParagraphStyle("CardH2", fontName=FONT_BOLD, fontSize=_FONT_SIZE + 1, spaceBefore=4 * mm, spaceAfter=1 * mm)
+# Nadpis hlavni sekce Karty (Pronajate plochy, Poskytovane sluzby) - podkres
+# pres celou sirku, at jsou sekce na prvni pohled oddelene. Daniel 2026-10-15.
+_STYLE_SEKCE = ParagraphStyle(
+    "CardSekce", parent=_STYLE_H2, backColor=colors.HexColor("#e5e7eb"),
+    borderPadding=(2, 3, 2, 3), spaceBefore=5 * mm, spaceAfter=2 * mm,
+)
 # Podnadpis uvnitr sekce (Poskytovane sluzby: a) / b)) - Daniel 2026-10-15.
 _STYLE_H3 = ParagraphStyle("CardH3", fontName=FONT_BOLD, fontSize=_FONT_SIZE, spaceBefore=2.5 * mm, spaceAfter=1 * mm)
 _STYLE_SIG_LABEL = ParagraphStyle("CardSigLabel", fontName=FONT_BOLD, fontSize=_FONT_SIZE, alignment=1)  # 1 = center
@@ -80,7 +86,9 @@ _STYLE_POZNAMKA = ParagraphStyle(
     "CardPoznamka", fontName=FONT_REGULAR, fontSize=_FONT_SIZE,
     leading=_FONT_SIZE + 3, spaceBefore=1.5 * mm,
 )
-_SIG_GAP = 3 * _FONT_SIZE * 1.2  # >= 3 blank lines between "Pronajímatel/Nájemce" heading and the signature line
+# Misto na podpis mezi "Pronajimatel/Najemce" a carou - 3 radky byly malo
+# (Daniel 2026-10-15), ted 6.
+_SIG_GAP = 6 * _FONT_SIZE * 1.2
 
 _TABLE_BASE_STYLE = [
     ("FONTNAME", (0, 0), (-1, -1), FONT_REGULAR),
@@ -342,19 +350,12 @@ def generate_client_card_document(card, output_path):
     elements.extend(_hlavicka_karty(card))
 
     # --- Plochy ---
-    elements.append(Paragraph("Pronajaté plochy", _STYLE_H2))
-    # Sloupec Vytapeno se tiskne, jen kdyz ma karta aspon jednu vytapenou
-    # plochu - u karet, kde se to neresi (sklady, DV), by jen zabiral misto
-    # a mlcky tvrdil, ze se nikde netopi. Daniel 2026-09-05.
-    ma_vytapene = any(cu.vytapena_plocha for cu in card.card_units.all())
-    zahlavi = ["Plocha", "Účel", "Výměra"]
-    if ma_vytapene:
-        zahlavi.append("Vytápěno")
-    zahlavi += ["Cena (Kč/m²/rok)", "Nájemné/rok", "Nájemné/měsíc"]
-    rows = [zahlavi]
+    elements.append(Paragraph("Pronajaté plochy", _STYLE_SEKCE))
+    # Sloupec Vytapeno Daniel 2026-10-15 zrusil - v Karte nema co delat,
+    # vytapena plocha je udaj pro rozuctovani tepla, ne pro najem.
+    rows = [["Plocha", "Účel", "Výměra", "Cena (Kč/m²/rok)", "Nájemné/rok", "Nájemné/měsíc"]]
 
     total_area = Decimal("0")
-    total_heated = Decimal("0")
     total_year = Decimal("0")
     total_month = Decimal("0")
     # Stejne poradi jako sekce Plochy a najemne v adminu (core.admin
@@ -370,11 +371,6 @@ def generate_client_card_document(card, output_path):
         # Ucel plochy (Unit.purpose) - Daniel 2026-10-15.
         radek = [str(cu.unit) if cu.unit else "—",
                  (cu.unit.purpose if cu.unit and cu.unit.purpose else "—"), _fmt_m2(area)]
-        if ma_vytapene:
-            vytapeno = cu.vytapena_plocha
-            # Pomlcka misto "0,00 m2" - u nevytapene plochy je to jasnejsi
-            radek.append(_fmt_m2(vytapeno) if vytapeno else "—")
-            total_heated += vytapeno
         radek += [
             _fmt_kc(cu.rate_per_m2),
             _fmt_kc(year_rent, whole=True),
@@ -386,10 +382,8 @@ def generate_client_card_document(card, output_path):
         total_year += year_rent or Decimal("0")
         total_month += month_rent or Decimal("0")
 
-    celkem = ["Celkem", "", _fmt_m2(total_area)]
-    if ma_vytapene:
-        celkem.append(_fmt_m2(total_heated))
-    celkem += ["", _fmt_kc(total_year, whole=True), _fmt_kc(total_month, whole=True)]
+    celkem = ["Celkem", "", _fmt_m2(total_area), "",
+              _fmt_kc(total_year, whole=True), _fmt_kc(total_month, whole=True)]
     rows.append(celkem)
 
     units_table = Table(rows, repeatRows=1, hAlign="LEFT")
@@ -417,7 +411,7 @@ def generate_client_card_document(card, output_path):
     # b) Evidence pro výpočet - všechny ostatní klíče (podíly podle váhy
     #    a měřidel), podle kterých se rozúčtovává skutečný náklad.
     # Dřív to byla jedna tabulka "Klíče rozúčtování služeb".
-    elements.append(Paragraph("Poskytované služby", _STYLE_H2))
+    elements.append(Paragraph("Poskytované služby", _STYLE_SEKCE))
     # Stejne razeni jako sekce Klicu v adminu (core.admin
     # AllocationKeyInlineBase.get_queryset): v ramci Polozky zasobniku
     # jeste podle Podruzneho meridla, klic bez meridla prvni - at Karta
@@ -434,7 +428,12 @@ def generate_client_card_document(card, output_path):
         )
     )
     t = AllocationKey.AllocationType
-    pausalni = [k for k in keys if k.allocation_type in (t.FIXED_AMOUNT, t.AREA_PRICE)]
+    # Do a) jen pevne castky, ktere se opravdu fakturuji - sloupec
+    # Fakturovat Daniel 2026-10-15 zrusil, takze nefakturovana pevna castka
+    # (napr. srazkove vody "v pausalu") by tu vypadala jako uctovana.
+    # Patri do b) mezi podklady pro vypocet.
+    pausalni = [k for k in keys
+                if k.allocation_type in (t.FIXED_AMOUNT, t.AREA_PRICE) and k.is_billed]
     evidence = [k for k in keys if k not in pausalni]
 
     # Poradi i nazvy Trid se berou z DB (Nastaveni -> Tridy) az za behu -
@@ -446,18 +445,15 @@ def generate_client_card_document(card, output_path):
     elements.append(Paragraph("a) Účtované služby vždy za měsíc", _STYLE_H3))
     if pausalni:
         obdobi = Period.current()
-        pausal_rows = [["Položka", "Výpočet", "Kč/měsíc", "Fakturovat"]]
+        pausal_rows = [["Položka", "Výpočet", "Kč/měsíc"]]
         celkem_mesic = Decimal("0")
         for class_code in class_order:
             for key in [k for k in pausalni if k.service_item.invoice_class == class_code]:
                 vypocet, mesicne = _pausal_za_mesic(key, obdobi)
-                pausal_rows.append([
-                    key.service_item.name, vypocet, _fmt_kc(mesicne),
-                    "Ano" if key.is_billed else "V paušálu",
-                ])
-                if key.is_billed and mesicne is not None:
+                pausal_rows.append([key.service_item.name, vypocet, _fmt_kc(mesicne)])
+                if mesicne is not None:
                     celkem_mesic += mesicne
-        pausal_rows.append(["Celkem za měsíc", "", _fmt_kc(celkem_mesic), ""])
+        pausal_rows.append(["Celkem za měsíc", "", _fmt_kc(celkem_mesic)])
         pausal_table = Table(pausal_rows, repeatRows=1, hAlign="LEFT")
         pausal_table.setStyle(TableStyle([
             *_TABLE_BASE_STYLE,
@@ -470,12 +466,17 @@ def generate_client_card_document(card, output_path):
         elements.append(Paragraph("Karta nemá žádné pevné částky ani paušály.", _STYLE_POZNAMKA))
 
     # b) Evidence pro výpočet
+    # Od tohoto mista az po podpisy drzet pohromade (KeepTogether nize):
+    # jinak se stavalo, ze na posledni strane zbyly jen podpisy (MI Roads).
+    # Kdyz se blok na stranu nevejde, presune se cely na dalsi; delsi nez
+    # strana se rozdeli normalne. Daniel 2026-10-15.
+    zaver_od = len(elements)
     elements.append(Paragraph("b) Evidence pro výpočet", _STYLE_H3))
     # Ktera meridla karta s nekym sdili - rozhoduje o tom, jestli se
     # u klice tiskne vaha, nebo pomlcka (viz _fmt_key_value).
     sdilena = _sdilena_meridla(evidence)
 
-    key_rows = [["Položka", "Měřidlo", "Typ výpočtu", "Hodnota", "Fakturovat"]]
+    key_rows = [["Položka", "Měřidlo", "Typ výpočtu", "Hodnota"]]
     type_labels = dict(AllocationKey.AllocationType.choices)
     class_header_rows = []  # indexy radku s nazvem tridy - pro silnejsi linku/tucne pismo
 
@@ -484,7 +485,7 @@ def generate_client_card_document(card, output_path):
         if not class_keys:
             continue
         class_header_rows.append(len(key_rows))
-        key_rows.append([class_labels[class_code], "", "", "", ""])
+        key_rows.append([class_labels[class_code], "", "", ""])
         for key in class_keys:
             key_rows.append([
                 key.service_item.name,
@@ -493,7 +494,6 @@ def generate_client_card_document(card, output_path):
                 _fmt_key_value(
                     key, (key.service_item_id, key.meter_id) in sdilena
                 ),
-                "Ano" if key.is_billed else "V paušálu",
             ])
 
     keys_style = [
@@ -535,6 +535,7 @@ def generate_client_card_document(card, output_path):
         ("TOPPADDING", (0, 1), (-1, 1), _SIG_GAP),
     ]))
     elements.append(sig_table)
+    elements[zaver_od:] = [KeepTogether(elements[zaver_od:])]
 
     # --- Plánky pater, kde má karta plochy (každý na vlastní straně) ---
     elements.extend(_planek_stranky(card, doc.width, doc.height - 20 * mm))

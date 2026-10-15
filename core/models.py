@@ -652,6 +652,20 @@ class ClientCard(models.Model):
         "Číslo objednávky - energie a služby", max_length=100, blank=True,
         help_text="Někteří klienti vyžadují uvést na faktuře/vyúčtování za energie a služby - vázané na tuto Kartu.",
     )
+    # Najem je podle §56a osvobozeny; jsou-li platci obe strany, DPH se
+    # pripocist MUZE, ale nemusi. Bez prepinace aplikace u dvou platcu
+    # danila vzdy. Pravidlo zije v CardUnit.najem_lze_zdanit - plati tak
+    # stejne pro Kartu v PDF, Prehled najemneho i koeficient DPH.
+    # Daniel 2026-10-15.
+    najem_bez_dph = models.BooleanField(
+        "Nájem bez DPH (osvobozeno)", default=False,
+        help_text=(
+            "Zapni, když jsou plátci obě strany, ale nájem se podle §56a "
+            "nechává osvobozený. Bez zaškrtnutí se u dvou plátců k nájemnému "
+            "DPH připočítává. U neplátce nebo bytu nemá vliv - tam se nájem "
+            "nedaní nikdy."
+        ),
+    )
 
     class Meta:
         verbose_name = "Karta klienta"
@@ -920,6 +934,7 @@ class ClientCard(models.Model):
             # z Poctu osob ctou jen pole na Karte (Daniel 2026-09-27).
             pocet_osob=self.pocet_osob,
             pocet_osob_tuv=self.pocet_osob_tuv,
+            najem_bez_dph=self.najem_bez_dph,
         )
         new_card.save()
 
@@ -2815,6 +2830,9 @@ class CardUnit(models.Model):
             klient.vat_payer
             and pronajimatel and pronajimatel.vat_payer
             and not unit.is_residential
+            # Obe strany platci se mohou dohodnout, ze najem zustane
+            # osvobozeny (ClientCard.najem_bez_dph). Daniel 2026-10-15.
+            and not self.card.najem_bez_dph
         )
 
     @property
