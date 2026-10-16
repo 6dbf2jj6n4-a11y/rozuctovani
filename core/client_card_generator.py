@@ -558,6 +558,8 @@ def generate_client_card_document(card, output_path):
     # --- Podpisy: datum podpisu / nadpis strany / čára / jméno zástupce pod čarou ---
     elements.append(Spacer(1, 10 * mm))
     elements.append(Paragraph(f"Datum podpisu: {format_date_cz(card.signed_on)}", _STYLE_H2))
+    # Jeden volny radek pod datem podpisu (Daniel 2026-10-16).
+    elements.append(Spacer(1, _FONT_SIZE * 1.2))
     sig_rows = [
         [Paragraph("Pronajímatel", _STYLE_SIG_LABEL), Paragraph("Nájemce", _STYLE_SIG_LABEL)],
         [Paragraph("_" * 35, _STYLE_SIG_LINE), Paragraph("_" * 35, _STYLE_SIG_LINE)],
