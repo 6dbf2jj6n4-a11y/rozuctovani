@@ -76,9 +76,11 @@ _STYLE_SEKCE = ParagraphStyle(
     "CardSekce", parent=_STYLE_H2, backColor=colors.HexColor("#e5e7eb"),
     borderPadding=(2, 3, 2, 3), spaceBefore=5 * mm, spaceAfter=2 * mm,
 )
-# Vycet meridel pod Evidenci - obycejne pismo, radky pod sebou.
+# Popis meridel pod tabulkami sluzeb - souvisly text oddeleny carkami,
+# male pismo (Daniel 2026-10-16).
 _STYLE_MERIDLA = ParagraphStyle(
-    "CardMeridla", fontName=FONT_REGULAR, fontSize=_FONT_SIZE, leading=_FONT_SIZE + 3,
+    "CardMeridla", fontName=FONT_REGULAR, fontSize=_FONT_SIZE - 2, leading=_FONT_SIZE,
+    spaceBefore=2 * mm,
 )
 # Podnadpis uvnitr sekce (Poskytovane sluzby: a) / b)) - Daniel 2026-10-15.
 _STYLE_H3 = ParagraphStyle("CardH3", fontName=FONT_BOLD, fontSize=_FONT_SIZE, spaceBefore=2.5 * mm, spaceAfter=1 * mm)
@@ -540,7 +542,7 @@ def generate_client_card_document(card, output_path):
             meridla[k.meter_id] = (k.service_item.invoice_class, k.meter)
     if meridla:
         poradi = {code: i for i, code in enumerate(class_order)}
-        elements.append(Paragraph("Popis měřidel", _STYLE_H3))
+
         radky = [
             # <b> by vyzadovalo registrovanou rodinu pisma - tucny rez se
             # proto zadava primo jmenem fontu.
@@ -549,7 +551,9 @@ def generate_client_card_document(card, output_path):
             for _trida, m in sorted(
                 meridla.values(), key=lambda x: (poradi.get(x[0], 99), x[1].code or x[1].name))
         ]
-        elements.append(Paragraph("<br/>".join(radky), _STYLE_MERIDLA))
+        # Bez samostatneho nadpisu - jen uvozujici slova v textu.
+        elements.append(Paragraph(
+            f'<font name="{FONT_BOLD}">Popis měřidel:</font> ' + ", ".join(radky), _STYLE_MERIDLA))
 
     # --- Podpisy: datum podpisu / nadpis strany / čára / jméno zástupce pod čarou ---
     elements.append(Spacer(1, 10 * mm))
