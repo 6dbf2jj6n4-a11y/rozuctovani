@@ -318,13 +318,8 @@ def _hlavicka_karty(card):
     radky.append(platnost)
     # Pocty osob - klice na vodu, TUV a dalsi z nich berou vahu, takze musi
     # byt na Karte videt (Daniel 2026-09-25). Jsou to dve samostatna pole.
-    osoby = []
-    if card.pocet_osob is not None:
-        osoby += ["Počet osob:", str(card.pocet_osob)]
-    if card.pocet_osob_tuv is not None:
-        osoby += ["Počet osob pro TUV:", str(card.pocet_osob_tuv)]
-    if osoby:
-        radky.append(osoby)
+    # Pocty osob z hlavicky Daniel 2026-10-15 zrusil - jsou videt jako
+    # podil u klicu ve Sluzbach rozuctovanych podle skutecnych nakladu.
     # Platcovstvi rozhoduje, jestli se najem dani (viz poznamka pod
     # Pronajatymi plochami) - Daniel 2026-09-29.
     radky.append(["Plátce DPH:", "ano" if card.client.vat_payer else "ne",
@@ -416,12 +411,13 @@ def generate_client_card_document(card, output_path):
         elements.append(Paragraph(
             "K výše uvedeným částkám nájemného bude připočtena DPH.", _STYLE_POZNAMKA))
 
-    # --- Poskytované služby (Daniel 2026-10-15) ---
-    # a) Účtované služby vždy za měsíc - pevné částky a paušály (Pevná
-    #    částka, Dle výměry), klient je platí každý měsíc bez ohledu na
-    #    spotřebu;
-    # b) Evidence pro výpočet - všechny ostatní klíče (podíly podle váhy
-    #    a měřidel), podle kterých se rozúčtovává skutečný náklad.
+    # --- Poskytované služby (Daniel 2026-10-15/16) ---
+    # Pevné měsíční platby - fakturované pevné částky a paušály (Pevná
+    #    částka, Dle výměry), klient je platí každý měsíc ve stejné výši;
+    # Služby rozúčtované podle skutečných nákladů - všechny ostatní klíče
+    #    (podíly podle měřidel, m², osob) se sloupcem Fakturovat: "ano" =
+    #    klient platí svůj podíl, "ne – v paušálu" = podíl se jen eviduje
+    #    a klient platí paušál z první tabulky.
     # Dřív to byla jedna tabulka "Klíče rozúčtování služeb".
     elements.append(Paragraph("Poskytované služby", _STYLE_SEKCE))
     # Stejne razeni jako sekce Klicu v adminu (core.admin
@@ -440,10 +436,9 @@ def generate_client_card_document(card, output_path):
         )
     )
     t = AllocationKey.AllocationType
-    # Do a) jen pevne castky, ktere se opravdu fakturuji - sloupec
-    # Fakturovat Daniel 2026-10-15 zrusil, takze nefakturovana pevna castka
-    # (napr. srazkove vody "v pausalu") by tu vypadala jako uctovana.
-    # Patri do b) mezi podklady pro vypocet.
+    # Do Pevnych mesicnich plateb jen pevne castky, ktere se opravdu
+    # fakturuji - nefakturovana pevna castka (napr. srazkove vody
+    # "v pausalu") patri do druhe tabulky s "ne – v paušálu".
     pausalni = [k for k in keys
                 if k.allocation_type in (t.FIXED_AMOUNT, t.AREA_PRICE) and k.is_billed]
     evidence = [k for k in keys if k not in pausalni]
@@ -453,8 +448,7 @@ def generate_client_card_document(card, output_path):
     class_labels = InvoiceClassColor.label_map()
     class_order = [code for code, _ in InvoiceClassColor.choices()]
 
-    # a) Účtované služby ("za měsíc" je ve sloupci Kč/měsíc - Daniel 2026-10-15)
-    elements.append(Paragraph("a) Účtované služby", _STYLE_H3))
+    elements.append(Paragraph("Pevné měsíční platby", _STYLE_H3))
     if pausalni:
         obdobi = Period.current()
         pausal_rows = [["Položka", "Výpočet", "Kč/měsíc"]]
@@ -474,22 +468,15 @@ def generate_client_card_document(card, output_path):
             ("ALIGN", (2, 0), (-1, -1), "RIGHT"),
         ]))
         elements.append(pausal_table)
-        # Sluzby se dani vzdy, kdyz je pronajimatel platce - na rozdil od
-        # najmu nezalezi na platcovstvi najemce. U neplatce (DV) DPH neni.
-        # Daniel 2026-10-15.
-        if _pronajimatel_platce(card):
-            elements.append(Paragraph(
-                "K výše uvedeným částkám bude připočtena DPH.", _STYLE_POZNAMKA))
     else:
         elements.append(Paragraph("Karta nemá žádné pevné částky ani paušály.", _STYLE_POZNAMKA))
 
-    # b) Evidence pro výpočet
-    elements.append(Paragraph("b) Evidence pro výpočet", _STYLE_H3))
+    elements.append(Paragraph("Služby rozúčtované podle skutečných nákladů", _STYLE_H3))
     # Ktera meridla karta s nekym sdili - rozhoduje o tom, jestli se
     # u klice tiskne vaha, nebo pomlcka (viz _fmt_key_value).
     sdilena = _sdilena_meridla(evidence)
 
-    key_rows = [["Položka", "Měřidlo", "Typ výpočtu", "Hodnota"]]
+    key_rows = [["Položka", "Měřidlo", "Způsob výpočtu", "Podíl", "Fakturovat"]]
     type_labels = dict(AllocationKey.AllocationType.choices)
     class_header_rows = []  # indexy radku s nazvem tridy - pro silnejsi linku/tucne pismo
 
@@ -498,7 +485,7 @@ def generate_client_card_document(card, output_path):
         if not class_keys:
             continue
         class_header_rows.append(len(key_rows))
-        key_rows.append([class_labels[class_code], "", "", ""])
+        key_rows.append([class_labels[class_code], "", "", "", ""])
         for key in class_keys:
             key_rows.append([
                 key.service_item.name,
@@ -507,12 +494,13 @@ def generate_client_card_document(card, output_path):
                 _fmt_key_value(
                     key, (key.service_item_id, key.meter_id) in sdilena
                 ),
+                "ano" if key.is_billed else "ne – v paušálu",
             ])
 
     keys_style = [
         *_TABLE_BASE_STYLE,
         ("FONTNAME", (0, 0), (-1, 0), FONT_BOLD),
-        ("ALIGN", (3, 0), (-1, -1), "RIGHT"),
+        ("ALIGN", (3, 0), (3, -1), "RIGHT"),
     ]
     for row_idx in class_header_rows:
         keys_style.append(("SPAN", (0, row_idx), (-1, row_idx)))
@@ -523,18 +511,25 @@ def generate_client_card_document(card, output_path):
         keys_table = Table(key_rows, repeatRows=1, hAlign="LEFT")
         keys_table.setStyle(TableStyle(keys_style))
         elements.append(keys_table)
+        if any(not k.is_billed for k in evidence):
+            elements.append(Paragraph(
+                "Služby označené „ne – v paušálu“ jsou hrazeny pevnou platbou uvedenou "
+                "výše; podíl slouží k evidenci skutečné spotřeby.", _STYLE_POZNAMKA))
     else:
         elements.append(Paragraph("Karta nemá žádné další klíče rozúčtování.", _STYLE_POZNAMKA))
-    # Plati pro kazdou Kartu bez ohledu na platcovstvi - Daniel 2026-09-29:
-    # "Karty najemcu musi obsahovat poznamku, ze vsechny ceny sluzeb jsou
-    # uvedeny bez DPH."
-    # Od teto poznamky az po podpisy drzet pohromade (KeepTogether nize),
+    # Od poznamky o DPH az po podpisy drzet pohromade (KeepTogether nize),
     # aby na posledni strane nezustaly jen podpisy (MI Roads). Drive se
     # drzela i cela tabulka Evidence - s Popisem meridel uz byl blok tak
     # vysoky, ze odskocil na dalsi stranu a prvni zustala z pulky prazdna.
     # Daniel 2026-10-15.
     zaver_od = len(elements)
-    elements.append(Paragraph("Všechny ceny služeb jsou uvedeny bez DPH.", _STYLE_POZNAMKA))
+    # Jedna poznamka o DPH na konci sekce (Daniel 2026-10-16). Sluzby se dani
+    # vzdy, kdyz je pronajimatel platce - na rozdil od najmu nezalezi na
+    # platcovstvi najemce. U neplatce (DV) se DPH nepripocitava, poznamka
+    # se netiskne.
+    if _pronajimatel_platce(card):
+        elements.append(Paragraph(
+            "K výše uvedeným částkám bude připočtena DPH.", _STYLE_POZNAMKA))
 
     # Popis měřidel - výčet měřidel použitých v klíčích Karty s jejich
     # popisem, at nájemce ví, co se pod kódem (E_AB3, T_A1S...) skrývá.
