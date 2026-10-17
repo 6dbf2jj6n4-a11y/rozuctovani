@@ -77,3 +77,22 @@ def prepnout_pronajimatele(request, pk):
     # Zpatky na tutez stranku: po prepnuti se ma jen prekreslit obsah.
     # Referer muze chybet (primo zadana adresa), pak jde uzivatel na uvod.
     return redirect(request.META.get("HTTP_REFERER") or "/admin/")
+
+
+def historie_zmen(request):
+    """Nedavne akce prihlaseneho uzivatele na samostatne strance.
+
+    Na Prehledu misto sloupce s tabulkou zustal jen odkaz sem (Daniel
+    2026-10-17). Stejny zdroj i omezeni na zvoleneho pronajimatele jako
+    drivejsi sloupec - core.templatetags.core_extras.posledni_akce_v_kontextu.
+    """
+    from django.contrib.admin import site as admin_site
+    from django.shortcuts import render
+
+    from core.templatetags.core_extras import posledni_akce_v_kontextu
+
+    return render(request, "admin/historie_zmen.html", {
+        **admin_site.each_context(request),
+        "title": "Historie mých změn",
+        "zaznamy": posledni_akce_v_kontextu({"request": request}, 200),
+    })

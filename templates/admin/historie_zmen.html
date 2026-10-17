@@ -1,0 +1,36 @@
+{% extends "admin/base_site.html" %}
+
+{% block content %}
+<div>
+    <p style="color:#999; font-size:13px;">
+        Posledních 200 tvých změn v adminu (přidání a úpravy) u zvoleného pronajímatele.
+        Smazané záznamy tu nejsou – objekt už neexistuje.
+    </p>
+    {% if not zaznamy %}
+        <p>Zatím žádné změny.</p>
+    {% else %}
+        <table style="width:100%; border-collapse:collapse; font-size:13px;">
+            <thead>
+                <tr style="border-bottom:2px solid #666; text-align:left;">
+                    <th style="padding:6px 8px;">Kdy</th>
+                    <th style="padding:6px 8px;">Akce</th>
+                    <th style="padding:6px 8px;">Typ</th>
+                    <th style="padding:6px 8px;">Záznam</th>
+                    <th style="padding:6px 8px;">Co se změnilo</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for z in zaznamy %}
+                    <tr style="border-bottom:1px solid #333;">
+                        <td style="padding:5px 8px; white-space:nowrap;">{{ z.action_time|date:"j. n. Y H:i" }}</td>
+                        <td style="padding:5px 8px;">{% if z.is_addition %}přidáno{% elif z.is_change %}změněno{% endif %}</td>
+                        <td style="padding:5px 8px;">{% if z.content_type %}{{ z.content_type.name|capfirst }}{% endif %}</td>
+                        <td style="padding:5px 8px;">{% if z.get_admin_url %}<a href="{{ z.get_admin_url }}">{{ z.object_repr }}</a>{% else %}{{ z.object_repr }}{% endif %}</td>
+                        <td style="padding:5px 8px; color:#999;">{{ z.get_change_message }}</td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    {% endif %}
+</div>
+{% endblock %}

@@ -9,6 +9,7 @@ from django.views.static import serve as static_serve
 from core.autocomplete import PopiskyAutocompleteView
 from core.views import (
     class_colors_css,
+    historie_zmen,
     prepnout_pronajimatele,
     vyber_pronajimatele,
 )
@@ -68,6 +69,11 @@ urlpatterns = [
         "admin/pronajimatel/<int:pk>/",
         admin.site.admin_view(prepnout_pronajimatele),
         name="prepnout_pronajimatele",
+    ),
+    path(
+        "admin/historie/",
+        admin.site.admin_view(historie_zmen),
+        name="historie_zmen",
     ),
     path("admin/", admin.site.urls),
     path("api/", include("billing.api_urls")),

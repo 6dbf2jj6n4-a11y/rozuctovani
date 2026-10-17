@@ -11,8 +11,8 @@ kolik mam klientu a za kolik, jestli uz jdou spocitat odecty a naklady,
 a co lezi ladem. Kazda vede na sestavu, kde se to da rozebrat.
 Cisla pocita core/dashboard.py. Daniel 2026-09-07.
 
-Sloupec "Nedavne akce" vpravo zustava - viz templates/unfold/helpers/
-history.html, ktery ho omezuje na zvoleneho pronajimatele.
+Sloupec "Nedavne akce" vpravo byl nahrazen odkazem na stranku Historie
+mych zmen (core.views.historie_zmen) - Daniel 2026-10-17.
 {% endcomment %}
 
 {% block title %}{% if subtitle %}{{ subtitle }} | {% endif %}{{ title }} | {{ site_title|default:_('Django site admin') }}{% endblock %}
@@ -181,6 +181,9 @@ history.html, ktery ho omezuje na zvoleneho pronajimatele.
             {% endif %}
         </div>
 
-        {% include "unfold/helpers/history.html" %}
     </div>
+    {# Nedavne akce: misto sloupce s tabulkou jen odkaz (Daniel 2026-10-17). #}
+    <p class="text-sm" style="margin-top:16px;">
+        <a href="{% url 'historie_zmen' %}">Historie mých změn →</a>
+    </p>
 {% endblock %}
