@@ -2725,8 +2725,12 @@ class ClientCardAdmin(PodlePronajimatele, ModelAdmin):
         # podle kodu klienta a Platnosti od.
         import re
 
+        import unicodedata
+
         if card.description.strip():
             zaklad = re.sub(r"[\s\-–—/]+", "_", card.description.strip()).strip("_")
+            # Bez diakritiky (Daniel 2026-10-17): Halamová -> Halamova.
+            zaklad = unicodedata.normalize("NFKD", zaklad).encode("ascii", "ignore").decode()
         else:
             zaklad = (f"karta_najemce_{card.client.code or card.client.pk}_"
                       f"{card.valid_from.strftime('%d%m%Y')}")
@@ -2736,7 +2740,6 @@ class ClientCardAdmin(PodlePronajimatele, ModelAdmin):
         from django.utils.http import content_disposition_header
 
         response = HttpResponse(buf.getvalue(), content_type="application/pdf")
-        # Popis muze mit diakritiku (Halamová) - hlavicka ji musi zakodovat.
         response["Content-Disposition"] = content_disposition_header(True, filename)
         return response
 
