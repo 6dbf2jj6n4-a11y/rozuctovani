@@ -3272,8 +3272,35 @@ class MeterAdmin(PodlePronajimatele, DuplicateModelAdminMixin, ModelAdmin):
                 self.admin_site.admin_view(self.report_stav_odectu_view),
                 name="core_meter_report_stav_odectu",
             ),
+            path(
+                "report/stav-odectu/prepnout/",
+                self.admin_site.admin_view(self.report_stav_odectu_prepnout_view),
+                name="core_meter_report_stav_odectu_prepnout",
+            ),
         ]
         return custom + urls
+
+    def report_stav_odectu_prepnout_view(self, request):
+        """Uzavrit / znovu otevrit odecty arealu za obdobi primo ze sestavy
+        Stav odectu. Uzavreni odectu (ReadingsClosure) nema polozku v menu,
+        takze to admin dosud nemel kde udelat. Daniel 2026-10-17."""
+        from django.shortcuts import get_object_or_404, redirect
+        from django.urls import reverse
+
+        if request.method != "POST":
+            return redirect("admin:core_meter_report_stav_odectu")
+        period = get_object_or_404(Period, pk=request.POST.get("period"))
+        site = get_object_or_404(pronajimatele.arealy(request), pk=request.POST.get("site"))
+        if request.POST.get("akce") == "otevrit":
+            ReadingsClosure.objects.filter(period=period, site=site).delete()
+            self.message_user(request, f"{site} {period}: odečty znovu otevřeny pro správce.",
+                              messages.WARNING)
+        else:
+            _, zalozeno = ReadingsClosure.objects.get_or_create(
+                period=period, site=site, defaults={"closed_by": request.user})
+            if zalozeno:
+                self.message_user(request, f"{site} {period}: odečty uzavřeny.", messages.SUCCESS)
+        return redirect(f"{reverse('admin:core_meter_report_stav_odectu')}?period={period.pk}")
 
     def report_spotreby_view(self, request):
         """Report (Reporty v menu): pro vybrane Obdobi (volitelne i Areal)

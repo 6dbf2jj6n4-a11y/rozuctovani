@@ -36,6 +36,17 @@
             {% else %}
                 <span style="font-size:13px; font-weight:400; color:#d97706;">&ndash; správce zatím neuzavřel</span>
             {% endif %}
+            <form method="post" action="{% url 'admin:core_meter_report_stav_odectu_prepnout' %}" style="display:inline; margin-left:12px;">
+                {% csrf_token %}
+                <input type="hidden" name="period" value="{{ selected_period.pk|unlocalize }}">
+                <input type="hidden" name="site" value="{{ s.site.pk|unlocalize }}">
+                {% if s.uzavreno %}
+                    <button type="submit" name="akce" value="otevrit" class="rx-btn" style="font-size:12px;"
+                            onclick="return confirm('Znovu otevřít odečty {{ s.site.name }} {{ selected_period }} pro správce?');">Otevřít odečty</button>
+                {% else %}
+                    <button type="submit" name="akce" value="uzavrit" class="rx-btn" style="font-size:12px;">Uzavřít odečty</button>
+                {% endif %}
+            </form>
         </h2>
 
         <p style="font-size:13px;">
