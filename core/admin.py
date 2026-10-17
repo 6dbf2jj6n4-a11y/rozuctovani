@@ -2718,17 +2718,26 @@ class ClientCardAdmin(PodlePronajimatele, ModelAdmin):
             return self._presmeruj_cizi_kartu(request)
         buf = BytesIO()
         generate_client_card_document(card, buf)
-        # Na konci Platnost od (ddmmrrrr) misto id karty - z nazvu souboru
-        # je hned poznat, od kdy karta plati, a karty jednoho klienta se
-        # v adresari seradi po sobe. Daniel 2026-09-29.
-        filename = (
-            f"karta_najemce_{card.client.code or card.client.pk}_"
-            f"{card.valid_from.strftime('%d%m%Y')}.pdf"
-        )
+        # Nazev souboru = Popis karty, mezery a pomlcky nahrazene "_"
+        # (Daniel 2026-10-17): "Karta KJOEU 2026 - 1" -> Karta_KJOEU_2026_1.pdf.
+        # Vic podtrzitek za sebou (z " - ") se slouci do jednoho, "/" by
+        # na R2 zalozilo slozku. Karta bez Popisu dostane puvodni nazev
+        # podle kodu klienta a Platnosti od.
+        import re
+
+        if card.description.strip():
+            zaklad = re.sub(r"[\s\-–—/]+", "_", card.description.strip()).strip("_")
+        else:
+            zaklad = (f"karta_najemce_{card.client.code or card.client.pk}_"
+                      f"{card.valid_from.strftime('%d%m%Y')}")
+        filename = f"{zaklad}.pdf"
         card.document.save(filename, ContentFile(buf.getvalue()), save=True)
 
+        from django.utils.http import content_disposition_header
+
         response = HttpResponse(buf.getvalue(), content_type="application/pdf")
-        response["Content-Disposition"] = f'attachment; filename="{filename}"'
+        # Popis muze mit diakritiku (Halamová) - hlavicka ji musi zakodovat.
+        response["Content-Disposition"] = content_disposition_header(True, filename)
         return response
 
     def generate_card_button(self, obj):
