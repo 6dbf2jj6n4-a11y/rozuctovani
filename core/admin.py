@@ -4056,9 +4056,23 @@ class PeriodAdmin(ModelAdmin):
         period = get_object_or_404(Period, pk=period_id)
         period.status = Period.Status.CLOSED
         period.save(update_fields=["status"])
-        self.message_user(
-            request, f"{period}: uzavřeno - rozúčtování už nepůjde přepočítat.", level=messages.SUCCESS
-        )
+        # Uzavrene Obdobi = hotove odecty. Dokud to slo jen rucne, zustavaly
+        # odecty arealu, ktery spravce sam neuzavrel, v prehledech jako
+        # otevrene, i kdyz uz nesly menit (FM 09/2026). Uzaviraji se arealy
+        # aktualniho pronajimatele; zaznam spravce se neprepisuje.
+        # Daniel 2026-10-17.
+        nove = []
+        for site in pronajimatele.arealy(request).order_by("name"):
+            _, zalozeno = ReadingsClosure.objects.get_or_create(
+                period=period, site=site,
+                defaults={"closed_by": request.user, "note": "uzavřeno s Obdobím"},
+            )
+            if zalozeno:
+                nove.append(site.name)
+        zprava = f"{period}: uzavřeno - rozúčtování už nepůjde přepočítat."
+        if nove:
+            zprava += f" Uzavřeny i odečty: {', '.join(nove)}."
+        self.message_user(request, zprava, level=messages.SUCCESS)
         return self._redirect_back(request)
 
     def vypocet_view(self, request, period_id):
@@ -4624,6 +4638,13 @@ class ReadingsClosureAdmin(PodlePronajimatele, ModelAdmin):
     list_select_related = ("period", "site", "closed_by")
     list_filter = ("period", "site")
     readonly_fields = ("closed_at", "closed_by")
+
+    def save_model(self, request, obj, form, change):
+        """Uzavrel = kdo zaznam zalozil, i kdyz ho zalozi admin rucne -
+        drive zustal sloupec prazdny. Daniel 2026-10-17."""
+        if not obj.closed_by_id:
+            obj.closed_by = request.user
+        super().save_model(request, obj, form, change)
 
 
 class _PotvrzeneVarovaniFilter(admin.SimpleListFilter):
