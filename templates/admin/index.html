@@ -53,7 +53,16 @@ history.html, ktery ho omezuje na zvoleneho pronajimatele.
                         {% component "unfold/components/title.html" %}{{ p.odecty.hotovo }} / {{ p.odecty.celkem }}{% endcomponent %}
                         {% component "unfold/components/text.html" %}
                             {% if p.odecty.chybi %}Odečteno měřidel, chybí {{ p.odecty.chybi }}.{% else %}Odečtená měřidla – hotovo.{% endif %}
-                            Správci uzavřeli {{ p.odecty.uzavreno }} z {{ p.odecty.arealu }} areálů.
+                            <br>
+                            {% for a in p.odecty.po_arealech %}
+                                {% if a.uzavreno %}<span style="color:#15803d;">✔ {{ a.nazev }} uzavřeno{% if a.kdo %} ({{ a.kdo }}){% endif %}</span>{% else %}<span style="color:#d97706;">⏳ {{ a.nazev }} otevřeno</span>{% endif %}{% if not forloop.last %} · {% endif %}
+                            {% endfor %}
+                            <br>
+                            {% if p.odecty.vse_uzavreno %}
+                                <strong style="color:#15803d;">Odečty jsou uzavřené – můžeš spustit výpočet.</strong>
+                            {% else %}
+                                <strong style="color:#d97706;">Čeká se na uzavření odečtů – s výpočtem počkej.</strong>
+                            {% endif %}
                         {% endcomponent %}
                     {% endcomponent %}
 

@@ -24,7 +24,7 @@ from django.utils import timezone
 from core import pronajimatele, volne_plochy
 from core.models import (
     BillingLine, Client, ClientCard, CostEntry, InvoiceClassColor, Meter,
-    MeterReading, Period, PriceList, ReadingsClosure, ServicePoolItem,
+    MeterReading, Period, PriceList, ReadingsClosure, ServicePoolItem, Site,
 )
 
 # Kolik dopredu se hlida konec Karty. Tri mesice je doba, za kterou se
@@ -99,14 +99,29 @@ def _odecty(obdobi, id_arealu):
     hotovo = MeterReading.objects.filter(
         period=obdobi, meter__in=meridla
     ).values("meter").distinct().count()
+    # Stav po arealech - admin z nej pozna, jestli muze zahajit vypocet
+    # (spravci maji hotovo = odecty uzavrene). Daniel 2026-10-17.
+    uzavreni = {
+        u.site_id: u for u in ReadingsClosure.objects.filter(
+            period=obdobi, site__in=id_arealu).select_related("closed_by")
+    }
+    arealy = [
+        {
+            "nazev": site.name,
+            "uzavreno": uzavreni.get(site.pk),
+            "kdo": (uzavreni[site.pk].closed_by.get_full_name() or uzavreni[site.pk].closed_by.username)
+                   if site.pk in uzavreni and uzavreni[site.pk].closed_by else "",
+        }
+        for site in Site.objects.filter(pk__in=id_arealu).order_by("name")
+    ]
     return {
         "hotovo": hotovo,
         "celkem": celkem,
         "chybi": celkem - hotovo,
-        "uzavreno": ReadingsClosure.objects.filter(
-            period=obdobi, site__in=id_arealu
-        ).count(),
+        "uzavreno": len(uzavreni),
         "arealu": len(id_arealu),
+        "po_arealech": arealy,
+        "vse_uzavreno": bool(arealy) and all(a["uzavreno"] for a in arealy),
         "odkaz": reverse("admin:core_meter_report_stav_odectu"),
     }
 
