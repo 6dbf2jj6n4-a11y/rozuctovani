@@ -33,6 +33,12 @@ from core.pdf_fonts import FONT_CARD_REGULAR as FONT_REGULAR
 _FONT_SIZE = 8
 
 
+# Verze formulare Karty najemce - tiskne se drobne nahore na kazde strane.
+# Pri KAZDE zmene podoby/obsahu Karty zvys cislo za teckou (KN2026.2, ...);
+# novy rok zacina od .1. Daniel 2026-10-19.
+KARTA_VERZE = "KN2026.1"
+
+
 class _NumberedCanvas(_canvas.Canvas):
     """Canvas, ktery na konci kazdou stranku doplni o cislovani "Strana X z Y" -
     celkovy pocet stran neni znamy, dokud nejsou vsechny vysazene, proto se
@@ -59,6 +65,11 @@ class _NumberedCanvas(_canvas.Canvas):
         self.drawCentredString(
             A4[0] / 2, 10 * mm, f"Stránka {self._pageNumber} z {total_pages}"
         )
+        # Verze formulare drobne vlevo nahore (KARTA_VERZE).
+        self.setFont(FONT_REGULAR, 5)
+        self.setFillGray(0.45)
+        self.drawString(18 * mm, A4[1] - 11 * mm, KARTA_VERZE)
+        self.setFillGray(0)
 
 
 _STYLE_HEADER = ParagraphStyle("CardHeader", fontName=FONT_BOLD, fontSize=_FONT_SIZE, alignment=2)  # 2 = right
