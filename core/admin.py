@@ -800,9 +800,12 @@ class AllocationKeyInlineBase(TabularInline):
         # tam ale meridlo nepatri. Daniel 2026-08-26.
         from django.db.models import F
 
+        # select_related: sloupec "Co je vahou" cte meridlo i polozku
+        # kazdeho radku - bez nej dva dotazy na klic (Daniel 2026-10-19,
+        # pomale nacitani Karty).
         return super().get_queryset(request).filter(
             service_item__invoice_class=self.invoice_class
-        ).order_by(
+        ).select_related("service_item", "meter", "client_card").order_by(
             "service_item__name", F("meter__code").asc(nulls_first=True), "pk"
         )
 
@@ -818,7 +821,15 @@ class AllocationKeyInlineBase(TabularInline):
         # a pak by se polozky toho druheho vubec nenabidly (Daniel
         # 2026-09-08). U nove zakladane Karty plochy jeste nejsou, tam
         # se filtruje jen Tridou a pronajimatelem.
-        arealy = list(parent.sites()) if parent is not None and parent.pk else []
+        # Arealy Karty jednou za pozadavek - formfield_for_foreignkey se vola
+        # pro kazde pole kazde sekce Trid (12x na Karte). Daniel 2026-10-19.
+        if parent is not None and parent.pk:
+            cache = request.__dict__.setdefault("_rx_arealy_karty", {})
+            if parent.pk not in cache:
+                cache[parent.pk] = list(parent.sites())
+            arealy = cache[parent.pk]
+        else:
+            arealy = []
         if db_field.name == "service_item":
             qs = pronajimatele.omez(
                 ServicePoolItem.objects.filter(invoice_class=self.invoice_class),
@@ -1079,7 +1090,16 @@ class CardUnitInline(TabularInline):
         pocet cislic, takze poradi sedi. Prirozene razeni by chtelo vyraz
         specificky pro Postgres, coz by se nedalo overit na sqlite, na
         kterem bezi zkousky - proto zatim takhle."""
-        return super().get_queryset(request).order_by("unit__name")
+        # select_related: Vymera (zasobnik) i nazev Prostoru (obsahuje areal)
+        # cetly Prostor a Areal zvlast pro kazdy radek. Daniel 2026-10-19.
+        return super().get_queryset(request).select_related("unit__site").order_by("unit__name")
+
+    def formfield_for_foreignkey(self, db_field, request, **kwargs):
+        # Vybrany Prostor ve widgetu se vypisuje i s arealem - bez
+        # select_related jeden dotaz na Areal za kazdy radek.
+        if db_field.name == "unit" and "queryset" not in kwargs:
+            kwargs["queryset"] = Unit.objects.select_related("site")
+        return super().formfield_for_foreignkey(db_field, request, **kwargs)
 
     def vymera_zasobnik(self, obj):
         if obj.unit and obj.unit.area_m2:
@@ -2750,35 +2770,17 @@ class ClientCardAdmin(PodlePronajimatele, ModelAdmin):
             return "Nejprve kartu uložte."
         url = reverse("admin:core_clientcard_generovat", args=[obj.pk])
         url_nahled = reverse("admin:core_clientcard_nahled", args=[obj.pk])
-        # Tlacitko i miniatura vykresluje JEDNO pole, aby sedely vedle sebe -
-        # dve samostatna readonly pole si admin sazi pod sebe.
-        #
-        # Zmensit musi byt SAMOSTATNE tlacitko: ve zvetsene podobe si
-        # kliknuti bere prohlizec PDF (aby slo Kartou rolovat), takze na
-        # obal uz se nedostane a zpatky by to neslo.
-        #
-        # Miniatura je normalne velky ramecek zmenseny pres CSS transform,
-        # ne uzky <iframe>: prohlizec by v uzkem ramu nakreslil svou listu
-        # a z Karty by nebylo videt nic. Nacita se rovnou pri otevreni
-        # formulare, ale na pozadi - stranka na nej necheka. Daniel 2026-08-26.
+        # Nahled jen na tlacitko (otevre se v nove zalozce). Drive se miniatura
+        # nacitala rovnou pri otevreni Karty - generovani PDF na pozadi
+        # zdrzovalo nacteni formulare. Daniel 2026-10-19.
         return format_html(
             '<div class="rx-karta-akce">'
             '<div class="rx-karta-tlacitka">'
+            '<a href="{}" target="_blank" rel="noopener" class="rx-btn">Náhled Karty</a> '
             '<a href="{}" class="rx-btn rx-btn-primary">Generovat Kartu nájemce (.pdf)</a>'
             '</div>'
-            '<div class="rx-karta-nahled" title="Klikni pro zvětšení" '
-            'onclick="rxZvetsiKartu(this)">'
-            '<iframe src="{}" title="Náhled Karty nájemce" loading="lazy"></iframe>'
-            '<button type="button" class="rx-btn rx-btn-sm rx-karta-zmensit" '
-            'onclick="event.stopPropagation();'
-            'rxZvetsiKartu(this.closest(\'.rx-karta-nahled\'))">Zmenšit</button>'
-            '</div>'
-            '</div>'
-            '<script>function rxZvetsiKartu(o){{'
-            'o.classList.toggle("rx-zvetseno");'
-            'o.title=o.classList.contains("rx-zvetseno")'
-            '?"":"Klikni pro zvětšení";}}</script>',
-            url, url_nahled,
+            '</div>',
+            url_nahled, url,
         )
     generate_card_button.short_description = ""
 
