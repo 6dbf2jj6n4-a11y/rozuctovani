@@ -19,12 +19,13 @@ from reportlab.lib.units import mm
 from reportlab.pdfbase.pdfmetrics import stringWidth
 from reportlab.pdfgen import canvas as _canvas
 from reportlab.platypus import (
-    KeepTogether, PageBreak, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle,
+    HRFlowable, KeepTogether, PageBreak, Paragraph, SimpleDocTemplate, Spacer, Table,
+    TableStyle,
 )
 
 from django.db.models import F
 
-from core.contract_generator import format_date_cz, get_landlord
+from core.contract_generator import _court_instrumental, format_date_cz, get_landlord
 from core.models import AllocationKey, InvoiceClassColor, Period, PriceList, ServicePoolItem
 from core.pdf_fonts import FONT_CARD_BOLD as FONT_BOLD
 from core.pdf_fonts import FONT_CARD_REGULAR as FONT_REGULAR
@@ -296,7 +297,71 @@ def najem_s_dph(card):
                for cu in card.card_units.select_related("unit__site__landlord"))
 
 
-def _hlavicka_karty(card):
+_STYLE_STRANA = ParagraphStyle(
+    "CardStrana", fontName=FONT_REGULAR, fontSize=_FONT_SIZE, leading=_FONT_SIZE + 2.5,
+)
+_STYLE_STRANA_TUCNE = ParagraphStyle("CardStranaTucne", parent=_STYLE_STRANA, fontName=FONT_BOLD)
+
+
+def _strana(popisek, klient):
+    """Udaje smluvni strany jako ve Smlouve (core/contract_generator.py):
+    nazev, sidlo, IC, DIC, zapis v rejstriku, zastoupeni. Prazdne radky se
+    vynechaji - nepodnikatel (byt DV) ma jen jmeno, pripadne adresu.
+    Daniel 2026-10-19: Karta je priloha Smlouvy, strany patri do hlavicky."""
+    from core.models import Client
+
+    if klient is None:
+        return [Paragraph(f"{popisek}", _STYLE_STRANA_TUCNE)]
+    radky = [Paragraph(popisek, _STYLE_STRANA_TUCNE),
+             Paragraph(escape(klient.name), _STYLE_STRANA_TUCNE)]
+    adresa = " ".join(x for x in (klient.street, klient.street_number) if x)
+    if klient.zip_code or klient.city:
+        adresa = f"{adresa}, {klient.zip_code} {klient.city}".strip(", ").strip()
+    if adresa:
+        typ = Client.EntityType
+        uvod = {typ.LEGAL: "se sídlem", typ.NATURAL: "s místem podnikání"}.get(
+            klient.entity_type, "bytem")
+        radky.append(Paragraph(f"{uvod} {escape(adresa)}", _STYLE_STRANA))
+    if klient.ico:
+        radky.append(Paragraph(f"IČ: {escape(klient.ico)}", _STYLE_STRANA))
+    if klient.dic:
+        radky.append(Paragraph(f"DIČ: {escape(klient.dic)}", _STYLE_STRANA))
+    if klient.registry_court:
+        zapis = f"zapsaná v obchodním rejstříku vedeném {_court_instrumental(klient.registry_court)}"
+        if klient.registry_section:
+            zapis += f", oddíl {klient.registry_section}"
+        if klient.registry_insert:
+            zapis += f", vložka {klient.registry_insert}"
+        radky.append(Paragraph(escape(zapis), _STYLE_STRANA))
+    zastupce = (klient.representative_name or "").strip()
+    if zastupce and zastupce != "?":
+        role = (klient.representative_role or "").strip()
+        radky.append(Paragraph(
+            escape(f"zastoupená: {zastupce}{', ' + role if role else ''}"), _STYLE_STRANA))
+    return radky
+
+
+def _strany_vedle_sebe(card, sirka):
+    """Pronajimatel vlevo, Najemce vpravo - dva sloupce pres celou sirku."""
+    try:
+        pronajimatel = get_landlord(card.site)
+    except ValueError:
+        pronajimatel = None
+    tabulka = Table(
+        [[_strana("Pronajímatel:", pronajimatel), _strana("Nájemce:", card.client)]],
+        colWidths=[sirka / 2, sirka / 2], hAlign="LEFT",
+    )
+    tabulka.setStyle(TableStyle([
+        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+        ("LEFTPADDING", (0, 0), (-1, -1), 0),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 6),
+        ("TOPPADDING", (0, 0), (-1, -1), 0),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
+    ]))
+    return tabulka
+
+
+def _hlavicka_karty(card, sirka=None):
     """Hlavicka Karty: zvyrazneny nazev, volny radek, pak udaje.
 
     Daniel 2026-09-29: klient v hlavicce uz neni (je v nazvu Karty
@@ -312,6 +377,8 @@ def _hlavicka_karty(card):
         Paragraph(escape(nazev), _STYLE_NAZEV_KARTY),
         Spacer(1, _STYLE_INFO.leading),  # 1 volny radek
     ]
+    if sirka:
+        prvky += [_strany_vedle_sebe(card, sirka), Spacer(1, _STYLE_INFO.leading)]
 
     radky = []
     platnost = ["Platnost od:", format_date_cz(card.valid_from)]
@@ -354,9 +421,14 @@ def generate_client_card_document(card, output_path):
         output_path, pagesize=A4,
         topMargin=18 * mm, bottomMargin=18 * mm, leftMargin=18 * mm, rightMargin=18 * mm,
     )
-    elements = [Paragraph("Příloha č. 1 ke Smlouvě o nájmu", _STYLE_HEADER), Spacer(1, 4 * mm)]
+    elements = [
+        Paragraph("Příloha č. 1 ke Smlouvě o nájmu", _STYLE_HEADER),
+        # Linka oddelujici zahlavi (Daniel 2026-10-19).
+        HRFlowable(width="100%", thickness=0.6, color=colors.black,
+                   spaceBefore=1 * mm, spaceAfter=4 * mm),
+    ]
 
-    elements.extend(_hlavicka_karty(card))
+    elements.extend(_hlavicka_karty(card, doc.width))
 
     # --- Plochy ---
     elements.append(Paragraph("Pronajaté plochy", _STYLE_SEKCE))
@@ -563,7 +635,9 @@ def generate_client_card_document(card, output_path):
     sig_rows = [
         [Paragraph("Pronajímatel", _STYLE_SIG_LABEL), Paragraph("Nájemce", _STYLE_SIG_LABEL)],
         [Paragraph("_" * 35, _STYLE_SIG_LINE), Paragraph("_" * 35, _STYLE_SIG_LINE)],
-        [Paragraph(get_landlord(card.site).representative_name, _STYLE_SIG_NAME),
+        # Fyzicka osoba (DV) zastupce nema - podepisuje sama za sebe.
+        [Paragraph(escape(get_landlord(card.site).representative_name
+                          or get_landlord(card.site).name), _STYLE_SIG_NAME),
          Paragraph(str(card.client), _STYLE_SIG_NAME)],
     ]
     sig_table = Table(sig_rows, colWidths=[85 * mm, 85 * mm], hAlign="LEFT")
