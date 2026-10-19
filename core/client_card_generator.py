@@ -378,7 +378,12 @@ def _hlavicka_karty(card, sirka=None):
         Spacer(1, _STYLE_INFO.leading),  # 1 volny radek
     ]
     if sirka:
-        prvky += [_strany_vedle_sebe(card, sirka), Spacer(1, _STYLE_INFO.leading)]
+        prvky += [
+            _strany_vedle_sebe(card, sirka),
+            # Linka pod bloky Pronajimatel / Najemce (Daniel 2026-10-19).
+            HRFlowable(width="100%", thickness=0.6, color=colors.black,
+                       spaceBefore=2 * mm, spaceAfter=3 * mm),
+        ]
 
     radky = []
     platnost = ["Platnost od:", format_date_cz(card.valid_from)]
@@ -635,10 +640,10 @@ def generate_client_card_document(card, output_path):
     sig_rows = [
         [Paragraph("Pronajímatel", _STYLE_SIG_LABEL), Paragraph("Nájemce", _STYLE_SIG_LABEL)],
         [Paragraph("_" * 35, _STYLE_SIG_LINE), Paragraph("_" * 35, _STYLE_SIG_LINE)],
-        # Fyzicka osoba (DV) zastupce nema - podepisuje sama za sebe.
-        [Paragraph(escape(get_landlord(card.site).representative_name
-                          or get_landlord(card.site).name), _STYLE_SIG_NAME),
-         Paragraph(str(card.client), _STYLE_SIG_NAME)],
+        # Pod carou jen nazev spolecnosti, u zivnostnika / fyzicke osoby
+        # jmeno - zastupce uz je v hlavicce (Daniel 2026-10-19).
+        [Paragraph(escape(get_landlord(card.site).name), _STYLE_SIG_NAME),
+         Paragraph(escape(card.client.name), _STYLE_SIG_NAME)],
     ]
     sig_table = Table(sig_rows, colWidths=[85 * mm, 85 * mm], hAlign="LEFT")
     sig_table.setStyle(TableStyle([
