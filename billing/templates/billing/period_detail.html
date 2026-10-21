@@ -18,7 +18,8 @@
     .obdobi a.aktivni { background: var(--accent-bg); border-left-color: var(--accent); color: var(--accent); font-weight: 600; }
 
     .topbar { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 4px; }
-    .akce { display: flex; gap: 8px; }
+    .akce { display: flex; gap: 8px; align-items: center; }
+    .logout-form { display: inline; margin: 0; }
     h1 { font-size: 20px; margin: 0; }
     .sub { color: var(--muted); font-size: 14px; margin: 4px 0 20px; }
     .odkazy { font-size: 13px; margin: -12px 0 20px; }
@@ -84,6 +85,11 @@
                 <button type="button" class="tlacitko tema" onclick="prepniTema()" title="Přepnout světlý / tmavý režim">
                     <span class="tmave">☾ Tmavý</span><span class="svetle">☀ Světlý</span>
                 </button>
+                {# Odhlaseni i tady - klient konci na detailu a ze seznamu se nevraci (Daniel 2026-10-21). #}
+                <form method="post" action="{% url 'logout' %}" class="logout-form">
+                    {% csrf_token %}
+                    <button type="submit" class="tlacitko">Odhlásit se</button>
+                </form>
             </div>
         </div>
         <p class="sub">{{ client.name }}</p>
