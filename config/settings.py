@@ -131,7 +131,13 @@ USE_THOUSAND_SEPARATOR = True
 
 STATIC_URL = "static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
-STATICFILES_STORAGE = "django.contrib.staticfiles.storage.ManifestStaticFilesStorage"
+# STATICFILES_STORAGE / DEFAULT_FILE_STORAGE Django 5.1 zrusilo - jen STORAGES.
+# Soubory (smlouvy, Karty, faktury, fotky) maji u poli vlastni R2MediaStorage,
+# "default" je jen pro pripadne pole bez nej.
+STORAGES = {
+    "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
+    "staticfiles": {"BACKEND": "django.contrib.staticfiles.storage.ManifestStaticFilesStorage"},
+}
 
 MEDIA_URL = "media/"
 MEDIA_ROOT = BASE_DIR / "media"
@@ -172,7 +178,7 @@ SESSION_SAVE_EVERY_REQUEST = True
 # 2027.0), i kdyby se nekdo zapomnel APP_VERSION_YEAR rucne prepsat -
 # dohoda s Danielem 2026-08-15.
 APP_VERSION_YEAR = 2026
-APP_VERSION_SEQUENCE = 355
+APP_VERSION_SEQUENCE = 356
 APP_VERSION = (
     f"{APP_VERSION_YEAR}.{APP_VERSION_SEQUENCE}"
     if date.today().year == APP_VERSION_YEAR
