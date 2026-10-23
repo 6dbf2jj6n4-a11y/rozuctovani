@@ -36,6 +36,15 @@ h2[id$="-heading"] {
     padding-left: 14px;
 }
 
+/* Unfold 0.110 dava tabulce inline sekce vlastni bile (tmave base-900)
+   pozadi, ktere barvu Tridy na fieldsetu prekryje - ze sekce zbyl jen
+   tenky barevny prouzek pod nadpisem. Tabulka v barevnych sekcich je
+   proto pruhledna. Daniel 2026-10-23. */
+fieldset[class*="key-section-"] table.formset,
+fieldset[class*="key-section-"] .formset-wrapper {
+    background-color: transparent !important;
+}
+
 /* Pruh v barve konkretni Tridy. */
 {% for c in invoice_class_colors %}
     .key-section-{{ c.invoice_class }} h2[id$="-heading"] { border-left-color: {{ c.text_color_light }}; }
