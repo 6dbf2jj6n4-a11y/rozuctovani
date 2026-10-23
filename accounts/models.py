@@ -77,6 +77,20 @@ class User(AbstractUser):
             return None
 
     @property
+    def avatar_url(self):
+        """Obrazek do nativniho panelu uzivatele Unfoldu (unfold/helpers/
+        avatar.html, od 0.110): vlastni fotka, jinak spolecny staticky
+        avatar, jinak None - Unfold pak ukaze pocatecni pismeno. Nahrazuje
+        drivejsi vlastni templates/unfold/helpers/user_panel.html."""
+        if self.photo_url:
+            return self.photo_url
+        from django.contrib.staticfiles import finders
+        from django.templatetags.static import static
+        if finders.find("core/img/avatar.jpg"):
+            return static("core/img/avatar.jpg")
+        return None
+
+    @property
     def is_admin_role(self):
         return self.role == self.Role.ADMIN
 

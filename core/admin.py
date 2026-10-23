@@ -1025,7 +1025,7 @@ class CardOccupantInline(TabularInline):
     fields = ("name", "note")
     verbose_name = "Spolubydlící"
     verbose_name_plural = "Spolubydlící"
-    hide_title = True
+    show_title = False
 
 
 class CardUnitInlineFormSet(forms.BaseInlineFormSet):
@@ -1164,7 +1164,7 @@ class ClientCardInline(TabularInline):
     # (ClientCard.__str__ = "Klient - Plocha - od M/RRRR"). Tady je to
     # zbytecne: klient je z te stranky zrejmy a popis karty je hned prvni
     # sloupec radku. Viz unfold/helpers/edit_inline/tabular_title.html.
-    hide_title = True
+    show_title = False
 
     def has_add_permission(self, request, obj=None):
         return False
@@ -2981,7 +2981,7 @@ class MeterReadingInline(TabularInline):
     # nad kazdym radkem - jen duplikoval hodnoty uz vidne ve sloupcich.
     # Zahlavi sloupcu (thead) zustava - bez nej neni jasne, ktery sloupec
     # je co (viz konverzace s Danielem).
-    hide_title = True
+    show_title = False
 
 
 @admin.register(Meter)

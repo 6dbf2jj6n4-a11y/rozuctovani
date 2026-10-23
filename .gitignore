@@ -7,3 +7,4 @@ venv/
 *.sqlite3
 media/
 .venv312/
+.venv-unfold/
