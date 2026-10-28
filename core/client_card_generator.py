@@ -36,7 +36,7 @@ _FONT_SIZE = 8
 # Verze formulare Karty najemce - tiskne se drobne nahore na kazde strane.
 # Pri KAZDE zmene podoby/obsahu Karty zvys cislo za teckou (KN2026.2, ...);
 # novy rok zacina od .1. Daniel 2026-10-19.
-KARTA_VERZE = "KN2026.1"
+KARTA_VERZE = "KN2026.2"
 
 
 class _NumberedCanvas(_canvas.Canvas):
@@ -475,8 +475,10 @@ def generate_client_card_document(card, output_path):
         # Ucel plochy (Unit.purpose) - Daniel 2026-10-15.
         radek = [str(cu.unit) if cu.unit else "—",
                  (cu.unit.purpose if cu.unit and cu.unit.purpose else "—"), _fmt_m2(area)]
+        # Sjednana pevna castka sazbu prebiji - cena za m2 by tu byla
+        # zavadejici (nebo prazdna). Daniel 2026-10-28.
         radek += [
-            _fmt_kc(cu.rate_per_m2),
+            "smluvní" if cu.monthly_rent_override is not None else _fmt_kc(cu.rate_per_m2),
             _fmt_kc(year_rent, whole=True),
             _fmt_kc(month_rent, whole=True),
         ]
