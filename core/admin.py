@@ -6398,8 +6398,7 @@ class FloorplanAdmin(PodlePronajimatele, ModelAdmin):
             "plan": plan,
             "kody": kody,
             "units": units,
-            "klienti": pronajimatele.klienti(
-                request, Client.objects.filter(is_active=True)).order_by("name"),
+            **self._klienti_pro_prevod(request, plan.site),
             "klient": klient,
             "datum": datum,
             "sazba": sazba,
@@ -6412,6 +6411,30 @@ class FloorplanAdmin(PodlePronajimatele, ModelAdmin):
             "opts": self.model._meta,
             "title": "Převod ploch na Kartu",
         })
+
+    @staticmethod
+    def _klienti_pro_prevod(request, site):
+        """Nabidka najemcu pro prevod - nejdriv klienti TOHOTO arealu.
+
+        Pronajimatel (CALAMARI SE) ma vic arealu, takze vyber jen podle
+        pronajimatele nabizel v planku NJ i najemce z FM. Daniel 2026-10-28.
+        Klienti arealu = maji tu nekdy nejakou Kartu, jeste nemaji zadnou
+        (cerstve zalozeni), nebo jsou pronajimatelem arealu. Ostatni klienti
+        pronajimatele zustavaji ve zvlastni skupine na konci - kdyby si
+        najemce z FM bral plochu i v NJ."""
+        vsichni = list(pronajimatele.klienti(
+            request, Client.objects.filter(is_active=True)).order_by("name"))
+        z_arealu = set(
+            Client.objects.filter(
+                Q(cards__card_units__unit__site=site) | Q(cards__isnull=True)
+                | Q(pk=site.landlord_id)
+            ).values_list("pk", flat=True)
+        )
+        return {
+            "klienti": [c for c in vsichni if c.pk in z_arealu],
+            "klienti_jinde": [c for c in vsichni if c.pk not in z_arealu],
+            "areal": site,
+        }
 
     def prohlizec_view(self, request, plan_id):
         """Planek obarveny podle obsazenosti k zadanemu datu. SVG se vklada

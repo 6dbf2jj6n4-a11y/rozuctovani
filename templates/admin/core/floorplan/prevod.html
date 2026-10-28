@@ -22,9 +22,18 @@
             <label for="klient">Nájemce</label>
             <select name="klient" id="klient">
                 <option value="">— vyber klienta —</option>
+                <optgroup label="Klienti areálu {{ areal.name }}">
                 {% for c in klienti %}
                     <option value="{{ c.pk }}" {% if klient and c.pk == klient.pk %}selected{% endif %}>{{ c.name }}</option>
                 {% endfor %}
+                </optgroup>
+                {% if klienti_jinde %}
+                <optgroup label="Klienti z jiných areálů">
+                {% for c in klienti_jinde %}
+                    <option value="{{ c.pk }}" {% if klient and c.pk == klient.pk %}selected{% endif %}>{{ c.name }}</option>
+                {% endfor %}
+                </optgroup>
+                {% endif %}
             </select>
             </div>
 
