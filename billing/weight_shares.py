@@ -42,7 +42,7 @@ def get_weight_share_data(item, period):
     prev_period = period.previous_period()
 
     all_keys = list(
-        item.allocation_keys.select_related("client_card__client", "client_card__unit", "meter")
+        item.allocation_keys.select_related("client_card__client", "client_card__unit", "meter").prefetch_related("meter__plochy")
     )
     valid_keys = [k for k in all_keys if k.is_valid_for_period(period)]
     invalid_keys = [k for k in all_keys if k not in valid_keys]

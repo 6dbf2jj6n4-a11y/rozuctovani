@@ -1280,6 +1280,20 @@ class Meter(models.Model):
             "samotný výpočet nemá vliv."
         ),
     )
+    # Ktere Prostory meridlo meri. Klic na meridle s vahou z plochy pak
+    # bere jen plochy Karty pod timhle meridlem - karta s kancelari ve 2.NP
+    # (E_AB2) a ve 3.NP (E_AB3) by jinak mela na obou celou svou vymeru.
+    # Prazdne = cela plocha Karty (jako drive). Daniel 2026-10-28, smer
+    # schvaleny 2026-09-25 ("meridlo vi, ktere plochy obsluhuje").
+    plochy = models.ManyToManyField(
+        "Unit", blank=True, related_name="meridla", verbose_name="Obsluhované prostory",
+        help_text=(
+            "Prostory, jejichž spotřebu tohle měřidlo měří (např. E_AB2 = kanceláře "
+            "ve 2.NP). Klíče s váhou „Celá plocha“ nebo „Vytápěná plocha“ na tomhle "
+            "měřidle pak počítají jen plochy Karty, které sem patří. Nech prázdné, "
+            "když měřidlo dělí podle celé plochy Karty (E_SPOL, teplo NJ)."
+        ),
+    )
     skip_manual_reading = models.BooleanField(
         "Nezadává se v Odečtech", default=False,
         help_text=(
@@ -1400,6 +1414,17 @@ class Meter(models.Model):
         """True u pseudomeridla, ktere misto odectu secte vytapenou plochu
         Prostoru arealu (ReadingMode.VYTAPENA_*)."""
         return self.reading_mode in (self.ReadingMode.VYTAPENA_SPOLECNA, self.ReadingMode.VYTAPENA_OSTATNI)
+
+    def id_obsluhovanych_ploch(self):
+        """Mnozina id Obsluhovanych prostor (z prefetch, kdyz je)."""
+        if not hasattr(self, "_rx_id_ploch"):
+            if self.pk is None:
+                self._rx_id_ploch = set()
+            elif "plochy" in getattr(self, "_prefetched_objects_cache", {}):
+                self._rx_id_ploch = {u.pk for u in self.plochy.all()}
+            else:
+                self._rx_id_ploch = set(self.plochy.values_list("pk", flat=True))
+        return self._rx_id_ploch
 
     def vytapena_plocha_prostoru(self):
         """Soucet vytapenych m2 Prostoru arealu - spolecnych, nebo ostatnich
@@ -2220,15 +2245,30 @@ class AllocationKey(models.Model):
         a nikdo by si toho nevšiml (Daniel 2026-09-05: "musíme zajistit,
         že to provede sám model")."""
         volby = AllocationKey.ZdrojVahy
-        if self.weight_source == volby.PLOCHA:
-            return self.client_card.plocha_celkem
-        if self.weight_source == volby.VYTAPENA:
-            return self.client_card.vytapena_plocha
+        if self.weight_source in (volby.PLOCHA, volby.VYTAPENA):
+            plochy = self.plochy_pod_meridlem()
+            if plochy is None:
+                karta = self.client_card
+                return karta.plocha_celkem if self.weight_source == volby.PLOCHA else karta.vytapena_plocha
+            if self.weight_source == volby.PLOCHA:
+                return sum((Decimal(str(cu.area_m2 or 0)) for cu in plochy), Decimal("0"))
+            return sum((cu.vytapena_plocha for cu in plochy), Decimal("0"))
         if self.weight_source == volby.OSOBY:
             return Decimal(self.client_card.pocet_osob or 0)
         if self.weight_source == volby.OSOBY_TUV:
             return Decimal(self.client_card.pocet_osob_tuv or 0)
         return self.value or Decimal("0")
+
+    def plochy_pod_meridlem(self):
+        """Plochy Karty, ktere meri meridlo klice - nebo None, kdyz klic
+        meridlo nema nebo meridlo nema vyplnene Obsluhovane prostory
+        (pak se bere cela Karta). Viz Meter.plochy."""
+        if not self.meter_id:
+            return None
+        ids = self.meter.id_obsluhovanych_ploch()
+        if not ids:
+            return None
+        return [cu for cu in self.client_card._plochy_karty() if cu.unit_id in ids]
 
     def is_valid_for_period(self, period):
         period_start, period_end = period.date_range()

@@ -71,7 +71,7 @@ def get_key_rows_for_client(client, period):
         remaining_cost = Decimal(calc["remaining_cost"]) if calc.get("remaining_cost") is not None else None
 
         all_keys = list(
-            si.allocation_keys.select_related("client_card", "client_card__unit", "meter")
+            si.allocation_keys.select_related("client_card", "client_card__unit", "meter").prefetch_related("meter__plochy")
         )
         valid_keys = [k for k in all_keys if k.is_valid_for_period(period)]
         client_keys = [k for k in valid_keys if k.client_card_id == line.client_card_id]

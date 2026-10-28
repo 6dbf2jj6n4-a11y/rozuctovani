@@ -376,7 +376,7 @@ def _consumption_shares(
     # Viz Daniel 2026-09-16.
     keys = []
     meridla_neaktivnich = {}  # meter -> [karty, ktere v obdobi neplati]
-    for k in service_item.allocation_keys.select_related("client_card", "client_card__unit", "meter"):
+    for k in service_item.allocation_keys.select_related("client_card", "client_card__unit", "meter").prefetch_related("meter__plochy"):
         if not k.is_valid_for_period(period) or k.allocation_type in ABSOLUTE_AMOUNT_TYPES:
             continue
         if k.client_card.active_days_in_period(period_start, period_end) <= 0:
@@ -856,7 +856,7 @@ def calculate_period(period, site=None):
             )
 
             all_keys = list(
-                service_item.allocation_keys.select_related("client_card", "client_card__unit", "meter")
+                service_item.allocation_keys.select_related("client_card", "client_card__unit", "meter").prefetch_related("meter__plochy")
             )
             valid_keys = [k for k in all_keys if k.is_valid_for_period(period)]
 

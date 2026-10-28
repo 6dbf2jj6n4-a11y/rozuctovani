@@ -108,7 +108,7 @@ def get_item_summary_rows(period, site=None, with_meters=False, sites=None):
         meter_breakdown = [] if with_meters else None
         if reported_units and not item.meter:
             valid_keys = [
-                k for k in item.allocation_keys.select_related("meter", "client_card")
+                k for k in item.allocation_keys.select_related("meter", "client_card").prefetch_related("meter__plochy")
                 if k.is_valid_for_period(period) and k.allocation_type not in ABSOLUTE_AMOUNT_TYPES
             ]
             has_meter_keys = any(

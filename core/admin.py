@@ -514,6 +514,16 @@ class UnitAdmin(PodlePronajimatele, DuplicateModelAdminMixin, ModelAdmin):
     list_filter = ("site", "is_residential", "is_heated", "is_common")
     search_fields = ("name",)
     actions = ["duplicate_selected", "zapnout_vytapeni", "vypnout_vytapeni"]
+    readonly_fields = ("meri_meridla",)
+
+    @display(description="Měří ji měřidla")
+    def meri_meridla(self, obj):
+        """Merdila, u kterych je tenhle Prostor mezi Obsluhovanymi
+        prostorami (Meter.plochy) - nastavuje se u Meridla."""
+        if obj is None or not obj.pk:
+            return "—"
+        kody = [m.code or m.name for m in obj.meridla.order_by("code")]
+        return ", ".join(kody) if kody else "— (nastavuje se u Měřidla: Obsluhované prostory)"
 
     @display(description="Druh", ordering="is_residential")
     def druh_prostoru(self, obj):
@@ -721,10 +731,19 @@ class AllocationKeyInlineBase(TabularInline):
         if obj is None or obj.allocation_type != AllocationKey.AllocationType.WEIGHTED_COUNT:
             return "—"
         volby = AllocationKey.ZdrojVahy
-        if obj.weight_source == volby.PLOCHA:
-            return format_html('<span style="color:#2a7;">celá plocha karty</span>')
-        if obj.weight_source == volby.VYTAPENA:
-            return format_html('<span style="color:#2a7;">vytápěná plocha karty</span>')
+        if obj.weight_source in (volby.PLOCHA, volby.VYTAPENA):
+            druh = "plocha" if obj.weight_source == volby.PLOCHA else "vytápěná plocha"
+            plochy = obj.plochy_pod_meridlem() if obj.client_card_id else None
+            if plochy is None:
+                return format_html('<span style="color:#2a7;">{} karty</span>',
+                                   "celá plocha" if druh == "plocha" else druh)
+            if not plochy:
+                return format_html(
+                    '<span style="color:#a70;">{} pod {} – žádná plocha karty sem nepatří (váha 0)</span>',
+                    druh, obj.meter.code)
+            return format_html('<span style="color:#2a7;">{} pod {}: {} = {} m²</span>',
+                               druh, obj.meter.code, ", ".join(cu.unit.name for cu in plochy),
+                               _fmt_cislo(obj.vaha))
         # Prazdne pole na Karte = vaha 0, klient by tise neplatil nic.
         if obj.weight_source == volby.OSOBY:
             if obj.client_card_id and obj.client_card.pocet_osob is None:
@@ -3078,8 +3097,22 @@ class MeterAdmin(PodlePronajimatele, DuplicateModelAdminMixin, ModelAdmin):
     list_filter = ("site", "meter_type", "supply_point", "reading_mode", "is_virtual")
     search_fields = ("name", "code", "serial_number")
     autocomplete_fields = ("parent_meter", "supply_point")
+    filter_horizontal = ("plochy",)
     actions = ["duplicate_selected", "assign_supply_point"]
     inlines = [MeterReadingInline]
+
+    def formfield_for_manytomany(self, db_field, request, **kwargs):
+        """Obsluhovane prostory jen z arealu meridla - jinak by se nabizely
+        vsechny Prostory vsech arealu (E_SPOL je ve FM i NJ)."""
+        if db_field.name == "plochy":
+            qs = pronajimatele.omez(Unit.objects.all(), "site", request)
+            meridlo_id = (request.resolver_match.kwargs.get("object_id")
+                          if request.resolver_match else None)
+            meridlo = Meter.objects.filter(pk=meridlo_id).first() if meridlo_id else None
+            if meridlo is not None:
+                qs = qs.filter(site=meridlo.site_id)
+            kwargs["queryset"] = qs.select_related("site").order_by("site__name", "name")
+        return super().formfield_for_manytomany(db_field, request, **kwargs)
     # Tabulka podrizenych meridel v sekci Hierarchie - neni to pole modelu,
     # takze by ho formular jinak nepustil (viz podrizena_meridla nize).
     readonly_fields = ("podrizena_meridla",)
