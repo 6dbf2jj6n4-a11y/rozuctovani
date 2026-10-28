@@ -605,6 +605,31 @@ class Contract(models.Model):
                 karta.save(update_fields=["valid_to"])
 
 
+def navrh_zdroje_vahy(service_item, meter=None):
+    """Odkud brat vahu, kdyz to nikdo nerekl - podle ostatnich Karet.
+
+    Vezme se zdroj, ktery u stejne polozky a meridla pouziva vetsina
+    platnych Klicu "Podle vahy" (T_INDIVIDUALNI -> vytapena plocha,
+    T_SPOLECNA -> osoby, snih -> plocha...). Kdyz vetsina vahu zadava
+    rucne, nebo zadne Klice nejsou, vrati "" - pak zustava rucni Hodnota.
+    Daniel 2026-10-28: "vyberu sice dle vahy, ale u T_INDIVIDUALNI je
+    potreba zadat plochu, ale ja to nevim"."""
+    from collections import Counter
+
+    from django.utils import timezone
+
+    klice = (AllocationKey.objects
+             .filter(karta_plati_q(timezone.localdate(), prefix="client_card__"),
+                     service_item=service_item, meter=meter,
+                     allocation_type=AllocationKey.AllocationType.WEIGHTED_COUNT)
+             .values_list("weight_source", flat=True))
+    pocty = Counter(klice)
+    if not pocty:
+        return ""
+    zdroj, kolik = pocty.most_common(1)[0]
+    return zdroj if kolik * 2 > sum(pocty.values()) else ""
+
+
 def karta_plati_q(od, do=None, prefix=""):
     """Q pro Karty platne aspon jeden den mezi `od` a `do` (bez `do` k datu `od`).
 
@@ -2835,6 +2860,10 @@ class CardUnit(models.Model):
 
     def save(self, *args, **kwargs):
         is_new = self.pk is None
+        # Nova Plocha karty bez sazby si vezme Cenu Kc/m2/rok z Predmetu
+        # najmu - prevod z planku ji jinak nechaval prazdnou. Daniel 2026-10-28.
+        if is_new and self.rate_per_m2 is None and self.unit_id:
+            self.rate_per_m2 = self.unit.rate_per_m2_year
         super().save(*args, **kwargs)
         if is_new:
             self.create_default_keys()
@@ -2879,7 +2908,12 @@ class CardUnit(models.Model):
                 .exclude(weight_source="")
                 .values_list("weight_source", flat=True)
                 .first()
-            ) or ""
+            ) or unit_service.weight_source
+            # Starsi Vychozi sluzba bez zdroje i hodnoty by dala vahu 0 -
+            # radsi zdroj podle ostatnich Karet areálu (navrh_zdroje_vahy).
+            if (not zdroj and value is None
+                    and unit_service.allocation_type == AllocationKey.AllocationType.WEIGHTED_COUNT):
+                zdroj = navrh_zdroje_vahy(unit_service.service_item, unit_service.meter)
             AllocationKey.objects.create(
                 client_card=self.card,
                 service_item=unit_service.service_item,
@@ -2979,6 +3013,20 @@ class UnitService(models.Model):
         Meter, null=True, blank=True, on_delete=models.SET_NULL,
         related_name="unit_services", verbose_name="Měřidlo"
     )
+    # Stejne volby jako na Klici - prenasi se do Klicu, ktere z Vychozi
+    # sluzby vzniknou. Bez nej musel Daniel u "Podle vahy" znat napr.
+    # vytapenou plochu a klice z planku vznikaly s vahou 0 (GIGAFACT,
+    # MYWAYTRADE). Daniel 2026-10-28.
+    weight_source = models.CharField(
+        "Odkud brát váhu", max_length=20, blank=True,
+        choices=AllocationKey.ZdrojVahy.choices, default=AllocationKey.ZdrojVahy.HODNOTA,
+        help_text=(
+            "Váha se spočítá z Karty, na kterou plocha přijde – nemusíš znát "
+            "výměru ani počet osob. Když necháš „Hodnota zadaná ručně“ "
+            "a Hodnotu prázdnou, doplní se to, co u téhle položky a měřidla "
+            "používají ostatní Karty areálu."
+        ),
+    )
 
     class Meta:
         verbose_name = "Výchozí služba plochy"
@@ -2987,3 +3035,9 @@ class UnitService(models.Model):
 
     def __str__(self):
         return ""
+
+    def save(self, *args, **kwargs):
+        if (self.allocation_type == AllocationKey.AllocationType.WEIGHTED_COUNT
+                and not self.weight_source and self.value is None and self.service_item_id):
+            self.weight_source = navrh_zdroje_vahy(self.service_item, self.meter)
+        super().save(*args, **kwargs)

@@ -394,10 +394,56 @@ def _formset_se_stabilnim_prefixem(formset, invoice_class):
     return FormSetSeStabilnimPrefixem
 
 
+def _fmt_cislo(hodnota):
+    """14.00 -> "14", 12.50 -> "12,5" - pro popisky v adminu."""
+    if hodnota is None:
+        return "—"
+    text = f"{hodnota:f}"
+    if "." in text:
+        text = text.rstrip("0").rstrip(".")
+    return text.replace(".", ",")
+
+
 class UnitServiceInlineBase(TabularInline):
     model = UnitService
     extra = 0
     collapsible = True
+    fields = ("service_item", "allocation_type", "weight_source", "value", "co_je_vahou", "meter")
+    readonly_fields = ("co_je_vahou",)
+
+    @display(description="Co je váhou")
+    def co_je_vahou(self, obj):
+        """Čím se bude dělit - i s číslem, které z téhle plochy vyjde.
+
+        Daniel 2026-10-28: "vyberu sice dle vahy, ale u T_INDIVIDUALNI
+        je potreba zadat plochu, ale ja to nevim"."""
+        from django.utils.html import format_html
+
+        if obj is None or not obj.pk:
+            return "—"
+        typy = AllocationKey.AllocationType
+        volby = AllocationKey.ZdrojVahy
+        unit = obj.unit
+        if obj.allocation_type == typy.AREA_PRICE:
+            return format_html("výměra plochy na kartě ({} m²) × cena", _fmt_cislo(unit.area_m2))
+        if obj.allocation_type != typy.WEIGHTED_COUNT:
+            return "—"
+        if obj.weight_source == volby.PLOCHA:
+            return format_html('<span style="color:#2a7;">plocha – tady {} m²</span>',
+                               _fmt_cislo(unit.area_m2))
+        if obj.weight_source == volby.VYTAPENA:
+            return format_html('<span style="color:#2a7;">vytápěná plocha – tady {} m²</span>',
+                               _fmt_cislo(unit.vytapena_plocha))
+        if obj.weight_source == volby.OSOBY:
+            return format_html('<span style="color:#2a7;">počet osob – zadá se na Kartě</span>')
+        if obj.weight_source == volby.OSOBY_TUV:
+            return format_html('<span style="color:#2a7;">osoby pro TUV – zadají se na Kartě</span>')
+        if obj.value is None:
+            return format_html('<span style="color:#a70;">váha 0 – vyber „Odkud brát váhu“ '
+                               'nebo vyplň Hodnotu</span>')
+        popis = ((obj.meter.weight_unit_label if obj.meter_id else "")
+                 or obj.service_item.weight_unit_label or "")
+        return f"{_fmt_cislo(obj.value)} {popis}".strip()
 
     class Media:
         css = {"all": ("core/css/select_width_fix.css",)}
@@ -688,6 +734,11 @@ class AllocationKeyInlineBase(TabularInline):
             if obj.client_card_id and obj.client_card.pocet_osob_tuv is None:
                 return format_html('<span style="color:#dc2626;">počet osob pro TUV – na kartě NEVYPLNĚNO</span>')
             return format_html('<span style="color:#2a7;">počet osob pro TUV z karty</span>')
+        # Rucni Hodnota prazdna = vaha 0, klient z polozky nic nezaplati.
+        # Nekde je to zamer (revize hasicaku v NJ), proto jen oranzove.
+        if not obj.value:
+            return format_html('<span style="color:#a70;">váha 0 – z téhle položky nic nezaplatí '
+                               '(vyber „Odkud brát váhu“ nebo vyplň Hodnotu)</span>')
         popis = ""
         if obj.meter_id and obj.meter.weight_unit_label:
             popis = obj.meter.weight_unit_label
@@ -6360,6 +6411,13 @@ class FloorplanAdmin(PodlePronajimatele, ModelAdmin):
 
         klient = Client.objects.filter(pk=request.POST.get("klient")).first()
         sazba = request.POST.get("sazba") or None
+        # Predvyplnit Cenou z Predmetu najmu, kdyz ji maji vsechny vybrane
+        # plochy stejnou. Prazdna sazba = kazda plocha si vezme svou
+        # (CardUnit.save). Daniel 2026-10-28.
+        if sazba is None and "sazba" not in request.POST:
+            ceny = {u.rate_per_m2_year for u in units}
+            if len(ceny) == 1 and None not in ceny:
+                sazba = str(ceny.pop())
         datum = None
         if request.POST.get("datum"):
             try:

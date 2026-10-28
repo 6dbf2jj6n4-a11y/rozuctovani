@@ -44,7 +44,8 @@
 
             <div>
                 <label for="sazba">Sazba Kč/m²/rok</label>
-                <input type="number" step="0.01" name="sazba" id="sazba" value="{{ sazba|default_if_none:'' }}" style="width:8em">
+                <input type="number" step="0.01" name="sazba" id="sazba" value="{{ sazba|default_if_none:'' }}" style="width:8em"
+                       title="Prázdné = každá plocha si vezme Cenu Kč/m²/rok ze svého Předmětu nájmu.">
             </div>
 
             <div>
