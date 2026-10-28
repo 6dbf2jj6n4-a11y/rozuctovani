@@ -114,7 +114,7 @@ def get_weight_share_data(item, period):
             "card": str(key.client_card),
             "type": key.get_allocation_type_display(),
             "value": key.value,
-            "is_active_card": key.client_card.is_active,
+            "stav_karty": key.client_card.get_stav_display(),
             "valid_from": key.valid_from,
             "valid_to": key.valid_to,
         }

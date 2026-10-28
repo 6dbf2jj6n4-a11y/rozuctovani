@@ -519,7 +519,6 @@ def stavy_ploch(site, k_datu, dni_do_konce=DNI_DO_KONCE):
         CardUnit.objects.select_related("card", "card__client", "unit")
         .filter(
             unit__site=site,
-            card__is_active=True,
             card__valid_from__lte=k_datu,
         )
         .filter(Q(card__valid_to__isnull=True) | Q(card__valid_to__gte=k_datu))
@@ -531,7 +530,7 @@ def stavy_ploch(site, k_datu, dni_do_konce=DNI_DO_KONCE):
     budouci = {}
     for cu in (
         CardUnit.objects.select_related("card", "card__client", "unit")
-        .filter(unit__site=site, card__is_active=True, card__valid_from__gt=k_datu)
+        .filter(unit__site=site, card__valid_from__gt=k_datu)
         .order_by("-card__valid_from")          # dřívější přepíše pozdější
     ):
         budouci[cu.unit.name] = cu.card

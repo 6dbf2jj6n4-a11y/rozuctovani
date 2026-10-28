@@ -98,7 +98,7 @@ class Command(BaseCommand):
                 self.stdout.write(
                     f"  {key.client_card.client.name} ({key.client_card}): {key.get_allocation_type_display()} "
                     f"hodnota={key.value} akt.dny={active_days} eff.váha={eff:.4f} "
-                    f"podíl_z_celku={share_str} aktivní_karta={key.client_card.is_active}"
+                    f"podíl_z_celku={share_str} karta={key.client_card.get_stav_display()}"
                 )
         else:
             weight_keys = [k for k in valid_keys if k.allocation_type not in ABSOLUTE_AMOUNT_TYPES]
@@ -116,7 +116,7 @@ class Command(BaseCommand):
                 self.stdout.write(
                     f"  {key.client_card.client.name} ({key.client_card}): {key.get_allocation_type_display()} "
                     f"hodnota={key.value} akt.dny={active_days} eff.váha={eff:.4f} "
-                    f"podíl={share_str} aktivní_karta={key.client_card.is_active}"
+                    f"podíl={share_str} karta={key.client_card.get_stav_display()}"
                 )
 
         if invalid_keys:
@@ -124,7 +124,7 @@ class Command(BaseCommand):
             for key in invalid_keys:
                 self.stdout.write(
                     f"  {key.client_card.client.name} ({key.client_card}): {key.get_allocation_type_display()} "
-                    f"hodnota={key.value} aktivní_karta={key.client_card.is_active} "
+                    f"hodnota={key.value} karta={key.client_card.get_stav_display()} "
                     f"platnost={key.valid_from}–{key.valid_to or '∞'}"
                 )
 

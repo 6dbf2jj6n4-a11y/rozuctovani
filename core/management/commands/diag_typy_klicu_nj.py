@@ -73,7 +73,7 @@ class Command(BaseCommand):
             expected_value = Decimal(str(jednotek)).quantize(Decimal("0.0001"))
             expected_type = "person_count" if "TUV" in om_code.upper() else "weighted_count"
 
-            card = ClientCard.objects.filter(description=card_desc, is_active=True).first()
+            card = ClientCard.objects.filter(description=card_desc).order_by("-valid_from").first()
             meter = Meter.objects.filter(code=om_code).first()
             if card is None or meter is None:
                 not_found += 1

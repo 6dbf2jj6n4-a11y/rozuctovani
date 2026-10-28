@@ -32,7 +32,7 @@ class Command(BaseCommand):
         for card in ClientCard.objects.filter(id__in=card_ids).select_related("client").order_by("client__name", "valid_from"):
             self.stdout.write(
                 f"\nKarta #{card.pk}: '{card.description}' | klient: {card.client} | "
-                f"aktivní: {card.is_active} | platnost: {card.valid_from} - {card.valid_to or '(neurčito)'}"
+                f"stav: {card.get_stav_display()} | platnost: {card.valid_from} - {card.valid_to or '(neurčito)'}"
             )
             units = list(card.card_units.select_related("unit__site"))
             if not units:

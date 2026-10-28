@@ -64,7 +64,7 @@ class Command(BaseCommand):
 
         created = 0
         for card_desc, radiatory, radiatory_billed, osoby, osoby_billed in DATA:
-            card = ClientCard.objects.filter(description=card_desc, is_active=True).first()
+            card = ClientCard.objects.filter(description=card_desc).order_by("-valid_from").first()
             if card is None:
                 self.stdout.write(self.style.WARNING(f"Karta nenalezena: {card_desc}"))
                 continue

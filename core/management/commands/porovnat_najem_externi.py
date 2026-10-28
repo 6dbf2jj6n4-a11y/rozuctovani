@@ -16,6 +16,7 @@ Použití:
   python manage.py porovnat_najem_externi --tolerance 10
 """
 import unicodedata
+from datetime import date
 from decimal import Decimal
 
 from django.core.management.base import BaseCommand
@@ -82,7 +83,7 @@ class Command(BaseCommand):
         # nase data: rocni najem za vsechny AKTIVNI karty klienta
         nase = {}
         for card in (
-            ClientCard.objects.filter(is_active=True)
+            ClientCard.objects.platne_k(date.today())
             .select_related("client")
             .prefetch_related("card_units__unit")
         ):

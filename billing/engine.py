@@ -696,75 +696,26 @@ def _datum(d):
     return f"{d.day}. {d.month}. {d.year}" if d else ""
 
 
-def sync_card_activity(period, site=None):
-    """Pred vypoctem rozuctovani automaticky zkontroluje a opravi
-    ClientCard.is_active podle Platnost od/do vuci pocitanemu obdobi -
-    aby se pri prechodu na novou kartu (renovace najmu) nemuselo rucne
-    pamatovat na prepnuti Aktivni/Neaktivni presne v tu spravnou chvili
-    (viz konverzace s Danielem - is_active nema zadny casovy rozmer sam
-    o sobe, calculate_period ho bere jako plosne "tahle karta ted
-    plati", bez ohledu na to, jake obdobi se zrovna pocita).
+def karty_neaktivnich_klientu(period, site=None):
+    """Varovani pred vypoctem: Karta plati, ale jeji klient je Neaktivni.
 
-    Dve kategorie zmen, ruzne bezpecne:
-    - DEAKTIVACE (Platnost do uz pred timto obdobim, ale porad
-      Aktivni): vzdy jednoznacna a bezpecna, provede se automaticky.
-    - AKTIVACE (Platnost od uz zacala, ale karta je Neaktivni): provede
-      se automaticky JEN pokud tim nevznikne konflikt (jina aktivni
-      karta stejneho klienta ve stejnem arealu) - jinak zustane
-      needotcena a jen se nahlasi jako varovani, at si to Daniel
-      zkontroluje rucne (typicky rozpracovana/koncept karta, kterou
-      jeste nechce pustit do ostreho provozu).
-
-    Vraci list (level, text) zprav pro zobrazeni v adminu - level je
-    "success" (deaktivovano/aktivovano) nebo "warning" (konflikt)."""
+    O platnosti Karty rozhoduji jen data Platnost od/do, deaktivace
+    klienta na Kartach nic nemeni - takova Karta se tedy pocita. Typicky
+    je to najemce, ktery nikdy nenastoupil, a Kartu je treba ukoncit nebo
+    smazat. Driv to resil priznak Aktivni na Karte, ktery se ale rozchazel
+    s daty. Daniel 2026-10-28."""
     period_start, period_end = period.date_range()
-
-    cards = ClientCard.objects.select_related("client").prefetch_related("card_units__unit__site")
+    karty = (ClientCard.objects.platne_v(period_start, period_end)
+             .filter(client__is_active=False).select_related("client"))
     if site is not None:
-        cards = cards.filter(card_units__unit__site=site).distinct()
-    else:
-        cards = cards.distinct()
-
-    results = []
-
-    to_deactivate = [c for c in cards if c.is_active and c.valid_to and c.valid_to < period_start]
-    for card in to_deactivate:
-        card.is_active = False
-        card.save(update_fields=["is_active"])
-        results.append(("success", f"{card.client} ({card.description}): automaticky DEAKTIVOVÁNO (platnost do {_datum(card.valid_to)})"))
-
-    to_check = [
-        c for c in cards
-        if not c.is_active and c.valid_from <= period_end and (not c.valid_to or c.valid_to >= period_start)
+        karty = karty.filter(card_units__unit__site=site)
+    return [
+        f"{karta.client} ({karta.description}): klient je Neaktivní, ale Karta platí "
+        f"od {_datum(karta.valid_from)}"
+        + (f" do {_datum(karta.valid_to)}" if karta.valid_to else "")
+        + " – počítá se. Pokud nájem neběží, ukonči nebo smaž Kartu."
+        for karta in karty.distinct()
     ]
-    for card in to_check:
-        # Neaktivni klient znamena "tenhle najem nebezi" - karta se mu
-        # nesmi zapnout sama, jinak by ho neslo vypnout: Client.save()
-        # sice pri deaktivaci klienta jeho karty zhasne, ale nejblizsi
-        # prepocet obdobi, do ktereho spada jejich platnost, by je zase
-        # rozsvitil. Typicky pripad je najemce, ktery smlouvu podepsal,
-        # ale najem nikdy nezahajil. Viz Daniel 2026-09-05.
-        if not card.client.is_active:
-            results.append((
-                "warning",
-                f"{card.client} ({card.description}): platnost od {_datum(card.valid_from)} už začala, ale klient "
-                f"je Neaktivní - karta zůstává Neaktivní. Až nájem opravdu začne, zapni "
-                f"nejdřív klienta."
-            ))
-            continue
-        conflict = card.active_card_conflict()
-        if conflict is None:
-            card.is_active = True
-            card.save(update_fields=["is_active"])
-            results.append(("success", f"{card.client} ({card.description}): automaticky AKTIVOVÁNO (platnost od {_datum(card.valid_from)})"))
-        else:
-            results.append((
-                "warning",
-                f"{card.client} ({card.description}): platnost od {_datum(card.valid_from)} už začala, ale je Neaktivní - "
-                f"NEaktivováno automaticky, protože koliduje s aktivní kartou {conflict} - zkontroluj ručně."
-            ))
-
-    return results
 
 
 def calculate_period(period, site=None):

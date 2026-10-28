@@ -62,7 +62,7 @@ class Command(BaseCommand):
                 skipped += 1
                 continue
 
-            card = ClientCard.objects.filter(description=card_desc, is_active=True).first()
+            card = ClientCard.objects.filter(description=card_desc).order_by("-valid_from").first()
             if not card:
                 self.stdout.write(f"  Karta nenalezena: {card_desc}")
                 skipped += 1

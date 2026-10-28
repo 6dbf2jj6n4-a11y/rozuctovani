@@ -57,7 +57,7 @@ class Command(BaseCommand):
                 marker = "" if ok else "  <-- NESEDÍ"
                 self.stdout.write(
                     f"  {card.client.name} ({card}): klíč_hodnota={key.value} "
-                    f"součet_m²_karty={area_sum} aktivní_karta={card.is_active}{marker}"
+                    f"součet_m²_karty={area_sum} karta={card.get_stav_display()}{marker}"
                 )
 
             if mismatches:

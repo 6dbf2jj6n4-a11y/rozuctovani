@@ -31,13 +31,21 @@
                 Platnost od
             </label>
             <input type="date" name="valid_from" id="id_valid_from" required
-                   value="{{ original.valid_from|date:'Y-m-d' }}"
+                   value="{{ navrh_od|date:'Y-m-d' }}"
                    style="padding: 8px;">
             <p style="font-size: 12px; opacity: .75; margin: 6px 0 0;">
-                Původní karta platí od {{ original.valid_from|date:'j. n. Y' }}. Dřív než
-                ona nová karta začít nemůže.
+                Původní karta platí od {{ original.valid_from|date:'j. n. Y' }}{% if original.valid_to %} do {{ original.valid_to|date:'j. n. Y' }}{% endif %}.
+                {% if clients %}Dřív než ona nová karta začít nemůže.{% else %}Nová karta platí hned od zadaného dne a původní karta skončí den před ním.{% endif %}
             </p>
         </div>
+        {% if clients %}
+        <label style="display: flex; gap: 8px; align-items: flex-start; margin: 16px 0;">
+            <input type="checkbox" name="ukoncit_original" value="1" checked style="margin-top: 3px;">
+            <span>Ukončit původní kartu ({{ original.client }}) den před začátkem nové
+                <span style="display: block; font-size: 12px; opacity: .75;">Kopie má stejné plochy –
+                bez ukončení by je od toho dne měli oba klienti.</span></span>
+        </label>
+        {% endif %}
         <input type="submit" value="Vytvořit kopii" class="button default" style="background-color: #2563eb; color: white; font-weight: 600; padding: 8px 16px; border-radius: 6px; border: none; cursor: pointer;">
         <a href="{% url 'admin:core_clientcard_change' original.pk %}" class="button" style="margin-left: 8px;">Zrušit</a>
     </form>

@@ -48,18 +48,19 @@ REZIM_NAVAZAT = "navazat"    # jeho běžící Kartu uzavřít a navázat novou 
 REZIM_PRIDAT = "pridat"      # plochy přidat rovnou do běžící Karty
 
 
-def karta_klienta_k_datu(klient, datum):
-    """Karta klienta platná k datu, nebo None."""
-    from django.db.models import Q
+def karta_klienta_k_datu(klient, datum, arealy=None):
+    """Karta klienta platná k datu (v daném areálu), nebo None.
 
+    Rozhodují jen data Platnost od/do. Dřív se brala jen Karta zaškrtnutá
+    jako Aktivní - Karty od 1. 10. 2026 (ARTALO, TENAUR, ANDELE) ho neměly,
+    převod je neviděl a zakládal novou Kartu jen s vybranou plochou.
+    Daniel 2026-10-28."""
     from core.models import ClientCard
 
-    return (
-        ClientCard.objects.filter(client=klient, is_active=True, valid_from__lte=datum)
-        .filter(Q(valid_to__isnull=True) | Q(valid_to__gte=datum))
-        .order_by("-valid_from")
-        .first()
-    )
+    karty = ClientCard.objects.filter(client=klient).platne_k(datum)
+    if arealy:
+        karty = karty.filter(card_units__unit__site__in=arealy).distinct()
+    return karty.order_by("-valid_from").first()
 
 
 class Prevod:
@@ -80,6 +81,8 @@ class Prevod:
         self.uz_drzi = []       # [(Karta, [Unit])] - plochy, které nájemce už má
         self.budouci = []       # [{card, plochy, zbyde_ploch}] - Karty, které
                                 # začínají AŽ PO datu převodu a plochu mají taky
+        self.budouci_vlastni = []  # nájemcovy Karty v areálu, které začínají
+                                   # AŽ PO datu - plochy se přidají i do nich
 
     @property
     def klice_z_ploch(self):
@@ -127,14 +130,13 @@ def priprav(units, klient, datum, sazba=None, cil_karta=None, rezim=REZIM_NOVA):
 
     prevod = Prevod(klient, datum, sazba, cil_karta, rezim)
 
-    from django.db.models import Q
+    from core.models import karta_plati_q
 
     # jen Karty platné K DATU převodu - už uzavřená Karta se nesmí zavírat
     # znovu a její plochy dávno drží někdo jiný
     radky = (
         CardUnit.objects.select_related("card", "card__client", "unit")
-        .filter(unit__in=units, card__is_active=True, card__valid_from__lte=datum)
-        .filter(Q(card__valid_to__isnull=True) | Q(card__valid_to__gte=datum))
+        .filter(karta_plati_q(datum, prefix="card__"), unit__in=units)
         .order_by("card__valid_from")
     )
     podle_karty = {}
@@ -149,8 +151,7 @@ def priprav(units, klient, datum, sazba=None, cil_karta=None, rezim=REZIM_NOVA):
     # te pozdejsi by obe platily naraz. Viz Daniel 2026-08-26.
     pozdejsi = (
         CardUnit.objects.select_related("card", "unit")
-        .filter(unit__in=units, card__is_active=True, card__client=klient,
-                card__valid_from__gt=datum)
+        .filter(unit__in=units, card__client=klient, card__valid_from__gt=datum)
         .order_by("card__valid_from")
     )
     for cu in pozdejsi:
@@ -189,7 +190,7 @@ def priprav(units, klient, datum, sazba=None, cil_karta=None, rezim=REZIM_NOVA):
     # takže se z nich plocha prostě odebere.
     budouci_radky = (
         CardUnit.objects.select_related("card", "card__client", "unit")
-        .filter(unit__in=units, card__is_active=True, card__valid_from__gt=datum)
+        .filter(unit__in=units, card__valid_from__gt=datum)
         .exclude(card__client_id=klient.id)
         .order_by("card__valid_from")
     )
@@ -248,16 +249,14 @@ def priprav(units, klient, datum, sazba=None, cil_karta=None, rezim=REZIM_NOVA):
     # na jednom meridle (Daniel 2026-08-27). Na tenhle pripad jsou rezimy
     # "navazat" (uzavrit a navazat novou) a "pridat" (rovnou do bezici).
     #
-    # Kontroluje se jen prekryv OD data prevodu dal, ne pouhe is_active:
-    # karta uzavrena v minulosti uz nikomu nevadi a blokovat kvuli ni
-    # navrat najemce by bylo na obtiz.
+    # Kontroluje se jen prekryv OD data prevodu dal: karta uzavrena
+    # v minulosti uz nikomu nevadi a blokovat kvuli ni navrat najemce by
+    # bylo na obtiz.
+    arealy = {u.site_id for u in units}
     if prevod.rezim == REZIM_NOVA:
         from core.models import ClientCard
 
-        arealy = {u.site_id for u in units}
-        for bezici in ClientCard.objects.filter(client=klient, is_active=True):
-            if bezici.valid_to and bezici.valid_to < datum:
-                continue
+        for bezici in ClientCard.objects.filter(client=klient).neskoncene_k(datum):
             if not arealy & set(bezici.sites().values_list("pk", flat=True)):
                 continue
             prevod.potize.append(
@@ -267,6 +266,19 @@ def priprav(units, klient, datum, sazba=None, cil_karta=None, rezim=REZIM_NOVA):
                 "„přidat plochy do běžící Karty“."
                 % (klient, bezici, bezici.valid_from.strftime("%-d. %-m. %Y"))
             )
+
+    # Najemcovy Karty, ktere zacinaji AZ PO datu (napr. pripravena Karta
+    # od pristiho mesice). Plocha pridana k datu by s jejich zacatkem zase
+    # zmizela - pridava se proto i do nich. Plochy, ktere uz drzi, hlida
+    # kontrola "pozdejsi" vyse. Daniel 2026-10-28: "musí zůstat všechny
+    # plochy z karty původní a pouze provedu změny".
+    if prevod.rezim != REZIM_NOVA:
+        from core.models import ClientCard
+
+        for pozdejsi_karta in (ClientCard.objects.filter(client=klient, valid_from__gt=datum,
+                                                         card_units__unit__site__in=arealy)
+                               .distinct().order_by("valid_from")):
+            prevod.budouci_vlastni.append(pozdejsi_karta)
 
     if prevod.cil_karta:
         soucet = _soucet_m2(prevod.cil_karta)
@@ -330,7 +342,7 @@ def proved(prevod):
         # 1) pokračovací Karta původního držitele - kopíruje se DŘÍV, než se
         #    originál uzavře, aby si nepřenesla jeho nové valid_to
         if zdroj["zbyde_ploch"]:
-            pokracovani = card.create_exact_copy(valid_from=prevod.datum, is_active=True)
+            pokracovani = card.create_exact_copy(valid_from=prevod.datum)
             pokracovani.valid_to = card.valid_to
             pokracovani.description = ""      # doplní se podle konvence v save()
             pokracovani.note = (
@@ -381,7 +393,7 @@ def proved(prevod):
         # běžící Karta se uzavře a od data na ni naváže nová s plochami navíc
         cil = prevod.cil_karta
         stary_soucet = _soucet_m2(cil)
-        nova = cil.create_exact_copy(valid_from=prevod.datum, is_active=True)
+        nova = cil.create_exact_copy(valid_from=prevod.datum)
         nova.valid_to = cil.valid_to
         nova.description = ""
         nova.note = (
@@ -393,7 +405,7 @@ def proved(prevod):
         cil.valid_to = prevod.den_uzavreni
         cil.save(update_fields=["valid_to"])
     else:
-        nova = ClientCard(client=prevod.klient, valid_from=prevod.datum, is_active=True)
+        nova = ClientCard(client=prevod.klient, valid_from=prevod.datum)
         nova.note = "Vznikla převodem ploch z plánku."
         nova.save()
         stary_soucet = Decimal("0")
@@ -409,6 +421,20 @@ def proved(prevod):
         novy_soucet = _soucet_m2(nova)
         for klic in nova.allocation_keys.all():
             if _je_plosny(klic, stary_soucet):
+                klic.value = novy_soucet
+                klic.save(update_fields=["value"])
+
+    # pozdější (připravené) Karty nájemce dostanou plochy taky
+    for pozdejsi_karta in prevod.budouci_vlastni:
+        puvodni_soucet = _soucet_m2(pozdejsi_karta)
+        for unit in prevod.vsechny_plochy:
+            CardUnit.objects.get_or_create(
+                card=pozdejsi_karta, unit=unit,
+                defaults={"area_m2_override": unit.area_m2, "rate_per_m2": prevod.sazba},
+            )
+        novy_soucet = _soucet_m2(pozdejsi_karta)
+        for klic in pozdejsi_karta.allocation_keys.all():
+            if _je_plosny(klic, puvodni_soucet):
                 klic.value = novy_soucet
                 klic.save(update_fields=["value"])
 

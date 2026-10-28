@@ -72,7 +72,7 @@
                                 <td style="padding:4px 8px;">
                                     {% if row.karta %}
                                         {{ row.karta.client }}
-                                        <span style="color:#888;">({{ row.karta.valid_from }} – {{ row.karta.valid_to|default:"…" }}{% if not row.karta.is_active %}, neaktivní{% endif %})</span>
+                                        <span style="color:#888;">({{ row.karta.valid_from }} – {{ row.karta.valid_to|default:"…" }})</span>
                                     {% else %}—{% endif %}
                                 </td>
                             </tr>

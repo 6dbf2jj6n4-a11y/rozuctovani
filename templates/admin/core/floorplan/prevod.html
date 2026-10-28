@@ -55,19 +55,24 @@
                 <label class="rx-prepinac">
                     <input type="radio" name="rezim" value="{{ REZIM_NAVAZAT }}"
                            {% if rezim == REZIM_NAVAZAT %}checked{% endif %}>
-                    Uzavřít ji a navázat novou kartou s plochami navíc
+                    Ukončit ji a od data navázat novou kartou – <strong>všechny její plochy a klíče</strong> + vybrané plochy
                 </label>
                 <label class="rx-prepinac">
                     <input type="radio" name="rezim" value="{{ REZIM_PRIDAT }}"
                            {% if rezim == REZIM_PRIDAT %}checked{% endif %}>
-                    Přidat plochy rovnou do téhle karty
+                    Přidat plochy rovnou do téhle karty (změní i proběhlá období)
                 </label>
                 <label class="rx-prepinac">
                     <input type="radio" name="rezim" value="{{ REZIM_NOVA }}"
                            {% if rezim == REZIM_NOVA %}checked{% endif %}>
-                    Založit další samostatnou kartu
+                    Založit další samostatnou kartu jen s vybranými plochami
                 </label>
             </div>
+        {% elif klient and datum %}
+            <p class="rx-planek-napoveda">
+                {{ klient }} nemá k {{ datum|date:'j. n. Y' }} v tomto areálu žádnou platnou kartu –
+                vznikne nová.
+            </p>
         {% endif %}
 
         {% if prevod %}
@@ -159,7 +164,10 @@
                 <p class="rx-odstavec">
                     Karta <strong>{{ prevod.cil_karta.description }}</strong> se uzavře k
                     <strong>{{ prevod.den_uzavreni|date:'j. n. Y' }}</strong> a od
-                    {{ prevod.datum|date:'j. n. Y' }} na ni naváže nová s plochami navíc:
+                    {{ prevod.datum|date:'j. n. Y' }} na ni naváže nová se všemi jejími plochami
+                    ({% for cu in prevod.cil_karta.card_units.all %}{{ cu.unit.name }}{% if not forloop.last %}, {% endif %}{% endfor %})
+                    a navíc
+                    {% for u in prevod.vsechny_plochy %}<strong>{{ u.name }}</strong>{% if not forloop.last %}, {% endif %}{% endfor %}:
                     {{ prevod.cil_m2_pred }} → <strong>{{ prevod.cil_m2_po }} m²</strong>.
                     {% if prevod.cil_plosne_klice %}Plošné klíče se přepočítají:
                         {% for k in prevod.cil_plosne_klice %}<em>{{ k.service_item.name }}</em>
@@ -168,11 +176,18 @@
                 </p>
             {% else %}
                 <p class="rx-odstavec">
-                    Nová karta pro <strong>{{ prevod.klient }}</strong> od
+                    Nová samostatná karta pro <strong>{{ prevod.klient }}</strong> od
                     <strong>{{ prevod.datum|date:'j. n. Y' }}</strong>, celkem
                     <strong>{{ prevod.prevadene_m2 }} m²</strong>.
                 </p>
             {% endif %}
+
+            {% for k in prevod.budouci_vlastni %}
+                <p class="rx-odstavec">
+                    Do připravené karty <strong>{{ k.description }}</strong> (od {{ k.valid_from|date:'j. n. Y' }})
+                    se plochy přidají taky, jinak by s jejím začátkem zase zmizely.
+                </p>
+            {% endfor %}
 
             {% endif %}
 

@@ -354,11 +354,14 @@ class SiteAdmin(PodlePronajimatele, ModelAdmin):
         dotazu, ne per radek, aby seznam Arealu nedelal dotaz navic za
         kazdy areal. Viz konverzace s Danielem 2026-08-16."""
         from django.db.models import Count
+        from django.utils import timezone
+
+        from core.models import karta_plati_q
 
         return super().get_queryset(request).annotate(
             _aktivnich_klientu=Count(
                 "units__card_units__card__client",
-                filter=Q(units__card_units__card__is_active=True),
+                filter=karta_plati_q(timezone.localdate(), prefix="units__card_units__card__"),
                 distinct=True,
             )
         )
@@ -1122,24 +1125,22 @@ class CardUnitInline(TabularInline):
     mesicni_najem.short_description = "Nájemné/měsíc"
 
 
-class ClientCardInlineForm(forms.ModelForm):
-    class Meta:
-        model = ClientCard
-        fields = "__all__"
+def _stav_karty(obj):
+    """Stav Karty slovem a barvou - jen z Platnosti od/do, k dnesku."""
+    from django.utils.html import format_html
 
-    def clean(self):
-        cleaned_data = super().clean()
-        is_active = cleaned_data.get("is_active")
-        if is_active and self.instance:
-            self.instance.client = cleaned_data.get("client") or self.instance.client
-            self.instance.is_active = True
-            conflict = self.instance.active_card_conflict()
-            if conflict:
-                raise forms.ValidationError(
-                    f"Klient už má aktivní kartu ve stejném areálu: {conflict.description}. "
-                    "Nejprve deaktivujte stávající kartu."
-                )
-        return cleaned_data
+    if obj is None or not obj.pk or not obj.valid_from:
+        return "—"
+    if obj.stav == ClientCard.STAV_PRIPRAVENA:
+        return format_html('<span style="color:#a70;">Připravená (od {})</span>',
+                           obj.valid_from.strftime("%-d. %-m. %Y"))
+    if obj.stav == ClientCard.STAV_SKONCILA:
+        return format_html('<span style="color:#888;">Skončila {}</span>',
+                           obj.valid_to.strftime("%-d. %-m. %Y"))
+    if obj.valid_to:
+        return format_html('<span style="color:#2a7;">Platí do {}</span>',
+                           obj.valid_to.strftime("%-d. %-m. %Y"))
+    return format_html('<span style="color:#2a7;">Platí</span>')
 
 
 class ClientCardInline(TabularInline):
@@ -1152,10 +1153,9 @@ class ClientCardInline(TabularInline):
     zadnou validaci povinnych udaju a driv na nej ani nesel kliknout
     (viz git historie - "Karta klienta s klíčem None")."""
     model = ClientCard
-    form = ClientCardInlineForm
     extra = 0
-    fields = ("description_link", "valid_from", "valid_to", "is_active", "note")
-    readonly_fields = ("description_link",)
+    fields = ("description_link", "valid_from", "valid_to", "stav", "note")
+    readonly_fields = ("description_link", "stav")
     can_delete = True
     verbose_name = "Karta"
     verbose_name_plural = "Karty klientů"
@@ -1177,6 +1177,10 @@ class ClientCardInline(TabularInline):
         url = reverse("admin:core_clientcard_change", args=[obj.pk])
         return format_html('<a href="{}">{}</a>', url, obj.description or "—")
     description_link.short_description = "Popis karty"
+
+    @display(description="Stav")
+    def stav(self, obj):
+        return _stav_karty(obj)
 
 
 class ContractInline(TabularInline):
@@ -1717,7 +1721,7 @@ class ContractAdmin(PodlePronajimatele, DuplicateModelAdminMixin, ModelAdmin):
 
                 monthly_rent_total = sum(
                     (cu.monthly_rent or 0)
-                    for card in client.cards.filter(is_active=True)
+                    for card in client.cards.platne_k(date.today())
                     for cu in card.card_units.all()
                 )
                 if monthly_rent_total:
@@ -1769,24 +1773,24 @@ class ContractAdmin(PodlePronajimatele, DuplicateModelAdminMixin, ModelAdmin):
                     skipped.append(f"{contract} (#{contract.pk}): chybí Areál na smlouvě")
                     continue
                 candidates = [
-                    c for c in ClientCard.objects.filter(client=contract.client, is_active=True)
+                    c for c in ClientCard.objects.filter(client=contract.client)
+                    .platne_k(new_valid_from - timedelta(days=1))
                     if contract.site in c.sites()
                 ]
                 if len(candidates) != 1:
                     skipped.append(
-                        f"{contract} (#{contract.pk}): nalezeno {len(candidates)} aktivních karet "
+                        f"{contract} (#{contract.pk}): nalezeno {len(candidates)} platných karet "
                         f"klienta v areálu {contract.site} (očekávána 1) - přeskočeno"
                     )
                     continue
                 old_card = candidates[0]
-                new_card = old_card.create_exact_copy(valid_from=new_valid_from, is_active=True)
+                new_card = old_card.create_exact_copy(valid_from=new_valid_from)
                 for cu in new_card.card_units.all():
                     if cu.rate_per_m2 is not None:
                         cu.rate_per_m2 = (cu.rate_per_m2 * factor).quantize(Decimal("0.01"))
                         cu.save(update_fields=["rate_per_m2"])
                 old_card.valid_to = new_valid_from - timedelta(days=1)
-                old_card.is_active = False
-                old_card.save(update_fields=["valid_to", "is_active"])
+                old_card.save(update_fields=["valid_to"])
                 created += 1
 
             text = f"Vytvořeno {created} nových karet s navýšením nájemného o {rate.percent} %."
@@ -1926,10 +1930,8 @@ class ContractAdmin(PodlePronajimatele, DuplicateModelAdminMixin, ModelAdmin):
 
 
 class ClientCardClientActiveFilter(admin.SimpleListFilter):
-    """Client.is_active i ClientCard.is_active se v modelu jmenuji stejne
-    ("Aktivní") - obycejny list_filter = ("client__is_active", "is_active")
-    proto v adminu zobrazi DVA filtry se stejnym nazvem, bez rozliseni, ktery
-    je za co (viz konverzace s Danielem)."""
+    """Filtr podle Client.is_active - pojmenovany, aby bylo jasne, ze jde
+    o klienta, ne o Kartu (ta zadny priznak Aktivni nema)."""
     title = "Klient aktivní"
     parameter_name = "client_active"
 
@@ -1944,35 +1946,20 @@ class ClientCardClientActiveFilter(admin.SimpleListFilter):
         return queryset
 
 
-class ClientCardActiveFilter(admin.SimpleListFilter):
-    title = "Karta aktivní"
-    parameter_name = "card_active"
-
-    def lookups(self, request, model_admin):
-        return (("1", "Ano"), ("0", "Ne"))
-
-    def queryset(self, request, queryset):
-        if self.value() == "1":
-            return queryset.filter(is_active=True)
-        if self.value() == "0":
-            return queryset.filter(is_active=False)
-        return queryset
-
-
 class ClientCardPlatnostFilter(admin.SimpleListFilter):
-    """Platnost Karty podle dat Plati od/do, ne podle priznaku Aktivni.
-    Vychozi je "Platne a budouci" - skoncene Karty (Aktiv Novostav...)
-    v seznamu jen prekazely. Daniel 2026-09-27."""
-    title = "Platnost"
+    """Stav Karty podle dat Platnost od/do - jediny udaj o platnosti.
+    Vychozi je "Platí a připravené" - skoncene Karty (Aktiv Novostav...)
+    v seznamu jen prekazely. Daniel 2026-09-27, 2026-10-28."""
+    title = "Stav"
     parameter_name = "platnost"
     VYCHOZI = "nekonci"
 
     def lookups(self, request, model_admin):
         return (
-            ("nekonci", "Platné a budoucí"),
-            ("dnes", "Platné dnes"),
-            ("budouci", "Začnou později"),
-            ("skoncene", "Skončené"),
+            ("nekonci", "Platí a připravené"),
+            ("dnes", "Platí"),
+            ("budouci", "Připravené"),
+            ("skoncene", "Skončily"),
             ("vse", "Všechny"),
         )
 
@@ -2013,7 +2000,7 @@ class ClientCardAdmin(PodlePronajimatele, ModelAdmin):
     warn_unsaved_form = False
     cesta_k_arealu = "card_units__unit__site"
     potrebuje_distinct = True
-    list_display = ("client", "description", "valid_from", "valid_to", "is_active",
+    list_display = ("client", "description", "valid_from", "valid_to", "stav",
                     "stav_k_obdobi")
     # Vygeneruje <style> pravidla pro barvy sekci Elektřina/Voda/Teplo/
     # Ostatní podle aktualnich hodnot InvoiceClassColor (Nastavení ->
@@ -2028,14 +2015,14 @@ class ClientCardAdmin(PodlePronajimatele, ModelAdmin):
     class Media:
         js = ("core/js/warn_unsaved.js",)
     list_select_related = ("client",)
-    list_filter = (ClientCardPlatnostFilter, ClientCardClientActiveFilter, ClientCardActiveFilter, ClientCardSiteFilter)
+    list_filter = (ClientCardPlatnostFilter, ClientCardClientActiveFilter, ClientCardSiteFilter)
     autocomplete_fields = ("client",)
     search_fields = ("client__name", "description")
     fieldsets = (
         ("Základní údaje", {
             "fields": (("client", "platce_dph", "description"), ("valid_from", "valid_to"),
                        ("najem_bez_dph", "najem_s_dph"),
-                       "contract", ("pocet_osob", "pocet_osob_tuv"), "is_active", "note")
+                       "contract", ("pocet_osob", "pocet_osob_tuv"), "note")
         }),
         ("Čísla objednávek (na faktury)", {
             "fields": (("po_number_rent", "po_number_services"),)
@@ -2048,6 +2035,10 @@ class ClientCardAdmin(PodlePronajimatele, ModelAdmin):
         }),
     )
     readonly_fields = ("generate_card_button", "platce_dph", "najem_s_dph")
+
+    @display(description="Stav", ordering="valid_from")
+    def stav(self, obj):
+        return _stav_karty(obj)
 
     @display(description="Plátce DPH")
     def platce_dph(self, obj):
@@ -2120,11 +2111,18 @@ class ClientCardAdmin(PodlePronajimatele, ModelAdmin):
             inlines.append(CardOccupantInline)
         return [*inlines, *sekce_klicu()]
 
-    @admin.action(description="Vytvořit kopii vybraných karet")
+    @admin.action(description="Vytvořit kopii karty")
     def kopie_karty(self, request, queryset):
-        for card in queryset:
-            card.create_exact_copy()
-        self.message_user(request, f"Vytvořeno {queryset.count()} kopií karet.")
+        """Jen pro jednu Kartu a pres formular s datem - kopie plati hned,
+        takze se musi zeptat, od kdy, a puvodni Kartu ukoncit. Hromadna
+        kopie se stejnou platnosti by kazdou plochu zdvojila."""
+        from django.shortcuts import redirect
+
+        if queryset.count() != 1:
+            self.message_user(request, "Vyber jednu kartu – kopie se zakládá s datem, od kdy platí.",
+                              level=messages.WARNING)
+            return None
+        return redirect("admin:core_clientcard_kopie", queryset.first().pk)
 
     def get_urls(self):
         from django.urls import path
@@ -2190,7 +2188,7 @@ class ClientCardAdmin(PodlePronajimatele, ModelAdmin):
         conflicts_by_site = {}
         for unit in units:
             active_cards = sorted(
-                {cu.card for cu in unit.card_units.all() if cu.card.is_active},
+                {cu.card for cu in unit.card_units.all()},
                 key=lambda c: (c.valid_from, c.client.name),
             )
             # Do vypisu jdou jen karty, ktere se s nekym opravdu potkavaji -
@@ -2224,21 +2222,10 @@ class ClientCardAdmin(PodlePronajimatele, ModelAdmin):
 
     @display(description="Stav k období")
     def stav_k_obdobi(self, obj):
-        """Slovem, jestli se karta v AKTUALNIM obdobi pocita, nebo ne.
-
-        Priznak Aktivni a Platnost od/do jsou dve ruzne veci a nejde je
-        precist jednou: Aktivni je rucni vypinac ("tuhle kartu pouzivej"),
-        cas resi Platnost - vahy se kratí na dny pres
-        active_days_in_period. Karta platna do 31. 8. se v zari zapocita
-        nulou, i kdyz u ni Aktivni zustane svitit, a proto muze byt
-        aktivnich karet vic, kdyz se casove neprekryvaji. Daniel
-        2026-09-05: "nemuzu si zvyknout, ze mame vic aktivnich karet
-        a ony se zapinaji az podle datumu." Tenhle sloupec to slozi
-        dohromady, at se to nemusi domyslet z priznaku a dvou datumu."""
+        """Slovem, jestli se karta v AKTUALNIM obdobi pocita, nebo ne -
+        vahy se kratí na dny pres active_days_in_period."""
         from django.utils.html import format_html
 
-        if not obj.is_active:
-            return format_html('<span style="color:#888;">vypnutá</span>')
         obdobi = getattr(self, "_pamet_obdobi", None)
         if obdobi is None:
             obdobi = self._pamet_obdobi = Period.current()
@@ -2516,7 +2503,7 @@ class ClientCardAdmin(PodlePronajimatele, ModelAdmin):
         # takze se vylucuji vsichni. Viz Daniel 2026-08-17 a 2026-08-24.
         cards = (
             pronajimatele.omez(
-                ClientCard.objects.filter(is_active=True, client__is_landlord=False),
+                ClientCard.objects.filter(client__is_landlord=False),
                 "card_units__unit__site", request,
             )
             .select_related("client")
@@ -2798,10 +2785,9 @@ class ClientCardAdmin(PodlePronajimatele, ModelAdmin):
         takze se obe data musela prepisovat rucne a snadno vznikla kopie
         se stejnym zacatkem jako original. Daniel 2026-09-01.
 
-        Karta se zaklada NEAKTIVNI (create_exact_copy) - to je zamer:
-        neaktivni karta do rozuctovani nevstupuje, takze si ji jde v klidu
-        upravit, a teprve pri jejim zaskrtnuti jako aktivni projde
-        ClientCard.clean kontrolou dvou soubeznych karet."""
+        Kopie plati hned od zadaneho data (zadny priznak Aktivni uz neni),
+        proto puvodni Karta vzdy skonci den pred ni - jinak by se od toho
+        dne pocitaly obe. Daniel 2026-10-28."""
         from django.shortcuts import redirect, render
 
         # Karta se bere pres self.get_queryset, tedy stejnym filtrem jako
@@ -2813,18 +2799,16 @@ class ClientCardAdmin(PodlePronajimatele, ModelAdmin):
             return self._presmeruj_cizi_kartu(request)
 
         if request.method == "POST":
-            platnost = self._datum_kopie(request, original)
+            platnost = self._datum_kopie(request, original, stejny_klient=True)
             if platnost is None:
                 return redirect(request.path)
             new_card = original.create_exact_copy(valid_from=platnost)
             konec = self._ukoncit_original(original, platnost)
             self.message_user(
                 request,
-                "Kopie karty byla vytvořena s platností od %s. Je zatím "
-                "neaktivní – zkontroluj ji a teprve pak zaškrtni Aktivní.%s"
+                "Nová karta platí od %s.%s Zkontroluj plochy a klíče."
                 % (platnost.strftime("%-d. %-m. %Y"),
-                   " Původní kartě byla doplněna platnost do %s."
-                   % konec.strftime("%-d. %-m. %Y") if konec else ""),
+                   " Původní karta končí %s." % konec.strftime("%-d. %-m. %Y") if konec else ""),
             )
             return redirect(f"/admin/core/clientcard/{new_card.pk}/change/")
 
@@ -2832,37 +2816,44 @@ class ClientCardAdmin(PodlePronajimatele, ModelAdmin):
             **self.admin_site.each_context(request),
             "title": "Kopírovat kartu",
             "original": original,
+            "navrh_od": self._navrh_od(original),
             "opts": self.model._meta,
         })
 
     @staticmethod
+    def _navrh_od(original):
+        """Predvyplnene Platnost od kopie: den po konci originalu, jinak
+        1. den pristiho mesice (nejdriv den po zacatku originalu)."""
+        from datetime import date, timedelta
+
+        if original.valid_to:
+            return original.valid_to + timedelta(days=1)
+        dnes = date.today()
+        navrh = date(dnes.year + (dnes.month == 12), dnes.month % 12 + 1, 1)
+        return max(navrh, original.valid_from + timedelta(days=1))
+
+    @staticmethod
     def _ukoncit_original(original, platnost_kopie):
-        """Puvodni karte doplni Platnost do na den pred zacatkem kopie.
+        """Puvodni karte nastavi Platnost do na den pred zacatkem kopie.
 
-        Bez toho zustane stara karta bez konce platnosti, automatika ji
-        nikdy nedeaktivuje (deaktivuje jen kartu s platnosti prokazatelne
-        skoncenou) a nova se kvuli kolizi nezapne - jen se nahlasi
-        varovani. Presne to se stalo u Tanecni skupiny Aktiv: obe karty
-        bez konce, nova cekala vypnuta. Daniel 2026-09-05: "kdyz dam
-        platnou kartu zkopirovat, ta stara by se mohla automaticky
-        doplnit, kdy bude koncit."
-
-        Uz vyplneny konec se NEPREPISUJE - kdyz ho nekdo nastavil, vi
-        proc; a nemeni se ani konec pozdejsi nez zacatek kopie, at se
-        omylem nezkrati bezici najem. Vraci datum, ktere doplnilo, nebo
-        None."""
+        Daniel 2026-09-05: "kdyz dam platnou kartu zkopirovat, ta stara by
+        se mohla automaticky doplnit, kdy bude koncit." Od 2026-10-28 se
+        prepisuje i konec pozdejsi nez zacatek kopie - kopie plati hned,
+        takze by se jinak obe Karty prekryvaly. Kopie si puvodni konec
+        prevzala (create_exact_copy), nic se tedy neztrati. Konec drivejsi
+        nez zacatek kopie zustava. Vraci nove datum konce, nebo None."""
         from datetime import timedelta
 
-        if original.valid_to is not None:
-            return None
         konec = platnost_kopie - timedelta(days=1)
+        if original.valid_to is not None and original.valid_to <= konec:
+            return None
         if konec < original.valid_from:
             return None
         original.valid_to = konec
         original.save(update_fields=["valid_to"])
         return konec
 
-    def _datum_kopie(self, request, original):
+    def _datum_kopie(self, request, original, stejny_klient=False):
         """Datum 'platnost od' z formulare kopie, nebo None pri chybe."""
         from datetime import date
 
@@ -2885,6 +2876,14 @@ class ClientCardAdmin(PodlePronajimatele, ModelAdmin):
                 level=messages.ERROR,
             )
             return None
+        if stejny_klient and platnost == original.valid_from:
+            self.message_user(
+                request,
+                "Nová karta téhož klienta musí začít později než původní (%s) – "
+                "původní karta skončí den před ní." % original.valid_from.strftime("%-d. %-m. %Y"),
+                level=messages.ERROR,
+            )
+            return None
         return platnost
 
     def kopie_klient_view(self, request, card_id):
@@ -2902,12 +2901,24 @@ class ClientCardAdmin(PodlePronajimatele, ModelAdmin):
             platnost = self._datum_kopie(request, original)
             if platnost is None:
                 return redirect(request.path)
+            if request.POST.get("ukoncit_original") and platnost == original.valid_from:
+                self.message_user(
+                    request,
+                    "Původní kartu nejde ukončit den před novou – obě začínají %s. "
+                    "Zvol pozdější datum, nebo nech původní kartu běžet."
+                    % platnost.strftime("%-d. %-m. %Y"),
+                    level=messages.ERROR,
+                )
+                return redirect(request.path)
             new_card = original.create_exact_copy(client=new_client, valid_from=platnost)
+            konec = None
+            if request.POST.get("ukoncit_original"):
+                konec = self._ukoncit_original(original, platnost)
             self.message_user(
                 request,
-                "Kopie karty byla vytvořena pro klienta %s s platností od %s. "
-                "Je zatím neaktivní – zkontroluj ji a teprve pak zaškrtni Aktivní."
-                % (new_client, platnost.strftime("%-d. %-m. %Y")),
+                "Nová karta pro klienta %s platí od %s.%s Zkontroluj plochy a klíče."
+                % (new_client, platnost.strftime("%-d. %-m. %Y"),
+                   " Původní karta končí %s." % konec.strftime("%-d. %-m. %Y") if konec else ""),
             )
             return redirect(f"/admin/core/clientcard/{new_card.pk}/change/")
 
@@ -2915,6 +2926,7 @@ class ClientCardAdmin(PodlePronajimatele, ModelAdmin):
             **self.admin_site.each_context(request),
             "title": "Kopírovat kartu na nového klienta",
             "original": original,
+            "navrh_od": self._navrh_od(original),
             "clients": pronajimatele.klienti(
                 request, Client.objects.filter(is_active=True)).order_by("name"),
             "opts": self.model._meta,
@@ -4139,17 +4151,13 @@ class PeriodAdmin(ModelAdmin):
 
     def _spocitat_rozuctovani(self, request, queryset, site=None):
         """Vypocet pro tlacitko Vypocet v radku (vypocet_view)."""
-        from billing.engine import BillingPeriodClosedError, calculate_period, sync_card_activity
+        from billing.engine import BillingPeriodClosedError, calculate_period, karty_neaktivnich_klientu
 
         for period in queryset:
             label = f"{period} / {site}" if site else str(period)
 
-            sync_results = sync_card_activity(period, site=site)
-            for level, text in sync_results:
-                self.message_user(
-                    request, f"{label}: {text}",
-                    level=messages.SUCCESS if level == "success" else messages.WARNING,
-                )
+            for text in karty_neaktivnich_klientu(period, site=site):
+                self.message_user(request, f"{label}: {text}", level=messages.WARNING)
 
             # Plocha, kterou po odchodu najemce nikdo neprevzal, se nikde
             # neozve - jen se jeji dil nakladu potichu rozpusti mezi
@@ -6363,7 +6371,7 @@ class FloorplanAdmin(PodlePronajimatele, ModelAdmin):
         cil_karta = None
         rezim = request.POST.get("rezim") or ""
         if klient and datum:
-            cil_karta = karta_klienta_k_datu(klient, datum)
+            cil_karta = karta_klienta_k_datu(klient, datum, {u.site_id for u in units})
             if not cil_karta:
                 rezim = REZIM_NOVA
             elif rezim not in (REZIM_NOVA, REZIM_NAVAZAT, REZIM_PRIDAT):

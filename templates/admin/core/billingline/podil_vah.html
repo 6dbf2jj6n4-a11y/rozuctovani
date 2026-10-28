@@ -190,7 +190,7 @@
                             <td style="padding:4px 8px;">{{ row.card }}</td>
                             <td style="padding:4px 8px;">{{ row.type }}</td>
                             <td style="padding:4px 8px;">hodnota={{ row.value|default:"—" }}</td>
-                            <td style="padding:4px 8px;">aktivní karta: {% if row.is_active_card %}ano{% else %}ne{% endif %}</td>
+                            <td style="padding:4px 8px;">karta: {{ row.stav_karty }}</td>
                             <td style="padding:4px 8px;">platnost: {{ row.valid_from }} – {{ row.valid_to|default:"∞" }}</td>
                         </tr>
                     {% endfor %}

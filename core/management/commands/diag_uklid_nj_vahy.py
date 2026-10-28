@@ -75,7 +75,7 @@ class Command(BaseCommand):
             self.stdout.write(
                 f"{card.client.name[:40]:40} {str(card)[:30]:30} {type_label[:28]:28} "
                 f"{str(key.value):>10} {active_days:>8} {eff_str:>12} {share_str:>10} "
-                f"{str(key.is_billed):>7} {str(valid):>6} {str(card.is_active):>10}"
+                f"{str(key.is_billed):>7} {str(valid):>6} {card.get_stav_display():>10}"
             )
 
         self.stdout.write(f"\nsoučet efektivních vah (jmenovatel normalizace) = {total}")

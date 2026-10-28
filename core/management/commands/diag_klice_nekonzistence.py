@@ -36,7 +36,7 @@ class Command(BaseCommand):
         parser.add_argument("--site", default=None, help="Filtrovat podle názvu areálu (např. FM, NJ) - substring match.")
         parser.add_argument(
             "--jen-aktivni-karty", action="store_true",
-            help="Zahrnout jen klíče karet s client_card.is_active=True.",
+            help="Zahrnout jen klíče karet platných dnes (podle Platnost od/do).",
         )
 
     def handle(self, *args, **options):
@@ -46,7 +46,11 @@ class Command(BaseCommand):
         if options["site"]:
             qs = qs.filter(service_item__site__name__icontains=options["site"])
         if options["jen_aktivni_karty"]:
-            qs = qs.filter(client_card__is_active=True)
+            from django.utils import timezone
+
+            from core.models import karta_plati_q
+
+            qs = qs.filter(karta_plati_q(timezone.localdate(), prefix="client_card__"))
 
         keys = list(qs.order_by("service_item__site__name", "service_item__name", "client_card__client__name"))
         self.stdout.write(self.style.WARNING(f"Celkem klíčů v rozsahu: {len(keys)}\n"))

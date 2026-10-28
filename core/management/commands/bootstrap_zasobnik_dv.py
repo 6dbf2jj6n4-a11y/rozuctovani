@@ -27,11 +27,12 @@ Pouziti:
   python manage.py bootstrap_zasobnik_dv
   python manage.py bootstrap_zasobnik_dv --provest
 """
+from datetime import date
 from decimal import Decimal
 
 from django.core.management.base import BaseCommand, CommandError
 
-from core.models import AllocationKey, CardUnit, Meter, ServicePoolItem, Site
+from core.models import AllocationKey, CardUnit, Meter, ServicePoolItem, Site, karta_plati_q
 
 BEZ_VYTAHU = ("D1", "E1")          # kancelare v prizemi
 S_ELEKTROMEREM = ("D1", "E1", "H2")  # nebytove prostory, ktere elektrinu meri
@@ -68,7 +69,7 @@ class Command(BaseCommand):
         # ClientCard.unit je starsi pole a u karet s vic plochami je prazdne
         karty, plochy_dle_nazvu = {}, {}
         for cu in (CardUnit.objects
-                   .filter(unit__site=site, card__is_active=True)
+                   .filter(karta_plati_q(date.today(), prefix="card__"), unit__site=site)
                    .select_related("card__client", "unit")):
             karty[cu.unit.name] = cu.card
             plochy_dle_nazvu[cu.unit.name] = cu.unit

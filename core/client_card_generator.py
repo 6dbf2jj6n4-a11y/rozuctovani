@@ -149,15 +149,22 @@ def _sdilena_meridla(keys):
 
     Jen tam má hodnota klíče význam váhy - viz _fmt_key_value. Zjišťuje
     se jedním dotazem pro všechny klíče karty najednou; počítají se jen
-    aktivní karty, tedy kdo měřidlo sdílí dnes."""
+    karty, jejichž platnost se s tou tištěnou překrývá."""
+    from datetime import date
+
     from django.db.models import Count
+
+    from core.models import karta_plati_q
 
     meridla = [k.meter_id for k in keys if k.meter_id]
     if not meridla:
         return set()
+    karta = keys[0].client_card
     return set(
         AllocationKey.objects.filter(
-            meter_id__in=meridla, client_card__is_active=True
+            karta_plati_q(karta.valid_from, karta.valid_to or date(9999, 12, 31),
+                          prefix="client_card__"),
+            meter_id__in=meridla,
         )
         .values("service_item_id", "meter_id")
         .annotate(karet=Count("client_card", distinct=True))

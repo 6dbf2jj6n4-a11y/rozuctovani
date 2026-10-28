@@ -47,7 +47,7 @@ class Command(BaseCommand):
                 f"  {key.client_card.client.name} ({key.client_card}): "
                 f"typ={key.allocation_type!r} ({key.get_allocation_type_display()}) "
                 f"hodnota={key.value} meridlo={key.meter} "
-                f"platnost={key.valid_from}–{key.valid_to or '∞'} karta_aktivni={key.client_card.is_active}"
+                f"platnost={key.valid_from}–{key.valid_to or '∞'} karta={key.client_card.get_stav_display()}"
             )
 
         self.stdout.write(self.style.WARNING(f"\n-- BillingLine.calc_detail pro {client.name}, {item}, {period} --"))

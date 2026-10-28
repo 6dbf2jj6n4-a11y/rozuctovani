@@ -36,7 +36,7 @@ def bez_karty(period, site=None, sites=None):
 
     drzene = set()
     for cu in (CardUnit.objects
-               .filter(card__is_active=True, unit__in=units)
+               .filter(unit__in=units)
                .select_related("card")):
         karta = cu.card
         if karta.valid_from <= konec and (karta.valid_to or DALEKO) >= zacatek:
@@ -54,7 +54,7 @@ def karta_pronajimatele(site, period):
         return None
     zacatek, konec = period.date_range()
     karty = [
-        k for k in ClientCard.objects.filter(client_id=site.landlord_id, is_active=True)
+        k for k in ClientCard.objects.filter(client_id=site.landlord_id)
         if k.valid_from <= konec and (k.valid_to or DALEKO) >= zacatek
         and k.card_units.filter(unit__site=site).exists()
     ]

@@ -45,8 +45,7 @@ def prehled(request):
 
     karty = (
         ClientCard.objects
-        .filter(is_active=True, valid_from__lte=konec,
-                card_units__unit__site__in=id_arealu)
+        .filter(valid_from__lte=konec, card_units__unit__site__in=id_arealu)
         .filter(Q(valid_to__isnull=True) | Q(valid_to__gte=zacatek))
         .distinct()
     )
@@ -265,7 +264,7 @@ def _koncici_karty(id_arealu):
     dnes = timezone.localdate()
     karty = list(
         ClientCard.objects
-        .filter(is_active=True, valid_to__isnull=False,
+        .filter(valid_to__isnull=False,
                 valid_to__gte=dnes, valid_to__lte=dnes + timedelta(days=KONEC_KARTY_DNI),
                 card_units__unit__site__in=id_arealu)
         .select_related("client")

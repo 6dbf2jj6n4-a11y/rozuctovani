@@ -36,12 +36,13 @@ Pouziti:
   python manage.py preklicovat_teplo_nj_m2
   python manage.py preklicovat_teplo_nj_m2 --provest
 """
+from datetime import date
 from decimal import Decimal
 
 from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
 
-from core.models import AllocationKey, CardUnit, ServicePoolItem, Site
+from core.models import AllocationKey, CardUnit, ServicePoolItem, Site, karta_plati_q
 
 STARA_MERIDLA = ("T_SPOLECNA", "T_INDIVIDUALNI")
 
@@ -73,7 +74,7 @@ class Command(BaseCommand):
         # vytapena plocha podle Karty
         plochy, popis = {}, {}
         for cu in (CardUnit.objects
-                   .filter(unit__site=site, card__is_active=True)
+                   .filter(karta_plati_q(date.today(), prefix="card__"), unit__site=site)
                    .select_related("card__client", "unit")):
             plocha = cu.vytapena_plocha
             if plocha:

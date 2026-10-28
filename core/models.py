@@ -512,13 +512,10 @@ class Client(models.Model):
             self.representative_name = ""
             self.representative_role = ""
 
-        deactivate_cards = False
-        if self.pk and not self.is_active:
-            was_active = Client.objects.filter(pk=self.pk, is_active=True).exists()
-            deactivate_cards = was_active
+        # Karty se pri deaktivaci klienta NEMENI - o jejich platnosti
+        # rozhoduji jen data Platnost od/do. Na neukoncenou Kartu
+        # neaktivniho klienta upozorni admin. Daniel 2026-10-28.
         super().save(*args, **kwargs)
-        if deactivate_cards:
-            self.cards.filter(is_active=True).update(is_active=False)
 
 
 class Contract(models.Model):
@@ -586,9 +583,75 @@ class Contract(models.Model):
     def __str__(self):
         return ""
 
+    def save(self, *args, **kwargs):
+        """Smlouva na dobu urcitou ukoncuje i sve Karty.
+
+        Karty, ktere koncily se smlouvou (Platnost do = puvodni konec
+        smlouvy) nebo konec nemely, se posunou na novy konec smlouvy -
+        jinak by prodlouzeni smlouvy dodatkem nechalo Kartu skoncit
+        driv. Daniel 2026-10-28 (MI Roads)."""
+        puvodni_konec = None
+        if self.pk:
+            puvodni_konec = (Contract.objects.filter(pk=self.pk)
+                             .values_list("valid_to", flat=True).first())
+        super().save(*args, **kwargs)
+        if self.pk and self.valid_to != puvodni_konec:
+            karty = self.cards.filter(
+                models.Q(valid_to__isnull=True) | models.Q(valid_to=puvodni_konec))
+            if self.valid_to:
+                karty = karty.filter(valid_from__lte=self.valid_to)
+            for karta in karty:
+                karta.valid_to = self.valid_to
+                karta.save(update_fields=["valid_to"])
+
+
+def karta_plati_q(od, do=None, prefix=""):
+    """Q pro Karty platne aspon jeden den mezi `od` a `do` (bez `do` k datu `od`).
+
+    Jediny zdroj pravdy o platnosti Karty jsou data Platnost od/do. Driv
+    vedle nich zil jeste rucni/automaticky priznak Aktivni a ty dve veci
+    se rozchazely (Karty od 1. 10. "neaktivni", skoncene "aktivni") -
+    prevod z planku pak klientovu Kartu nevidel a zakladal novou jen
+    s jednou plochou. Daniel 2026-10-28.
+
+    `prefix` je cesta ke Karte z jineho modelu, napr. "card__" nebo
+    "client_card__"."""
+    do = do or od
+    return (models.Q(**{prefix + "valid_from__lte": do})
+            & (models.Q(**{prefix + "valid_to__isnull": True})
+               | models.Q(**{prefix + "valid_to__gte": od})))
+
+
+class ClientCardQuerySet(models.QuerySet):
+    def platne_k(self, datum):
+        """Karty platne k datu."""
+        return self.filter(karta_plati_q(datum))
+
+    def platne_v(self, od, do):
+        """Karty platne aspon jeden den v rozsahu (napr. v Obdobi)."""
+        return self.filter(karta_plati_q(od, do))
+
+    def neskoncene_k(self, datum):
+        """Platne k datu nebo teprve pripravene (zacnou pozdeji)."""
+        return self.filter(models.Q(valid_to__isnull=True) | models.Q(valid_to__gte=datum))
+
 
 class ClientCard(models.Model):
-    """Karta klienta - vazba klienta na konkretni pronajaty prostor s obdobim platnosti."""
+    """Karta klienta - vazba klienta na konkretni pronajaty prostor s obdobim platnosti.
+
+    Jestli Karta plati, rika JEN Platnost od/do (viz karta_plati_q a
+    vlastnost stav) - zadny priznak Aktivni uz neexistuje."""
+
+    STAV_PRIPRAVENA = "pripravena"
+    STAV_PLATI = "plati"
+    STAV_SKONCILA = "skoncila"
+    STAVY = {
+        STAV_PRIPRAVENA: "Připravená",
+        STAV_PLATI: "Platí",
+        STAV_SKONCILA: "Skončila",
+    }
+
+    objects = ClientCardQuerySet.as_manager()
 
     client = models.ForeignKey(
         Client, on_delete=models.CASCADE, related_name="cards", verbose_name="Klient"
@@ -616,7 +679,6 @@ class ClientCard(models.Model):
     note = models.CharField("Poznámka", max_length=300, blank=True)
     external_id = models.IntegerField("Původní ID (IDK)", null=True, blank=True)
     description = models.CharField("Popis karty", max_length=200, blank=True)
-    is_active = models.BooleanField("Aktivní", default=True)
     # Osoby patri klientovi, ne mistnosti - pri dvou kancelarich neni kam
     # je rozdelit. Klice se zdrojem vahy "Pocet osob z karty" z nej berou
     # vahu samy, takze se zadava jednou za kartu. Viz Daniel 2026-09-25.
@@ -694,7 +756,33 @@ class ClientCard(models.Model):
             self.description = f"Karta {self.client.code} {year} - {order}"
         if not self.signed_on and self.valid_from:
             self.signed_on = self.valid_from
+        # Smlouva na dobu urcitou: Karta bez konce konci se smlouvou.
+        # Daniel 2026-10-28 (MI Roads).
+        if self.valid_to is None and self.contract_id and self.contract.valid_to:
+            self.valid_to = self.contract.valid_to
+            if "update_fields" in kwargs and kwargs["update_fields"] is not None:
+                kwargs["update_fields"] = {*kwargs["update_fields"], "valid_to"}
         super().save(*args, **kwargs)
+
+    @property
+    def stav(self):
+        """Pripravena / Plati / Skoncila - k dnesku, jen podle dat."""
+        from django.utils import timezone
+
+        dnes = timezone.localdate()
+        if self.valid_from and self.valid_from > dnes:
+            return self.STAV_PRIPRAVENA
+        if self.valid_to and self.valid_to < dnes:
+            return self.STAV_SKONCILA
+        return self.STAV_PLATI
+
+    def get_stav_display(self):
+        return self.STAVY[self.stav]
+
+    def plati_v(self, od, do=None):
+        """Plati Karta aspon jeden den mezi `od` a `do`?"""
+        do = do or od
+        return self.valid_from <= do and (self.valid_to is None or self.valid_to >= od)
 
     def clean(self):
         if self.valid_to and self.valid_to < self.valid_from:
@@ -740,21 +828,22 @@ class ClientCard(models.Model):
                     "mít dva pronajímatele."
                     % (self.contract.number or "bez čísla", smluvni, muj)
                 )
-        if self.is_active:
-            conflict = self.active_card_conflict()
-            if conflict:
-                raise ValidationError(
-                    f"Klient {self.client} už má aktivní kartu ve stejném areálu: "
-                    f"{conflict.description}. Nejprve deaktivujte stávající kartu."
-                )
+        conflict = self.active_card_conflict()
+        if conflict:
+            raise ValidationError(
+                f"Klient {self.client} má ve stejném areálu Kartu "
+                f"{conflict.description}, jejíž platnost se s touto překrývá "
+                f"– obě by si braly podíl. Ukonči dřívější Kartu (Platnost do) "
+                f"den před začátkem téhle."
+            )
 
     def sites(self):
         """Arealy, do kterych karta zasahuje - podle ulozenych Ploch (CardUnit)."""
         return Site.objects.filter(units__card_units__card_id=self.pk).distinct()
 
     def active_card_conflict(self):
-        """Vrati jinou aktivni kartu stejneho klienta ve stejnem arealu, pokud
-        existuje - jinak None. Areal karty se pozna jen podle jiz ulozenych
+        """Vrati jinou kartu stejneho klienta ve stejnem arealu s prekryvajici
+        se platnosti, pokud existuje - jinak None. Areal karty se pozna jen podle jiz ulozenych
         Ploch (CardUnit), takze u nove karty bez ulozenych ploch (self.pk je
         None, nebo karta jeste zadne Plochy nema) konflikt zjistit nejde -
         zkontroluje se az pri pristim ulozeni, kdy uz Plochy existuji."""
@@ -765,7 +854,7 @@ class ClientCard(models.Model):
         my_sites = set(self.sites())
         if not my_sites:
             return None
-        others = ClientCard.objects.filter(client_id=self.client_id, is_active=True).exclude(pk=self.pk)
+        others = ClientCard.objects.filter(client_id=self.client_id).exclude(pk=self.pk)
         # Konflikt je jen tehdy, kdyz se platnosti PREKRYVAJI. Navazujici
         # karty (jedna konci 31. 7., dalsi zacina 1. 8.) jsou bezny stav -
         # tak je zaklada i prevod ploch z planku. Bez tehle podminky se
@@ -912,7 +1001,7 @@ class ClientCard(models.Model):
             raw = raw * Decimal(active_days) / Decimal(dnu)
         return raw.quantize(Decimal("1"), rounding=ROUND_CEILING)
 
-    def create_exact_copy(self, client=None, valid_from=None, is_active=False):
+    def create_exact_copy(self, client=None, valid_from=None):
         """Vytvori presnou kopii teto karty (plochy i klice 1:1 z originalu).
         Zamerne NEPOUZIVA CardUnit.save()/create_default_keys() (ktere by
         klice odvozovaly znovu z vychozich sluzeb plochy - UnitService) -
@@ -929,7 +1018,8 @@ class ClientCard(models.Model):
             note=self.note,
             description=f"{self.description} (kopie)",
             external_id=None,
-            is_active=is_active,
+            # Smlouva patri klientovi - kopie na jineho klienta ji nedostane.
+            contract=self.contract if client in (None, self.client) else None,
             # Bez nich by kopie mela u vody/TUV vahu 0 - klice s vahou
             # z Poctu osob ctou jen pole na Karte (Daniel 2026-09-27).
             pocet_osob=self.pocet_osob,
@@ -2116,9 +2206,9 @@ class AllocationKey(models.Model):
         return self.value or Decimal("0")
 
     def is_valid_for_period(self, period):
-        if not self.client_card.is_active:
-            return False
         period_start, period_end = period.date_range()
+        if not self.client_card.plati_v(period_start, period_end):
+            return False
         if self.valid_from and self.valid_from > period_end:
             return False
         if self.valid_to and self.valid_to < period_start:
