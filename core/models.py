@@ -2931,7 +2931,9 @@ class CardUnit(models.Model):
             self.rate_per_m2 = self.unit.rate_per_m2_year
         super().save(*args, **kwargs)
         if is_new:
-            self.create_default_keys()
+            # vybrane_sluzby: id Vychozich sluzeb, ze kterych se maji Klice
+            # zalozit (prevod z planku nechava vybrat) - None = vsechny.
+            self.create_default_keys(getattr(self, "vybrane_sluzby", None))
             self.card.doplnit_areal_do_popisu()
 
     def delete(self, *args, **kwargs):
@@ -2944,7 +2946,7 @@ class CardUnit(models.Model):
         AllocationKey.objects.filter(client_card=self.card, unit=self.unit).delete()
         super().delete(*args, **kwargs)
 
-    def create_default_keys(self):
+    def create_default_keys(self, sluzby=None):
         """Kazda Plocha si vytvori VLASTNI Klice (uz ne get_or_create
         sdileny s jinou Plochou stejne karty pro stejnou polozku - to
         drive znamenalo, ze druha Plocha se stejnou polozkou svou
@@ -2954,8 +2956,14 @@ class CardUnit(models.Model):
         pricte svou hodnotu do stejneho client_card_id), takze na vysledek
         to nema vliv, jen na prehlednost v adminu - tu resi Konsolidace.
         `unit=self.unit` oznacuje, ze klic vznikl z TETO Plochy, aby ho
-        slo smazat spolu s ni (viz delete() vyse)."""
+        slo smazat spolu s ni (viz delete() vyse).
+
+        `sluzby` = id Vychozich sluzeb, ktere se maji pouzit (None = vsechny)
+        - prazdna kancelar na Karte pronajimatele nema spotrebu na meridle
+        patra, takze se ji takovy klic zakladat nema. Daniel 2026-10-29."""
         for unit_service in self.unit.unit_services.all():
+            if sluzby is not None and unit_service.pk not in sluzby:
+                continue
             if unit_service.allocation_type == AllocationKey.AllocationType.AREA_PRICE:
                 # Hodnota klice = skutecna vymera teto plochy na karte (vc.
                 # pripadneho area_m2_override), ne rucne zadana hodnota v

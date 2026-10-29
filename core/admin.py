@@ -6469,10 +6469,21 @@ class FloorplanAdmin(PodlePronajimatele, ModelAdmin):
                 # když karta začíná přesně v den převodu, není co uzavírat
                 rezim = REZIM_PRIDAT if cil_karta.valid_from == datum else REZIM_NAVAZAT
 
+        # Zaškrtávátka klíčů v náhledu - bez značky jde o první zobrazení
+        # a platí výchozí výběr (viz floorplan_prevod.priprav).
+        vybrane_sluzby = smazat_klice = None
+        # Výběr platí jen pro tentýž převod - po změně klienta, data nebo
+        # ploch se vrátí výchozí (u pronajímatele jiný než u nájemce).
+        znacka_vyberu = "%s|%s|%s" % (klient.pk if klient else "", datum or "", ",".join(sorted(kody)))
+        if request.POST.get("vyber_klicu") == znacka_vyberu:
+            vybrane_sluzby = {int(x) for x in request.POST.getlist("sluzby") if x.isdigit()}
+            smazat_klice = {int(x) for x in request.POST.getlist("smazat_klice") if x.isdigit()}
+
         if klient and datum and units:
             prevod = priprav(
                 units, klient, datum, Decimal(sazba) if sazba else None,
                 cil_karta if rezim != REZIM_NOVA else None, rezim,
+                vybrane_sluzby=vybrane_sluzby, smazat_klice=smazat_klice,
             )
 
             if request.POST.get("potvrzeno") and not prevod.potize:
@@ -6496,6 +6507,7 @@ class FloorplanAdmin(PodlePronajimatele, ModelAdmin):
             "prevod": prevod,
             "cil_karta": cil_karta,
             "rezim": rezim,
+            "znacka_vyberu": znacka_vyberu,
             "REZIM_NOVA": REZIM_NOVA,
             "REZIM_NAVAZAT": REZIM_NAVAZAT,
             "REZIM_PRIDAT": REZIM_PRIDAT,

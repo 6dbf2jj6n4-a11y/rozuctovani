@@ -83,6 +83,12 @@ class Prevod:
                                 # začínají AŽ PO datu převodu a plochu mají taky
         self.budouci_vlastni = []  # nájemcovy Karty v areálu, které začínají
                                    # AŽ PO datu - plochy se přidají i do nich
+        self.sluzby = []        # [(UnitService, zaškrtnuto)] - z čeho založit klíče
+
+    @property
+    def vybrane_sluzby(self):
+        """Id Výchozích služeb, ze kterých se založí klíče nájemce."""
+        return {sluzba.pk for sluzba, zaskrtnuto in self.sluzby if zaskrtnuto}
 
     @property
     def klice_z_ploch(self):
@@ -124,8 +130,28 @@ class Prevod:
         return self.cil_m2_pred + self.prevadene_m2
 
 
-def priprav(units, klient, datum, sazba=None, cil_karta=None, rezim=REZIM_NOVA):
-    """Spočítá, co převod udělá. Nic nezapisuje."""
+def _klice_bez_plochy(card, zbyvajici_units, odchazejici_units):
+    """Klíče Karty na měřidle patra (s Obsluhovanými prostory), pod kterým
+    po převodu nezůstane žádná její plocha - nesly by váhu 0, nabídne se
+    je smazat. Jen měřidla, pod která aspoň jedna odcházející plocha patřila."""
+    zbyva = {u.pk for u in zbyvajici_units}
+    odchazi = {u.pk for u in odchazejici_units}
+    out = []
+    for klic in card.allocation_keys.select_related("service_item", "meter"):
+        if not klic.meter_id:
+            continue
+        ids = klic.meter.id_obsluhovanych_ploch()
+        if ids and ids & odchazi and not ids & zbyva:
+            out.append(klic)
+    return out
+
+
+def priprav(units, klient, datum, sazba=None, cil_karta=None, rezim=REZIM_NOVA,
+            vybrane_sluzby=None, smazat_klice=None):
+    """Spočítá, co převod udělá. Nic nezapisuje.
+
+    `vybrane_sluzby` / `smazat_klice`: množiny id zaškrtnutých ve formuláři,
+    None = výchozí výběr (první zobrazení náhledu)."""
     from core.models import CardUnit
 
     prevod = Prevod(klient, datum, sazba, cil_karta, rezim)
@@ -230,7 +256,13 @@ def priprav(units, klient, datum, sazba=None, cil_karta=None, rezim=REZIM_NOVA):
         soucet = _soucet_m2(card)
         odchazi = sum((cu.area_m2 or Decimal("0")) for cu in cus)
         klice = list(card.allocation_keys.select_related("service_item").all())
+        odchazejici = [cu.unit for cu in cus]
+        zbyvajici = [cu.unit for cu in card.card_units.select_related("unit")
+                     if cu.unit_id not in {u.pk for u in odchazejici}]
+        prazdne = _klice_bez_plochy(card, zbyvajici, odchazejici) if zbyvajici else []
         prevod.zdroje.append({
+            # [(klíč, zaškrtnuto smazat)] - viz _klice_bez_plochy
+            "prazdne_klice": [(k, smazat_klice is None or k.pk in smazat_klice) for k in prazdne],
             "card": card,
             "plochy": [cu.unit for cu in cus],
             "odchazi_m2": odchazi,
@@ -294,6 +326,20 @@ def priprav(units, klient, datum, sazba=None, cil_karta=None, rezim=REZIM_NOVA):
                    prevod.cil_karta.valid_from.strftime("%-d. %-m. %Y"))
             )
 
+    # Klíče z Výchozích služeb převáděných ploch - vybírá se, které založit.
+    # Pronajímatel drží prázdné prostory: na měřidle patra (s Obsluhovanými
+    # prostory) nemají žádnou spotřebu, zůstává jen podíl na společné.
+    # Daniel 2026-10-29.
+    for unit in prevod.vsechny_plochy:
+        for sluzba in unit.unit_services.select_related("service_item", "meter").order_by(
+                "service_item__name", "meter__code"):
+            if vybrane_sluzby is not None:
+                zaskrtnuto = sluzba.pk in vybrane_sluzby
+            else:
+                zaskrtnuto = not (klient.is_landlord and sluzba.meter_id
+                                  and sluzba.meter.id_obsluhovanych_ploch())
+            prevod.sluzby.append((sluzba, zaskrtnuto))
+
     if not prevod.nove_plochy and not prevod.bez_karty:
         if prevod.uz_drzi:
             prevod.potize.append(
@@ -318,6 +364,17 @@ def priprav(units, klient, datum, sazba=None, cil_karta=None, rezim=REZIM_NOVA):
     return prevod
 
 
+def _pridat_plochu(karta, unit, prevod):
+    """Plocha na Kartu - klíče jen z vybraných Výchozích služeb."""
+    from core.models import CardUnit
+
+    if CardUnit.objects.filter(card=karta, unit=unit).exists():
+        return
+    cu = CardUnit(card=karta, unit=unit, area_m2_override=unit.area_m2, rate_per_m2=prevod.sazba)
+    cu.vybrane_sluzby = prevod.vybrane_sluzby
+    cu.save()
+
+
 @transaction.atomic
 def proved(prevod):
     """Provede připravený převod. Vrací novou Kartu nájemce."""
@@ -326,8 +383,12 @@ def proved(prevod):
     for zdroj in prevod.zdroje:
         card = zdroj["card"]
 
+        smazat = [k for k, zaskrtnuto in zdroj.get("prazdne_klice", []) if zaskrtnuto]
+
         if zdroj.get("rovnou"):
             # Karta začíná v den převodu - plochy z ní jen zmizí
+            for klic in smazat:
+                klic.delete()
             puvodni_soucet = _soucet_m2(card)
             CardUnit.objects.filter(
                 card=card, unit__in=[u.id for u in zdroj["plochy"]]
@@ -359,6 +420,11 @@ def proved(prevod):
             CardUnit.objects.filter(
                 card=pokracovani, unit__in=[u.id for u in zdroj["plochy"]]
             ).delete()
+            for klic in smazat:
+                pokracovani.allocation_keys.filter(
+                    service_item_id=klic.service_item_id, meter_id=klic.meter_id,
+                    allocation_type=klic.allocation_type,
+                ).delete()
 
             zbyva = _soucet_m2(pokracovani)
             for klic in pokracovani.allocation_keys.all():
@@ -411,10 +477,7 @@ def proved(prevod):
         stary_soucet = Decimal("0")
 
     for unit in prevod.vsechny_plochy:
-        CardUnit.objects.get_or_create(
-            card=nova, unit=unit,
-            defaults={"area_m2_override": unit.area_m2, "rate_per_m2": prevod.sazba},
-        )
+        _pridat_plochu(nova, unit, prevod)
 
     # plošné klíče, které Karta už měla, musí povyrůst o přibylou výměru
     if stary_soucet:
@@ -428,10 +491,7 @@ def proved(prevod):
     for pozdejsi_karta in prevod.budouci_vlastni:
         puvodni_soucet = _soucet_m2(pozdejsi_karta)
         for unit in prevod.vsechny_plochy:
-            CardUnit.objects.get_or_create(
-                card=pozdejsi_karta, unit=unit,
-                defaults={"area_m2_override": unit.area_m2, "rate_per_m2": prevod.sazba},
-            )
+            _pridat_plochu(pozdejsi_karta, unit, prevod)
         novy_soucet = _soucet_m2(pozdejsi_karta)
         for klic in pozdejsi_karta.allocation_keys.all():
             if _je_plosny(klic, puvodni_soucet):

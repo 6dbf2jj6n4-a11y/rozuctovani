@@ -192,6 +192,34 @@
                 </p>
             {% endif %}
 
+            {% if prevod.sluzby %}
+                <input type="hidden" name="vyber_klicu" value="{{ znacka_vyberu }}">
+                <h3 class="rx-nadpis" style="font-size:1em;margin-top:14px">Klíče z Výchozích služeb ploch</h3>
+                <p class="rx-planek-napoveda">
+                    Zaškrtni, které klíče má {{ prevod.klient }} za převáděné plochy dostat.
+                    {% if prevod.klient.is_landlord %}Pronajímatel drží prázdné prostory – klíče na měřidlech pater
+                    (vlastní spotřeba) jsou proto předem odškrtnuté, zůstává podíl na společné spotřebě.{% endif %}
+                </p>
+                {% for sluzba, zaskrtnuto in prevod.sluzby %}
+                    <label class="rx-prepinac" style="display:block">
+                        <input type="checkbox" name="sluzby" value="{{ sluzba.pk }}" {% if zaskrtnuto %}checked{% endif %}>
+                        {{ sluzba.unit.name }} – {{ sluzba.service_item.name }}{% if sluzba.meter %} – <strong>{{ sluzba.meter.code }}</strong>{% endif %}
+                        <span style="opacity:.7">({{ sluzba.get_allocation_type_display }}{% if sluzba.weight_source %}, {{ sluzba.get_weight_source_display }}{% elif sluzba.value is not None %}, {{ sluzba.value|floatformat:"-2" }}{% endif %})</span>
+                    </label>
+                {% endfor %}
+            {% endif %}
+
+            {% for z in prevod.zdroje %}{% if z.prazdne_klice %}
+                <h3 class="rx-nadpis" style="font-size:1em;margin-top:14px">Klíče, které na kartě {{ z.card.description }} zůstanou bez plochy</h3>
+                <p class="rx-planek-napoveda">Pod tímhle měřidlem jí po převodu nezůstane žádná plocha – klíč by měl váhu 0.</p>
+                {% for klic, zaskrtnuto in z.prazdne_klice %}
+                    <label class="rx-prepinac" style="display:block">
+                        <input type="checkbox" name="smazat_klice" value="{{ klic.pk }}" {% if zaskrtnuto %}checked{% endif %}>
+                        smazat {{ klic.service_item.name }} – <strong>{{ klic.meter.code }}</strong>
+                    </label>
+                {% endfor %}
+            {% endif %}{% endfor %}
+
             {% for k in prevod.budouci_vlastni %}
                 <p class="rx-odstavec">
                     Do připravené karty <strong>{{ k.description }}</strong> (od {{ k.valid_from|date:'j. n. Y' }})
