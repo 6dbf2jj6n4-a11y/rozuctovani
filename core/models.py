@@ -779,6 +779,12 @@ class ClientCard(models.Model):
                 client_id=self.client_id, valid_from__year=year
             ).exclude(pk=self.pk).count() + 1
             self.description = f"Karta {self.client.code} {year} - {order}"
+            # Areal na konec - CALAMARI ma Karty ve FM i NJ a bez nej se
+            # nedaly rozeznat (Daniel 2026-10-29). U nove Karty jeste
+            # Plochy nejsou, areal pak doplni prvni Plocha (CardUnit.save).
+            arealy = list(self.sites()) if self.pk else []
+            if len(arealy) == 1:
+                self.description += f" {arealy[0].name}"
         if not self.signed_on and self.valid_from:
             self.signed_on = self.valid_from
         # Smlouva na dobu urcitou: Karta bez konce konci se smlouvou.
@@ -788,6 +794,25 @@ class ClientCard(models.Model):
             if "update_fields" in kwargs and kwargs["update_fields"] is not None:
                 kwargs["update_fields"] = {*kwargs["update_fields"], "valid_to"}
         super().save(*args, **kwargs)
+
+    def doplnit_areal_do_popisu(self):
+        """Doplni areal do automatickeho Popisu ("Karta CSE 2026 - 8" ->
+        "Karta CSE 2026 - 8 NJ"), kdyz ho jeste nema. Rucne psane Popisy
+        se nemeni. Vola se po pridani Plochy - teprve pak je areal znamy."""
+        import re
+
+        if not self.client_id:
+            return
+        vzor = r"^Karta %s \d{4} - \d+" % re.escape(self.client.code)
+        shoda = re.match(vzor + r"(?P<zbytek>( \(.*\))?)$", self.description or "")
+        if not shoda:
+            return
+        arealy = list(self.sites())
+        if len(arealy) != 1:
+            return
+        zaklad = self.description[: shoda.start("zbytek")]
+        self.description = f"{zaklad} {arealy[0].name}{shoda.group('zbytek')}"
+        self.save(update_fields=["description"])
 
     @property
     def stav(self):
@@ -2907,6 +2932,7 @@ class CardUnit(models.Model):
         super().save(*args, **kwargs)
         if is_new:
             self.create_default_keys()
+            self.card.doplnit_areal_do_popisu()
 
     def delete(self, *args, **kwargs):
         """Smaze i Klice vznikle z teto Plochy (viz create_default_keys -
