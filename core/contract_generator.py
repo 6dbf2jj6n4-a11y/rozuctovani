@@ -1,5 +1,5 @@
 """
-Generovani dokumentu Smlouvy (.docx) z sablony core/contract_templates/smlouva_template.docx.
+Generovani dokumentu Smlouvy (.docx) z sablony core/contract_templates/smlouva_PN_template.docx.
 
 Sablona pouziva viditelne placeholdery ve tvaru [NAZEV_PLACEHOLDERU] (napr.
 [NÁZEV NÁJEMCE], [DATUM PODPISU]) na mistech, kam se dosazuji konkretni
@@ -41,7 +41,7 @@ from docx.oxml.ns import qn
 from docx.text.paragraph import Paragraph
 from docx.text.run import Run
 
-TEMPLATE_PATH = Path(__file__).resolve().parent / "contract_templates" / "smlouva_template.docx"
+TEMPLATE_PATH = Path(__file__).resolve().parent / "contract_templates" / "smlouva_PN_template.docx"
 
 _MONTHS = [
     "ledna", "února", "března", "dubna", "května", "června",
@@ -196,7 +196,7 @@ def _find_paragraph_index(paragraphs, marker):
             return i
     raise ValueError(
         f"V šabloně smlouvy nenalezen odstavec obsahující {marker!r} - "
-        f"zkontroluj core/contract_templates/smlouva_template.docx."
+        f"zkontroluj core/contract_templates/smlouva_PN_template.docx."
     )
 
 
@@ -261,7 +261,7 @@ def _replace_run_text(paragraphs, marker, old, new, highlight=True):
             return
     raise ValueError(
         f"Marker {old!r} nalezen v odstavci {idx}, ale ne v samostatnem runu - "
-        f"zkontroluj core/contract_templates/smlouva_template.docx."
+        f"zkontroluj core/contract_templates/smlouva_PN_template.docx."
     )
 
 
@@ -576,7 +576,7 @@ def fill_contract_template(data, output_path, template_path=TEMPLATE_PATH):
     if not landlord.vat_payer:
         paragraphs = doc.paragraphs
         _set_paragraph_text_keep_format(
-            paragraphs[_find_paragraph_index(paragraphs, "Ke všem částkám nájemného bude připočtena DPH")],
+            paragraphs[_find_paragraph_index(paragraphs, "Ke všem částkám nájemného")],
             "Pronajímatel není plátcem DPH, k\xa0nájemnému se DPH nepřipočítává.",
         )
         _set_paragraph_text_keep_format(
