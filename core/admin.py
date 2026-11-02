@@ -3022,9 +3022,10 @@ class ClientCardAdmin(PodlePronajimatele, ModelAdmin):
     def export_najemne_view(self, request, card_id):
         """Sekce Plochy a najemne jedne Karty do Excelu.
 
-        Soucty jsou hodnoty, ne vzorce: soubor stazeny z webu se v Excelu
-        otevre v chranenem zobrazeni a vzorec bez ulozeneho vysledku by
-        tam ukazal nulu. Daniel 2026-11-02."""
+        Najemne/rok a Najemne/mesic jsou vzorce, aby se po uprave vymery
+        nebo ceny v Excelu prepocitaly. Pocitaji stejne jako
+        CardUnit.monthly_rent: sjednana castka ma prednost, jinak vymera
+        x cena / 12 na halere. Daniel 2026-11-02."""
         from django.http import HttpResponse
         from django.shortcuts import get_object_or_404
         from django.utils.http import content_disposition_header
@@ -3047,27 +3048,27 @@ class ClientCardAdmin(PodlePronajimatele, ModelAdmin):
         def cislo(hodnota):
             return float(hodnota) if hodnota is not None else None
 
-        vymera = rok = mesic = nefakturovano = Decimal("0")
-        for cu in plochy:
-            najem = cu.monthly_rent
+        for r, cu in enumerate(plochy, start=2):
             ws.append([
                 cu.unit.name, cislo(cu.area_m2), cislo(cu.rate_per_m2), cislo(cu.monthly_rent_override),
-                cislo(najem * 12) if najem is not None else None, cislo(najem), cislo(cu.rent_not_invoiced),
+                f'=IF(F{r}="","",F{r}*12)',
+                f'=IF(D{r}<>"",D{r},IF(B{r}*C{r}>0,ROUND(B{r}*C{r}/12,2),""))',
+                cislo(cu.rent_not_invoiced),
             ])
-            vymera += cu.area_m2 or 0
-            rok += (najem or 0) * 12
-            mesic += najem or 0
-            nefakturovano += cu.rent_not_invoiced or 0
-        ws.append(["CELKEM", cislo(vymera), None, None, cislo(rok), cislo(mesic), cislo(nefakturovano)])
-        for bunka in ws[ws.max_row]:
-            bunka.font = Font(bold=True)
-            bunka.border = Border(top=Side(style="thin"))
+        posledni = ws.max_row
+        if posledni > 1:
+            ws.append(["CELKEM", f"=SUM(B2:B{posledni})", None, None, f"=SUM(E2:E{posledni})",
+                       f"=SUM(F2:F{posledni})", f"=SUM(G2:G{posledni})"])
+            for bunka in ws[ws.max_row]:
+                bunka.font = Font(bold=True)
+                bunka.border = Border(top=Side(style="thin"))
 
-        for sloupec, sirka in zip("ABCDEFG", (24, 13, 16, 28, 15, 15, 30)):
+        for sloupec, sirka in zip("ABCDEFG", (24, 13, 18, 28, 18, 18, 30)):
             ws.column_dimensions[sloupec].width = sirka
         for radek in ws.iter_rows(min_row=2, min_col=2, max_col=7):
-            for bunka in radek:
-                bunka.number_format = "#,##0.00"
+            radek[0].number_format = "#,##0.00"
+            for bunka in radek[1:]:
+                bunka.number_format = '#,##0.00\\ [$Kč-405]'
         ws.freeze_panes = "A2"
 
         popis = (karta.description or karta.client.name).replace("/", "-").replace("\\", "-")
