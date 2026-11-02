@@ -1,0 +1,9 @@
+{% include "admin/edit_inline/tabular.html" %}
+{% if inline_admin_formset.formset.instance.pk %}
+<div style="margin: -12px 0 24px 0;" x-show="activeTab == 'general'">
+    <a href="{% url 'admin:core_clientcard_export_najemne' inline_admin_formset.formset.instance.pk %}" download
+       style="padding:6px 16px; border-radius:6px; background:#2563eb; color:white; font-weight:600; text-decoration:none; display:inline-block;">
+        Export *.xlsx
+    </a>
+</div>
+{% endif %}

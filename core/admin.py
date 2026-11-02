@@ -1160,6 +1160,7 @@ class CardUnitInline(TabularInline):
     autocomplete_fields = ("unit",)
     verbose_name = "Plocha"
     verbose_name_plural = "Plochy a nájemné"
+    template = "admin/core/clientcard/cardunit_inline_tabular.html"
 
     class Media:
         js = ("core/js/cardunit_autofill.js",)
@@ -2267,6 +2268,10 @@ class ClientCardAdmin(PodlePronajimatele, ModelAdmin):
                 name="core_clientcard_generovat",
             ),
             path(
+                "export-najemne/<int:card_id>/", self.admin_site.admin_view(self.export_najemne_view),
+                name="core_clientcard_export_najemne",
+            ),
+            path(
                 "report/plochy-konflikt/",
                 self.admin_site.admin_view(self.report_plochy_konflikt_view),
                 name="core_clientcard_report_plochy_konflikt",
@@ -3013,6 +3018,64 @@ class ClientCardAdmin(PodlePronajimatele, ModelAdmin):
             )
             return None
         return platnost
+
+    def export_najemne_view(self, request, card_id):
+        """Sekce Plochy a najemne jedne Karty do Excelu.
+
+        Soucty jsou hodnoty, ne vzorce: soubor stazeny z webu se v Excelu
+        otevre v chranenem zobrazeni a vzorec bez ulozeneho vysledku by
+        tam ukazal nulu. Daniel 2026-11-02."""
+        from django.http import HttpResponse
+        from django.shortcuts import get_object_or_404
+        from django.utils.http import content_disposition_header
+        from openpyxl import Workbook
+        from openpyxl.styles import Border, Font, PatternFill, Side
+
+        karta = get_object_or_404(self.get_queryset(request), pk=card_id)
+        plochy = karta.card_units.select_related("unit").order_by("unit__name")
+
+        wb = Workbook()
+        ws = wb.active
+        ws.title = "Nájemné"
+        ws.append(["Plocha", "Výměra (m²)", "Cena Kč/m²/rok", "Sjednané nájemné (Kč/měsíc)",
+                   "Nájemné/rok", "Nájemné/měsíc", "Nefakturovaná část (Kč/měsíc)"])
+        for bunka in ws[1]:
+            bunka.font = Font(bold=True)
+            bunka.fill = PatternFill("solid", fgColor="DDDDDD")
+            bunka.border = Border(bottom=Side(style="thin"))
+
+        def cislo(hodnota):
+            return float(hodnota) if hodnota is not None else None
+
+        vymera = rok = mesic = nefakturovano = Decimal("0")
+        for cu in plochy:
+            najem = cu.monthly_rent
+            ws.append([
+                cu.unit.name, cislo(cu.area_m2), cislo(cu.rate_per_m2), cislo(cu.monthly_rent_override),
+                cislo(najem * 12) if najem is not None else None, cislo(najem), cislo(cu.rent_not_invoiced),
+            ])
+            vymera += cu.area_m2 or 0
+            rok += (najem or 0) * 12
+            mesic += najem or 0
+            nefakturovano += cu.rent_not_invoiced or 0
+        ws.append(["CELKEM", cislo(vymera), None, None, cislo(rok), cislo(mesic), cislo(nefakturovano)])
+        for bunka in ws[ws.max_row]:
+            bunka.font = Font(bold=True)
+            bunka.border = Border(top=Side(style="thin"))
+
+        for sloupec, sirka in zip("ABCDEFG", (24, 13, 16, 28, 15, 15, 30)):
+            ws.column_dimensions[sloupec].width = sirka
+        for radek in ws.iter_rows(min_row=2, min_col=2, max_col=7):
+            for bunka in radek:
+                bunka.number_format = "#,##0.00"
+        ws.freeze_panes = "A2"
+
+        popis = (karta.description or karta.client.name).replace("/", "-").replace("\\", "-")
+        odpoved = HttpResponse(
+            content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+        odpoved["Content-Disposition"] = content_disposition_header(True, "Nájemné - %s.xlsx" % popis)
+        wb.save(odpoved)
+        return odpoved
 
     def kopie_klient_view(self, request, card_id):
         """Kopie na jineho klienta - napr. kdyz si prostor pronajme novy najemce."""
