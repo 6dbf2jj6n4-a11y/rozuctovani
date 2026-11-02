@@ -10,7 +10,7 @@ from decimal import Decimal
 from django.core.exceptions import ValidationError
 from django.db import models
 
-from core.storage import R2MediaStorage
+from core.storage import R2MediaStorage, zmensit_fotku
 
 
 # Typy rozpoctu - sdileno mezi ServicePoolItem (vychozi typ) a AllocationKey
@@ -1754,6 +1754,8 @@ class MeterReading(models.Model):
 
     def save(self, *args, **kwargs):
         self.clean()
+        if self.photo and not self.photo._committed:
+            self.photo = zmensit_fotku(self.photo.file)
         super().save(*args, **kwargs)
 
 
