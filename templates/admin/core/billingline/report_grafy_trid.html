@@ -42,7 +42,7 @@
             <select name="site" id="id_site" onchange="this.form.submit()" style="padding:8px; min-width:180px;">
                 <option value="">-- všechny areály --</option>
                 {% for s in sites %}
-                    <option value="{{ s.pk }}" {% if selected_site and s.pk == selected_site.pk %}selected{% endif %}>{{ s.name }}</option>
+                    <option value="{{ s.pk|unlocalize }}" {% if selected_site and s.pk == selected_site.pk %}selected{% endif %}>{{ s.name }}</option>
                 {% endfor %}
             </select>
         </div>

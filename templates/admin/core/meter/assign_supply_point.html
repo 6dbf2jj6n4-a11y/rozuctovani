@@ -1,4 +1,5 @@
 {% extends "admin/base_site.html" %}
+{% load l10n %}
 
 {% block content %}
 <div>
@@ -9,7 +10,7 @@
         {% csrf_token %}
         <input type="hidden" name="action" value="{{ action_name }}">
         {% for pk in selected_ids %}
-            <input type="hidden" name="_selected_action" value="{{ pk }}">
+            <input type="hidden" name="_selected_action" value="{{ pk|unlocalize }}">
         {% endfor %}
 
         <div style="margin:16px 0;">
@@ -17,7 +18,7 @@
             <select name="supply_point" id="id_supply_point" style="padding:8px; min-width:280px;">
                 <option value="">-- žádné (odpojit) --</option>
                 {% for sp in supply_points %}
-                    <option value="{{ sp.pk }}">{{ sp.site.name }} – {{ sp }}{% if sp.code %} ({{ sp.code }}){% endif %}</option>
+                    <option value="{{ sp.pk|unlocalize }}">{{ sp.site.name }} – {{ sp }}{% if sp.code %} ({{ sp.code }}){% endif %}</option>
                 {% endfor %}
             </select>
         </div>

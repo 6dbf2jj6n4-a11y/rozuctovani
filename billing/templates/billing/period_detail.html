@@ -1,4 +1,5 @@
 {% extends "billing/_zaklad.html" %}
+{% load l10n %}
 {% load billing_extras %}
 
 {% block title %}Vyúčtování — {{ period }}{% endblock %}
@@ -100,7 +101,7 @@
                 &nbsp;·&nbsp;
                 <a href="{% url 'moje-vyuctovani' %}{{ dotaz }}">výběr klienta</a>
                 &nbsp;·&nbsp;
-                <a href="{% url 'admin:core_billingline_detail_client' client.pk %}?period={{ period.pk }}">detail po měřidlech (interní)</a>
+                <a href="{% url 'admin:core_billingline_detail_client' client.pk %}?period={{ period.pk|unlocalize }}">detail po měřidlech (interní)</a>
             </p>
         {% endif %}
 

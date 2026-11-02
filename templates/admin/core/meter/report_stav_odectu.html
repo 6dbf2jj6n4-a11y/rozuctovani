@@ -15,7 +15,7 @@
             <label for="id_period">Období</label>
             <select name="period" id="id_period" onchange="this.form.submit()" style="padding:8px; min-width:160px;">
                 {% for p in periods %}
-                    <option value="{{ p.pk }}" {% if selected_period and p.pk == selected_period.pk %}selected{% endif %}>{{ p }}</option>
+                    <option value="{{ p.pk|unlocalize }}" {% if selected_period and p.pk == selected_period.pk %}selected{% endif %}>{{ p }}</option>
                 {% endfor %}
             </select>
         </div>
@@ -69,7 +69,7 @@
                     {% for p in s.podezrele %}
                         <tr style="border-bottom:1px solid #333;">
                             <td style="padding:6px 8px;">
-                                <a href="/admin/core/meterreading/{{ p.reading.pk }}/change/">{{ p.reading.meter.code }}</a>
+                                <a href="/admin/core/meterreading/{{ p.reading.pk|unlocalize }}/change/">{{ p.reading.meter.code }}</a>
                                 <span style="opacity:.7;">{{ p.reading.meter.name }}</span>
                             </td>
                             <td style="padding:6px 8px; text-align:right;">{{ p.consumption|floatformat:"-2" }}</td>

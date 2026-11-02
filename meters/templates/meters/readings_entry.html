@@ -1,3 +1,4 @@
+{% load l10n %}
 {% load static %}
 <!DOCTYPE html>
 <html lang="cs">
@@ -346,12 +347,12 @@
     <form method="get" class="filters">
         <select name="site" onchange="this.form.submit()">
             {% for s in sites %}
-                <option value="{{ s.pk }}" {% if site and site.pk == s.pk %}selected{% endif %}>{{ s.name }}</option>
+                <option value="{{ s.pk|unlocalize }}" {% if site and site.pk == s.pk %}selected{% endif %}>{{ s.name }}</option>
             {% endfor %}
         </select>
         <select name="period" onchange="this.form.submit()">
             {% for p in periods %}
-                <option value="{{ p.pk }}" {% if period and period.pk == p.pk %}selected{% endif %}>{{ p }}{% if p.status == 'closed' %} (uzavřeno){% endif %}</option>
+                <option value="{{ p.pk|unlocalize }}" {% if period and period.pk == p.pk %}selected{% endif %}>{{ p }}{% if p.status == 'closed' %} (uzavřeno){% endif %}</option>
             {% endfor %}
         </select>
     </form>
@@ -500,9 +501,9 @@
     if (!meters.length) return;
     var classColors = JSON.parse(document.getElementById("class-colors-data").textContent);
 
-    var periodId = {{ period.pk|default:"null" }};
+    var periodId = {{ period.pk|default:"null"|unlocalize }};
     var periodClosed = {{ period_closed|yesno:"true,false" }};
-    var siteId = {{ site.pk|default:"null" }};
+    var siteId = {{ site.pk|default:"null"|unlocalize }};
     var isCoarsePointer = window.matchMedia && window.matchMedia("(pointer: coarse)").matches;
     var csrfToken = document.querySelector('input[name=csrfmiddlewaretoken]').value;
     var saveUrl = "{% url 'odecty-ulozit' %}";

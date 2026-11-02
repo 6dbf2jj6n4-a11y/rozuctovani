@@ -1,4 +1,5 @@
 {% extends "admin/base_site.html" %}
+{% load l10n %}
 
 {% block content %}
 <div>
@@ -14,7 +15,7 @@
         <label>Období:
             <select name="period" onchange="this.form.submit()">
                 {% for p in periods %}
-                    <option value="{{ p.pk }}" {% if p.pk == period.pk %}selected{% endif %}>{{ p }}</option>
+                    <option value="{{ p.pk|unlocalize }}" {% if p.pk == period.pk %}selected{% endif %}>{{ p }}</option>
                 {% endfor %}
             </select>
         </label>
@@ -25,7 +26,7 @@
     {% else %}
         <form method="post" action="{% url 'admin:core_unit_report_bez_karty_prevest' %}">
             {% csrf_token %}
-            <input type="hidden" name="period" value="{{ period.pk }}">
+            <input type="hidden" name="period" value="{{ period.pk|unlocalize }}">
             <div style="margin-bottom:10px;">
                 <button type="submit" class="rx-btn">
                     <span class="material-symbols-outlined">move_down</span>
@@ -47,7 +48,7 @@
                 <table style="width:100%; border-collapse:collapse; font-size:13px;">
                     <thead>
                         <tr style="border-bottom:2px solid #666; text-align:left;">
-                            <th style="padding:6px 8px;"><input type="checkbox" class="select-all" data-site="{{ group.site.pk }}"></th>
+                            <th style="padding:6px 8px;"><input type="checkbox" class="select-all" data-site="{{ group.site.pk|unlocalize }}"></th>
                             <th style="padding:6px 8px;">Plocha</th>
                             <th style="padding:6px 8px;">Účel</th>
                             <th style="padding:6px 8px; text-align:right;">Výměra</th>
@@ -59,8 +60,8 @@
                         {% for row in group.rows %}
                             <tr style="border-bottom:1px solid #2a2a2a;">
                                 <td style="padding:4px 8px;">
-                                    <input type="checkbox" name="unit" value="{{ row.unit.pk }}"
-                                           data-site="{{ group.site.pk }}"
+                                    <input type="checkbox" name="unit" value="{{ row.unit.pk|unlocalize }}"
+                                           data-site="{{ group.site.pk|unlocalize }}"
                                            {% if not group.karta %}disabled{% endif %}>
                                 </td>
                                 <td style="padding:4px 8px;">

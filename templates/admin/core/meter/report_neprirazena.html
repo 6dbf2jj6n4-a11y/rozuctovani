@@ -1,4 +1,5 @@
 {% extends "admin/base_site.html" %}
+{% load l10n %}
 
 {% block content %}
 <div>
@@ -41,12 +42,12 @@
                                 {% if meter.formula_used_by %}
                                     <input type="checkbox" disabled title="Nejde smazat - použito ve Vzorci: {{ meter.formula_used_by|join:', ' }}">
                                 {% else %}
-                                    <input type="checkbox" name="meter_ids" value="{{ meter.pk }}" class="row-check">
+                                    <input type="checkbox" name="meter_ids" value="{{ meter.pk|unlocalize }}" class="row-check">
                                 {% endif %}
                             </td>
                             <td style="padding:6px 8px;">{{ meter.site }}</td>
                             <td style="padding:6px 8px;">
-                                <a href="/admin/core/meter/{{ meter.pk }}/change/">{{ meter.code|default:"—" }}</a>
+                                <a href="/admin/core/meter/{{ meter.pk|unlocalize }}/change/">{{ meter.code|default:"—" }}</a>
                             </td>
                             <td style="padding:6px 8px;">{{ meter.name }}</td>
                             <td style="padding:6px 8px;">{{ meter.get_meter_type_display }}</td>

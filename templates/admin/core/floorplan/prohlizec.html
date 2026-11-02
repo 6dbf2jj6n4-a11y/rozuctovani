@@ -17,7 +17,7 @@ Daniel 2026-08-25.
             <select name="obdobi" id="obdobi" onchange="this.form.submit()">
                 <option value="">— nevybráno —</option>
                 {% for o in obdobi %}
-                    <option value="{{ o.pk }}" {% if vybrane_obdobi and o.pk == vybrane_obdobi.pk %}selected{% endif %}>
+                    <option value="{{ o.pk|unlocalize }}" {% if vybrane_obdobi and o.pk == vybrane_obdobi.pk %}selected{% endif %}>
                         {{ o.month }}/{{ o.year|unlocalize }}{% if o.is_current %} (aktuální){% endif %}
                     </option>
                 {% endfor %}
@@ -77,7 +77,7 @@ Daniel 2026-08-25.
         <div class="rx-planek-kontrola">
             <label>&nbsp;</label>
             <a class="rx-btn rx-btn-sm"
-               href="{% url 'admin:core_floorplan_kontrola' %}?site={{ plan.site.pk }}">Kontrola párování</a>
+               href="{% url 'admin:core_floorplan_kontrola' %}?site={{ plan.site.pk|unlocalize }}">Kontrola párování</a>
         </div>
     </form>
 

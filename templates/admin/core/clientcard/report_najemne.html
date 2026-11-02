@@ -23,14 +23,14 @@
         {% endcomment %}
         {% if koef_zvoleno %}
             {% for s in koef_sites %}
-                {% if s.vybrany %}<input type="hidden" name="koef_site" value="{{ s.site.pk }}">{% endif %}
+                {% if s.vybrany %}<input type="hidden" name="koef_site" value="{{ s.site.pk|unlocalize }}">{% endif %}
             {% endfor %}
         {% endif %}
         <div>
             <label for="id_period">Období</label>
             <select name="period" id="id_period" onchange="this.form.submit()" style="padding:8px; min-width:160px;">
                 {% for p in periods %}
-                    <option value="{{ p.pk }}" {% if selected_period and p.pk == selected_period.pk %}selected{% endif %}>{{ p }}</option>
+                    <option value="{{ p.pk|unlocalize }}" {% if selected_period and p.pk == selected_period.pk %}selected{% endif %}>{{ p }}</option>
                 {% endfor %}
             </select>
         </div>
@@ -39,7 +39,7 @@
             <select name="site" id="id_site" onchange="this.form.submit()" style="padding:8px; min-width:160px;">
                 <option value="">-- všechny --</option>
                 {% for s in sites %}
-                    <option value="{{ s.pk }}" {% if selected_site_id == s.pk %}selected{% endif %}>{{ s.name }}</option>
+                    <option value="{{ s.pk|unlocalize }}" {% if selected_site_id == s.pk %}selected{% endif %}>{{ s.name }}</option>
                 {% endfor %}
             </select>
         </div>
@@ -65,13 +65,13 @@
                 </p>
 
                 <form method="get" style="margin:0 0 12px; display:flex; align-items:center; gap:14px; flex-wrap:wrap;">
-                    <input type="hidden" name="period" value="{{ selected_period.pk }}">
-                    {% if selected_site_id %}<input type="hidden" name="site" value="{{ selected_site_id }}">{% endif %}
+                    <input type="hidden" name="period" value="{{ selected_period.pk|unlocalize }}">
+                    {% if selected_site_id %}<input type="hidden" name="site" value="{{ selected_site_id|unlocalize }}">{% endif %}
                     <input type="hidden" name="razeni" value="{{ razeni }}">
                     <span style="font-size:12px; color:#999;">Areály v koeficientu:</span>
                     {% for s in koef_sites %}
                         <label style="font-size:13px; display:inline-flex; align-items:center; gap:5px; cursor:pointer;">
-                            <input type="checkbox" name="koef_site" value="{{ s.site.pk }}"
+                            <input type="checkbox" name="koef_site" value="{{ s.site.pk|unlocalize }}"
                                    {% if s.vybrany %}checked{% endif %} onchange="this.form.submit()">
                             {{ s.site.name }}
                         </label>
@@ -202,7 +202,7 @@
                 {% for row in rows %}
                     <tr style="border-bottom:1px solid #333;">
                         <td style="padding:6px 8px;">
-                            <a href="/admin/core/clientcard/{{ row.card.pk }}/change/">{{ row.client.name }}</a>
+                            <a href="/admin/core/clientcard/{{ row.card.pk|unlocalize }}/change/">{{ row.client.name }}</a>
                         </td>
                         <td style="padding:6px 8px;">{{ row.card.description|default:"—" }}</td>
                         <td style="padding:6px 8px;">

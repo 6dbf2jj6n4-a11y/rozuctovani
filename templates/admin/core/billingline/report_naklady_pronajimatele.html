@@ -25,19 +25,19 @@ Pozor: viceradkovy komentar MUSI byt {% comment %}, ne {# #}.
         <div>
             <label for="id_site">Areál</label>
             <select name="site" id="id_site" onchange="this.form.submit()" style="padding:8px; min-width:160px;">
-                {% for s in sites %}<option value="{{ s.pk }}" {% if site and s.pk == site.pk %}selected{% endif %}>{{ s.name }}</option>{% endfor %}
+                {% for s in sites %}<option value="{{ s.pk|unlocalize }}" {% if site and s.pk == site.pk %}selected{% endif %}>{{ s.name }}</option>{% endfor %}
             </select>
         </div>
         <div>
             <label for="id_od">Od</label>
             <select name="od" id="id_od" onchange="this.form.submit()" style="padding:8px; min-width:120px;">
-                {% for p in vsechna %}<option value="{{ p.pk }}" {% if od and p.pk == od.pk %}selected{% endif %}>{{ p }}</option>{% endfor %}
+                {% for p in vsechna %}<option value="{{ p.pk|unlocalize }}" {% if od and p.pk == od.pk %}selected{% endif %}>{{ p }}</option>{% endfor %}
             </select>
         </div>
         <div>
             <label for="id_do">Do</label>
             <select name="do" id="id_do" onchange="this.form.submit()" style="padding:8px; min-width:120px;">
-                {% for p in vsechna %}<option value="{{ p.pk }}" {% if do and p.pk == do.pk %}selected{% endif %}>{{ p }}</option>{% endfor %}
+                {% for p in vsechna %}<option value="{{ p.pk|unlocalize }}" {% if do and p.pk == do.pk %}selected{% endif %}>{{ p }}</option>{% endfor %}
             </select>
         </div>
     </form>
@@ -72,7 +72,7 @@ Pozor: viceradkovy komentar MUSI byt {% comment %}, ne {# #}.
         <tbody>
             {% for o in data.obdobi %}
                 <tr>
-                    <td><a href="#o{{ o.period.pk }}">{{ o.period }}</a>{% if o.nespocitano %} <span class="mala" title="Některé položky se v tomto období nerozpočítávaly – viz rozpad">⚠ nespočítáno</span>{% endif %}</td>
+                    <td><a href="#o{{ o.period.pk|unlocalize }}">{{ o.period }}</a>{% if o.nespocitano %} <span class="mala" title="Některé položky se v tomto období nerozpočítávaly – viz rozpad">⚠ nespočítáno</span>{% endif %}</td>
                     <td>{{ o.b1_podil|floatformat:2 }}</td>
                     <td>{{ o.b1_pausal|floatformat:2 }}</td>
                     <td class="{% if o.b1_rozdil < 0 %}zap{% elif o.b1_rozdil > 0 %}kl{% endif %}">{{ o.b1_rozdil|floatformat:2 }}</td>
@@ -111,7 +111,7 @@ Pozor: viceradkovy komentar MUSI byt {% comment %}, ne {# #}.
             <tbody>
             {% for z in data.rocne %}
                 <tr>
-                    <td><a href="/admin/core/clientcard/{{ z.card.pk }}/change/">{{ z.card.client.name }}</a> <span class="mala">{{ z.card.description }}</span></td>
+                    <td><a href="/admin/core/clientcard/{{ z.card.pk|unlocalize }}/change/">{{ z.card.client.name }}</a> <span class="mala">{{ z.card.description }}</span></td>
                     <td>{{ z.mesicu }}</td>
                     {% for b in z.bunky %}<td>{% if b.podil != None or b.pausal != None %}{{ b.podil|default:0|floatformat:2 }}<br><span class="mala">paušál {{ b.pausal|default:0|floatformat:2 }}</span>{% else %}<span class="mala">—</span>{% endif %}</td>{% endfor %}
                     <td>{{ z.podil|floatformat:2 }}</td>
@@ -126,7 +126,7 @@ Pozor: viceradkovy komentar MUSI byt {% comment %}, ne {# #}.
 
     <h3 style="margin-top:24px;">Rozpad po obdobích</h3>
     {% for o in data.obdobi %}
-        <details id="o{{ o.period.pk }}">
+        <details id="o{{ o.period.pk|unlocalize }}">
             <summary>{{ o.period }} – pronajímatel nese {{ o.celkem|floatformat:2 }} Kč</summary>
 
             {% if o.pausalni %}
@@ -136,7 +136,7 @@ Pozor: viceradkovy komentar MUSI byt {% comment %}, ne {# #}.
                     <tbody>
                     {% for r in o.pausalni %}
                         <tr>
-                            <td><a href="/admin/core/clientcard/{{ r.card.pk }}/change/">{{ r.card.client.name }}</a></td>
+                            <td><a href="/admin/core/clientcard/{{ r.card.pk|unlocalize }}/change/">{{ r.card.client.name }}</a></td>
                             {% for b in r.bunky %}<td>{% if b.podil != None or b.pausal != None %}{{ b.podil|default:0|floatformat:2 }}<br><span class="mala">paušál {{ b.pausal|default:0|floatformat:2 }}</span>{% else %}<span class="mala">—</span>{% endif %}</td>{% endfor %}
                             <td>{{ r.podil_celkem|floatformat:2 }}</td>
                             <td>{{ r.pausal_celkem|floatformat:2 }}</td>
@@ -154,7 +154,7 @@ Pozor: viceradkovy komentar MUSI byt {% comment %}, ne {# #}.
                     <tbody>
                     {% for r in o.v_najmu %}
                         <tr>
-                            <td><a href="/admin/core/clientcard/{{ r.card.pk }}/change/">{{ r.card.client.name }}</a></td>
+                            <td><a href="/admin/core/clientcard/{{ r.card.pk|unlocalize }}/change/">{{ r.card.client.name }}</a></td>
                             {% for b in r.bunky %}<td>{% if b.podil != None %}{{ b.podil|floatformat:2 }}{% else %}<span class="mala">—</span>{% endif %}</td>{% endfor %}
                             <td><strong>{{ r.podil_celkem|floatformat:2 }}</strong></td>
                             <td>{{ r.najem|floatformat:2 }}</td>

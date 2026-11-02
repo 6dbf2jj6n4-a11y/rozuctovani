@@ -1,4 +1,5 @@
 {% extends "admin/base_site.html" %}
+{% load l10n %}
 
 {% block content %}
 <div style="max-width: 640px;">
@@ -20,7 +21,7 @@
         {% csrf_token %}
         <input type="hidden" name="action" value="generovat_karty_inflace">
         {% for contract in contracts %}
-            <input type="hidden" name="{{ action_checkbox_name }}" value="{{ contract.pk }}">
+            <input type="hidden" name="{{ action_checkbox_name }}" value="{{ contract.pk|unlocalize }}">
         {% endfor %}
 
         <div style="margin: 16px 0;">
@@ -37,7 +38,7 @@
             <select name="inflation_rate" id="id_inflation_rate" required style="padding: 8px; min-width: 200px;">
                 <option value="">-- vyber míru inflace --</option>
                 {% for rate in rates %}
-                    <option value="{{ rate.pk }}">{{ rate }}</option>
+                    <option value="{{ rate.pk|unlocalize }}">{{ rate }}</option>
                 {% endfor %}
             </select>
             {% if not rates %}
