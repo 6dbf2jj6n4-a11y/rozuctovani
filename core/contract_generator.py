@@ -570,16 +570,10 @@ def fill_contract_template(data, output_path, template_path=TEMPLATE_PATH):
         format_date_cz(data.get("signed_on")),
     )
 
-    # --- DPH: resi ji jen cl. 2.4, odst. 3.7 o tomtez ve smlouve nebude.
-    # Odstavec je v clanku 3 posledni, cislovani ani odkazy se nemeni; kdyz
-    # zmizi i ze sablony, nic se nestane. Pronajimatel, ktery neni platcem,
-    # DPH uctovat nemuze (viz CardUnit.najem_lze_zdanit), cl. 2.4 se proto
-    # prepisuje, ne maze. Daniel 2026-11-02. ---
-    paragraphs = doc.paragraphs
-    for para in paragraphs:
-        if "Ke všem částkám cen za služby" in para.text:
-            para._p.getparent().remove(para._p)
-            break
+    # --- DPH: pronajimatel, ktery neni platcem, ji nemuze uctovat (viz
+    # CardUnit.najem_lze_zdanit). Meni se jen cl. 2.4, odst. 3.7 zustava
+    # podle sablony. Odstavec se prepisuje, ne maze, aby se nerozjelo
+    # cislovani a odkazy na nej. Daniel 2026-11-02. ---
     if not landlord.vat_payer:
         paragraphs = doc.paragraphs
         _set_paragraph_text_keep_format(
