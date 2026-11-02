@@ -373,7 +373,8 @@ def _fill_landlord(paragraphs, landlord):
     ani zastupce), se smazou. Osoba bez IČO se identifikuje datem narozeni;
     kdyz v Klientovi chybi, zustane zlute k doplneni. Daniel 2026-11-02."""
     adresa = _format_address(landlord)
-    if landlord.entity_type == "nepodnikatel":
+    osoba = landlord.entity_type in ("fyzicka", "nepodnikatel")
+    if osoba and not landlord.ico:
         sidlo = f"bytem {adresa}"
     elif landlord.entity_type == "fyzicka":
         sidlo = f"s místem podnikání {adresa}"
@@ -400,7 +401,7 @@ def _fill_landlord(paragraphs, landlord):
         12: rejstrik,
         13: f"Společnost zastupuje: {zastupce}" if zastupce else "",
     }
-    if landlord.entity_type in ("fyzicka", "nepodnikatel") and not landlord.ico:
+    if osoba and not landlord.ico:
         narozeni = format_date_cz(landlord.birth_date)
         _set_paragraph_text_keep_format(
             paragraphs[8], f"datum narození: {narozeni or '[DOPLNIT]'}", highlight=not narozeni,
