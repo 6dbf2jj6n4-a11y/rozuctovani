@@ -370,8 +370,8 @@ def _fill_landlord(paragraphs, landlord):
     """Blok Pronajimatele v zahlavi (odstavce 6-13) z udaju jeho Klienta.
 
     Odstavce, pro ktere pronajimatel nema udaj (fyzicka osoba nema rejstrik
-    ani zastupce), se smazou. Datum narozeni u fyzicke osoby v Klientovi
-    neni, proto se nechava zlute k doplneni. Daniel 2026-11-02."""
+    ani zastupce), se smazou. Osoba bez IČO se identifikuje datem narozeni;
+    kdyz v Klientovi chybi, zustane zlute k doplneni. Daniel 2026-11-02."""
     adresa = _format_address(landlord)
     if landlord.entity_type == "nepodnikatel":
         sidlo = f"bytem {adresa}"
@@ -400,8 +400,11 @@ def _fill_landlord(paragraphs, landlord):
         12: rejstrik,
         13: f"Společnost zastupuje: {zastupce}" if zastupce else "",
     }
-    if landlord.entity_type == "nepodnikatel" and not landlord.ico:
-        _set_paragraph_text_keep_format(paragraphs[8], "datum narození: [DOPLNIT]")
+    if landlord.entity_type in ("fyzicka", "nepodnikatel") and not landlord.ico:
+        narozeni = format_date_cz(landlord.birth_date)
+        _set_paragraph_text_keep_format(
+            paragraphs[8], f"datum narození: {narozeni or '[DOPLNIT]'}", highlight=not narozeni,
+        )
         del radky[8]
     for index, text in radky.items():
         if text:

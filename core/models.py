@@ -398,6 +398,7 @@ class Client(models.Model):
     entity_type = models.CharField(
         "Typ osoby", max_length=20, blank=True, choices=EntityType.choices,
     )
+    birth_date = models.DateField("Datum narození", null=True, blank=True)
 
     class RegistrySource(models.TextChoices):
         COMMERCIAL = "obchodni", "Obchodní rejstřík"
@@ -511,6 +512,11 @@ class Client(models.Model):
             self.registry_insert = ""
             self.representative_name = ""
             self.representative_role = ""
+
+        # Datum narozeni ma jen osoba, ne firma - po prepnuti typu osoby
+        # nesmi zustat v DB.
+        if self.entity_type not in (self.EntityType.NATURAL, self.EntityType.NON_BUSINESS):
+            self.birth_date = None
 
         # Karty se pri deaktivaci klienta NEMENI - o jejich platnosti
         # rozhoduji jen data Platnost od/do. Na neukoncenou Kartu

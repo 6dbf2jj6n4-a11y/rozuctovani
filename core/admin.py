@@ -1548,7 +1548,7 @@ class ClientAdmin(PodlePronajimatele, ModelAdmin):
         ("Identifikace", {
             "fields": (
                 ("ico", "dic", "ares_button"), "vat_payer",
-                ("entity_type", "registry_source"),
+                ("entity_type", "registry_source", "birth_date"),
                 ("registry_court", "registry_section", "registry_insert"),
                 ("representative_name", "representative_role"),
                 "insolvency_status",
@@ -1579,6 +1579,7 @@ class ClientAdmin(PodlePronajimatele, ModelAdmin):
         "dic": _PODNIKATEL,
         "vat_payer": _PODNIKATEL,
         "registry_source": _PODNIKATEL,
+        "birth_date": "entity_type == 'fyzicka' || entity_type == 'nepodnikatel'",
         "representative_name": "entity_type != 'fyzicka' && entity_type != 'nepodnikatel'",
         "representative_role": "entity_type != 'fyzicka' && entity_type != 'nepodnikatel'",
         "registry_court": _BEZ_REJSTRIKU,
