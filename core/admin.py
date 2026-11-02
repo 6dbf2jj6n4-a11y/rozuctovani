@@ -163,12 +163,18 @@ class PodlePronajimatele:
         """Co se ma videt navic bez ohledu na areal (viz ClientAdmin)."""
         return None
 
+    def omezit_na_pronajimatele(self, request):
+        """Vyjimku z omezeni ma jen Klient - viz ClientAdmin."""
+        return True
+
     def get_queryset(self, request):
         from django.db.models import Q
 
         from core import pronajimatele
 
         qs = super().get_queryset(request)
+        if not self.omezit_na_pronajimatele(request):
+            return qs
         podminka = Q(**{"%s__in" % self.cesta_k_arealu: pronajimatele.id_arealu(request)})
         if self.zahrnout_neprirazene:
             podminka |= Q(**{"%s__isnull" % self.cesta_k_arealu: True})
@@ -1343,6 +1349,35 @@ class ActiveClientFilter(admin.SimpleListFilter):
         return queryset.filter(is_active=True)
 
 
+class KlientiPronajimateleFilter(admin.SimpleListFilter):
+    """Prepne seznam Klientu i na klienty druheho pronajimatele.
+
+    Filtr sam nic neomezuje, seznam by ale jinak neslo rozsirit:
+    hodnotu cte ClientAdmin.omezit_na_pronajimatele. Vychozi zustava
+    zvoleny pronajimatel, stejne jako u ActiveClientFilter."""
+    title = "Zobrazit klienty"
+    parameter_name = "pronajimatel"
+
+    def lookups(self, request, model_admin):
+        return (
+            ("vlastni", pronajimatele.aktualni(request) or "Zvoleného pronajímatele"),
+            ("vsichni", "Všech pronajímatelů"),
+        )
+
+    def choices(self, changelist):
+        value = self.value()
+        for lookup, title in self.lookup_choices:
+            selected = value == lookup or (value is None and lookup == "vlastni")
+            yield {
+                "selected": selected,
+                "query_string": changelist.get_query_string({self.parameter_name: lookup}),
+                "display": title,
+            }
+
+    def queryset(self, request, queryset):
+        return queryset
+
+
 # Predvolby pro combo u telefonu klienta. Zamerne kratky seznam - v praxi
 # jsou to ceska a slovenska cisla; posledni volba nechava pole jako holy
 # text pro cokoliv jineho (zahranici, klapka, dve cisla v jednom poli),
@@ -1460,6 +1495,24 @@ class ClientAdmin(PodlePronajimatele, ModelAdmin):
 
         zvoleny = pronajimatele.aktualni(request)
         return Q(pk=zvoleny.pk) if zvoleny else None
+
+    def omezit_na_pronajimatele(self, request):
+        """Klient patri pod pronajimatele jen pres Karty, takze najemce
+        CALAMARI SE bez Karty v DV nebyl v kontextu DV k nalezeni a Kartu
+        v DV mu nebylo kde zalozit - plochy DV nabizi jen kontext DV.
+
+        Sam od sebe se druhy pronajimatel nenabizi dal. Najde se ale
+        filtrem v seznamu a napsanim jmena v poli Klient na Karte
+        a Smlouve. Pole Pronajimatel u Arealu zustava omezene (viz
+        dodatecne_q). Daniel 2026-11-02."""
+        stranka = getattr(request.resolver_match, "url_name", "")
+        if stranka == "autocomplete_popisky":
+            return not (request.GET.get("field_name") == "client" and request.GET.get("term"))
+        if stranka == "core_client_changelist":
+            return request.GET.get(KlientiPronajimateleFilter.parameter_name) != "vsichni"
+        # Detail se musi otevrit i ze seznamu vsech klientu.
+        return stranka not in ("core_client_change", "core_client_history", "core_client_delete")
+
     list_display = (
         "name_display", "code", "ico", "vat_payer", "contact_email", "contact_phone", "is_active",
     )
@@ -1478,7 +1531,7 @@ class ClientAdmin(PodlePronajimatele, ModelAdmin):
             return TelefonField(required=False, label=db_field.verbose_name.capitalize(),
                                 help_text=db_field.help_text)
         return super().formfield_for_dbfield(db_field, request, **kwargs)
-    list_filter = (ActiveClientFilter, "entity_type", "is_landlord", SiteFilter, "insolvency_status", "vat_payer")
+    list_filter = (ActiveClientFilter, KlientiPronajimateleFilter, "entity_type", "is_landlord", SiteFilter, "insolvency_status", "vat_payer")
     fieldsets = (
         ("Základní údaje", {
             "fields": (("name", "code"), ("is_active", "is_landlord"))
@@ -2997,8 +3050,7 @@ class ClientCardAdmin(PodlePronajimatele, ModelAdmin):
             "title": "Kopírovat kartu na nového klienta",
             "original": original,
             "navrh_od": self._navrh_od(original),
-            "clients": pronajimatele.klienti(
-                request, Client.objects.filter(is_active=True)).order_by("name"),
+            "clients": Client.objects.filter(is_active=True).order_by("name"),
             "opts": self.model._meta,
         }
         return render(request, "admin/core/clientcard/kopie_form.html", context)
@@ -6500,7 +6552,7 @@ class FloorplanAdmin(PodlePronajimatele, ModelAdmin):
             "plan": plan,
             "kody": kody,
             "units": units,
-            **self._klienti_pro_prevod(request, plan.site),
+            **self._klienti_pro_prevod(plan.site),
             "klient": klient,
             "datum": datum,
             "sazba": sazba,
@@ -6516,17 +6568,16 @@ class FloorplanAdmin(PodlePronajimatele, ModelAdmin):
         })
 
     @staticmethod
-    def _klienti_pro_prevod(request, site):
+    def _klienti_pro_prevod(site):
         """Nabidka najemcu pro prevod - nejdriv klienti TOHOTO arealu.
 
         Pronajimatel (CALAMARI SE) ma vic arealu, takze vyber jen podle
         pronajimatele nabizel v planku NJ i najemce z FM. Daniel 2026-10-28.
         Klienti arealu = maji tu nekdy nejakou Kartu, jeste nemaji zadnou
         (cerstve zalozeni), nebo jsou pronajimatelem arealu. Ostatni klienti
-        pronajimatele zustavaji ve zvlastni skupine na konci - kdyby si
-        najemce z FM bral plochu i v NJ."""
-        vsichni = list(pronajimatele.klienti(
-            request, Client.objects.filter(is_active=True)).order_by("name"))
+        zustavaji ve zvlastni skupine na konci - kdyby si najemce z FM bral
+        plochu i v NJ, nebo najemce CALAMARI SE v DV (Daniel 2026-11-02)."""
+        vsichni = list(Client.objects.filter(is_active=True).order_by("name"))
         z_arealu = set(
             Client.objects.filter(
                 Q(cards__card_units__unit__site=site) | Q(cards__isnull=True)
