@@ -17,11 +17,11 @@ dokumentu TEXTOVE UNIKATNI (marker/old se hleda jako prvni substring shoda
 - viz _find_paragraph_index/_replace_run_text), jinak se dosadi na spatne
 misto.
 
-Blok Pronajimatele v zahlavi dokumentu (odstavce 6-13) je zamerne staticky
-a NEzvyraznuje se - Pronajimatel (CALAMARI SE) je v teto aplikaci jeden
-jediny a v sablone uz ma spravne udaje; dynamicky (a zvyrazneny) se
-doplnuje jen nazev v zahlavi kazde stranky a jmeno zastupce v podpisovem
-radku (viz nize) - tam, kde je uprava bezriziko (samostatny run).
+Blok Pronajimatele v zahlavi dokumentu (odstavce 6-13) se sklada z udaju
+Klienta, ktery areal pronajima (Site.landlord) - FM a NJ CALAMARI SE, DV
+Daniel jako fyzicka osoba (viz _fill_landlord). Pronajimatel se nezvyraznuje,
+je to nase vlastni osoba; zlute je jen to, co je potreba doplnit nebo
+zkontrolovat. Text v sablone je vzor pro pravnickou osobu.
 
 Clanek 1 (Vymezeni predmetu a ucelu najmu) je pro kazdy areal jiny (vypis
 jinych pozemku/budov) - jeho text se necte ze sablony, ale z
@@ -137,6 +137,7 @@ def contract_to_template_data(contract):
     landlord = get_landlord(contract.site)
 
     return {
+        "landlord": landlord,
         "site_name": str(contract.site) if contract.site else "",
         "lease_subject_text": (contract.site.lease_subject_text if contract.site else "") or "",
         "landlord_name": landlord.name,
@@ -365,9 +366,54 @@ def _fill_article1(doc, lease_subject_text):
     return n_needed - n_existing
 
 
+def _fill_landlord(paragraphs, landlord):
+    """Blok Pronajimatele v zahlavi (odstavce 6-13) z udaju jeho Klienta.
+
+    Odstavce, pro ktere pronajimatel nema udaj (fyzicka osoba nema rejstrik
+    ani zastupce), se smazou. Datum narozeni u fyzicke osoby v Klientovi
+    neni, proto se nechava zlute k doplneni. Daniel 2026-11-02."""
+    adresa = _format_address(landlord)
+    if landlord.entity_type == "nepodnikatel":
+        sidlo = f"bytem {adresa}"
+    elif landlord.entity_type == "fyzicka":
+        sidlo = f"s místem podnikání {adresa}"
+    else:
+        sidlo = f"se sídlem na adrese {adresa}"
+
+    ucet = "/".join(p for p in (landlord.bank_account, landlord.bank_code) if p)
+    rejstrik = ""
+    if landlord.registry_court:
+        rejstrik = (
+            f"Společnost zapsána v obchodním rejstříku vedeném "
+            f"{_court_instrumental(landlord.registry_court)}, "
+            f"oddíl {landlord.registry_section}, vložka {landlord.registry_insert}"
+        )
+    zastupce = ", ".join(p for p in (landlord.representative_name, landlord.representative_role) if p)
+
+    radky = {
+        6: landlord.name,
+        7: sidlo,
+        8: f"IČ: {landlord.ico}" if landlord.ico else "",
+        9: f"DIČ: {landlord.dic}" if landlord.dic else "",
+        10: f"Bankovní spojení: {landlord.bank_name}" if landlord.bank_name else "",
+        11: f"číslo účtu: {ucet}" if ucet else "",
+        12: rejstrik,
+        13: f"Společnost zastupuje: {zastupce}" if zastupce else "",
+    }
+    if landlord.entity_type == "nepodnikatel" and not landlord.ico:
+        _set_paragraph_text_keep_format(paragraphs[8], "datum narození: [DOPLNIT]")
+        del radky[8]
+    for index, text in radky.items():
+        if text:
+            _set_paragraph_text_keep_format(paragraphs[index], text, highlight=False)
+        else:
+            paragraphs[index]._p.getparent().remove(paragraphs[index]._p)
+
+
 def fill_contract_template(data, output_path, template_path=TEMPLATE_PATH):
     """
     `data` je dict s klici:
+      landlord (Klient, ktery areal pronajima),
       site_name, lease_subject_text (viz core.models.Site.lease_subject_text),
       landlord_name, landlord_representative_name,
       client_name, client_address (jednoradkovy retezec),
@@ -404,7 +450,8 @@ def fill_contract_template(data, output_path, template_path=TEMPLATE_PATH):
 
     # --- blok Najemce v zahlavi (odstavce 19-25, PRED clankem 1 - indexy
     # tedy zustavaji stabilni bez ohledu na delku vyctu nemovitosti v cl. 1).
-    # Blok Pronajimatele (6-13) je zamerne staticky, viz modulovy docstring. ---
+    # Blok Pronajimatele (6-13) az za nim - muze odstavce ubrat a tim by
+    # posunul indexy. ---
     paragraphs = doc.paragraphs
     paragraphs[19].runs[0].text = client_name
     _highlight(paragraphs[19].runs[0])
@@ -437,6 +484,9 @@ def fill_contract_template(data, output_path, template_path=TEMPLATE_PATH):
 
     email = data.get("invoicing_email") or ""
     _set_hyperlink(paragraphs[25], f"mailto:{email}" if email else None, email)
+
+    landlord = data["landlord"]
+    _fill_landlord(paragraphs, landlord)
 
     # --- clanek 1: vlastni text podle arealu (meni pocet odstavcu dokumentu) ---
     _fill_article1(doc, data.get("lease_subject_text"))
@@ -516,18 +566,34 @@ def fill_contract_template(data, output_path, template_path=TEMPLATE_PATH):
         format_date_cz(data.get("signed_on")),
     )
 
+    # --- DPH: pronajimatel, ktery neni platcem, ji nemuze uctovat (viz
+    # CardUnit.najem_lze_zdanit). Odstavce se prepisuji, ne mazou, aby se
+    # nerozjelo cislovani a odkazy na ne. ---
+    if not landlord.vat_payer:
+        paragraphs = doc.paragraphs
+        _set_paragraph_text_keep_format(
+            paragraphs[_find_paragraph_index(paragraphs, "Ke všem částkám nájemného bude připočtena DPH")],
+            "Pronajímatel není plátcem DPH, k\xa0nájemnému se DPH nepřipočítává.",
+        )
+        _set_paragraph_text_keep_format(
+            paragraphs[_find_paragraph_index(paragraphs, "Ke všem částkám cen za služby")],
+            "Pronajímatel není plátcem DPH, k\xa0cenám za služby se DPH nepřipočítává.",
+        )
+
     # --- podpisovy radek: jmena zastupcu pod carou a pod nimi nazvy
     # smluvnich stran (nadpis "Pronajímatel/Nájemce" a cara nad nimi jsou
     # staticky text sablony, viz modulovy docstring) ---
     paragraphs = doc.paragraphs
     names_idx = _find_paragraph_index(paragraphs, "\tIng. Daniel DAVID")
     names_runs = paragraphs[names_idx].runs
-    names_runs[0].text = "\t" + (data.get("landlord_representative_name") or "")
+    # Fyzicka osoba bez zastupce podepisuje sama, nazev firmy pod ni nepatri.
+    zastupce = data.get("landlord_representative_name") or ""
+    names_runs[0].text = "\t" + (zastupce or landlord_name)
     names_runs[-1].text = data.get("representative_name") or ""
     _highlight(names_runs[-1])
 
     company_runs = paragraphs[names_idx + 1].runs
-    company_runs[0].text = company_runs[0].text.replace("CALAMARI SE", landlord_name)
+    company_runs[0].text = company_runs[0].text.replace("CALAMARI SE", landlord_name if zastupce else "")
     _split_and_highlight(company_runs[-1], "název nájemce", client_name)
 
     # python-docx prijima jak cestu (str/Path), tak zapisovatelny stream (napr. BytesIO)
