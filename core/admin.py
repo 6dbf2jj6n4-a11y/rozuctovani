@@ -224,7 +224,12 @@ class PodlePronajimatele:
         omezenim), nesahame na nej."""
         if "queryset" not in kwargs:
             spravce = admin.site._registry.get(db_field.related_model)
-            if isinstance(spravce, PodlePronajimatele):
+            if db_field.name == "client":
+                # Karta a Smlouva: pole Klient musi prijmout i klienta bez
+                # Karty u tohoto pronajimatele - viz
+                # ClientAdmin.omezit_na_pronajimatele. Daniel 2026-11-02.
+                kwargs["queryset"] = db_field.related_model.objects.all()
+            elif isinstance(spravce, PodlePronajimatele):
                 kwargs["queryset"] = spravce.get_queryset(request)
         return super().formfield_for_foreignkey(db_field, request, **kwargs)
 
