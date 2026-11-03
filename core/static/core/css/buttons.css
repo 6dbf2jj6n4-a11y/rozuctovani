@@ -16,6 +16,7 @@ Pouziti:
   .rx-btn.rx-btn-primary  hlavni akce (plna barva)
   .rx-btn.rx-btn-danger   destruktivni (mazani, uzavreni)
   .rx-btn.rx-btn-success  potvrzujici (znovu otevreni)
+  .rx-btn.rx-btn-excel    export do Excelu (vsude stejny)
   .rx-btn.rx-btn-sm       mensi varianta do radku tabulky
 */
 
@@ -70,6 +71,25 @@ Pouziti:
 .rx-btn.rx-btn-success:hover { background: var(--color-green-700); color: #fff; }
 .dark .rx-btn.rx-btn-success { background: var(--color-green-600); color: #fff; }
 .dark .rx-btn.rx-btn-success:hover { background: var(--color-green-500); color: #fff; }
+
+/*
+Export do Excelu - vsude stejne tlacitko: zelena Excelu, ikona download,
+text "Export *.xlsx". Barva je natvrdo (ne z motivu), aby export slo
+poznat na prvni pohled a nepletl se s hlavni akci stranky.
+Viz Daniel 2026-11-03.
+*/
+.rx-btn.rx-btn-excel,
+.dark .rx-btn.rx-btn-excel {
+    background: #217346;
+    border-color: transparent;
+    color: #fff;
+    font-weight: 600;
+}
+.rx-btn.rx-btn-excel:hover,
+.dark .rx-btn.rx-btn-excel:hover {
+    background: #185c37;
+    color: #fff;
+}
 
 /*
 Tlumena destruktivni varianta - vypada jako zakladni tlacitko (stejne

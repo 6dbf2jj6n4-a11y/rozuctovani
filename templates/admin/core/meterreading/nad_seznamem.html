@@ -9,9 +9,9 @@ Pozor: víceřádkový komentář MUSÍ být {% comment %}, ne {# #} - to platí
 jen na jeden řádek a jinak se vypíše na stránku.
 {% endcomment %}
 <div style="display:flex; flex-wrap:wrap; align-items:center; gap:12px; margin-bottom:16px;">
-    <a href="{% url 'admin:core_meterreading_export' %}{% if request.GET %}?{{ request.GET.urlencode }}{% endif %}" class="rx-btn">
+    <a href="{% url 'admin:core_meterreading_export' %}{% if request.GET %}?{{ request.GET.urlencode }}{% endif %}" class="rx-btn rx-btn-excel">
         <span class="material-symbols-outlined md-18">download</span>
-        Exportovat do Excelu
+        Export *.xlsx
     </a>
     <span style="color:#999; font-size:13px;">
         Exportuje odečty, které vidíš v seznamu – se stejnými filtry, hledáním i řazením (všechny stránky).
