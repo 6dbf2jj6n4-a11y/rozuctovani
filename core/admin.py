@@ -3960,14 +3960,20 @@ class MeterAdmin(PodlePronajimatele, DuplicateModelAdminMixin, ModelAdmin):
 
         skupiny = []
         if period is not None:
+            # Nazvy Trid jednou pro celou sestavu - get_meter_type_display
+            # by se do DB ptal u kazdeho chybejiciho meridla zvlast.
+            tridy = InvoiceClassColor.label_map()
             for site in pronajimatele.arealy(request).order_by("name"):
-                meridla = list(Meter.objects.filter(site=site, is_virtual=False).order_by("code"))
+                meridla = list(Meter.objects.filter(site=site, is_virtual=False)
+                              .select_related("parent_meter").order_by("code"))
                 odecty = {
                     r.meter_id: r
                     for r in MeterReading.objects.select_related("meter").filter(
                         period=period, meter__site=site)
                 }
                 chybejici = [m for m in meridla if m.id not in odecty]
+                for m in chybejici:
+                    m.trida = tridy.get(m.meter_type, m.meter_type)
                 bez_foto = [odecty[m.id] for m in meridla if m.id in odecty and not odecty[m.id].photo]
 
                 podezrele = []

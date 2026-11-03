@@ -55,6 +55,41 @@
             {% if s.bez_foto %}<span style="color:#999;">Bez fotky {{ s.bez_foto|length }}.</span>{% endif %}
         </p>
 
+        {% comment %}
+        Chybejici odecty jako tabulka hned pod souhrnem - drive to byl
+        radek kodu oddeleny carkou az pod podezrelymi a vedle dlouheho
+        seznamu "Bez fotky", takze ho Daniel z dlazdice na nastence
+        nenasel. Daniel 2026-11-03.
+        {% endcomment %}
+        {% if s.chybejici %}
+            <table style="width:100%; border-collapse:collapse; font-size:13px; margin-bottom:14px;">
+                <thead>
+                    <tr style="border-bottom:2px solid #d97706; text-align:left;">
+                        <th style="padding:6px 8px; color:#d97706;">Chybí odečet</th>
+                        <th style="padding:6px 8px;">Název</th>
+                        <th style="padding:6px 8px;">Třída</th>
+                        <th style="padding:6px 8px;">Nadřazené měřidlo</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for m in s.chybejici %}
+                        <tr style="border-bottom:1px solid #333;">
+                            <td style="padding:6px 8px;"><a href="{% url 'admin:core_meter_change' m.pk %}">{{ m.code }}</a></td>
+                            <td style="padding:6px 8px;">{{ m.name }}</td>
+                            <td style="padding:6px 8px;">{{ m.trida }}</td>
+                            <td style="padding:6px 8px;">{{ m.parent_meter.code|default:"—" }}</td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            <p style="font-size:13px; margin-bottom:14px;">
+                <a href="{% url 'odecty' %}?site={{ s.site.pk|unlocalize }}&period={{ selected_period.pk|unlocalize }}" class="rx-btn rx-btn-sm">
+                    <span class="material-symbols-outlined md-18">edit_note</span>
+                    Zadat odečty {{ s.site.name }}
+                </a>
+            </p>
+        {% endif %}
+
         {% if s.podezrele %}
             <table style="width:100%; border-collapse:collapse; font-size:13px; margin-bottom:10px;">
                 <thead>
@@ -81,18 +116,11 @@
             </table>
         {% endif %}
 
-        {% if s.chybejici %}
-            <p style="font-size:13px;">
-                <strong>Chybí odečet:</strong>
-                {% for m in s.chybejici %}{{ m.code }}{% if not forloop.last %}, {% endif %}{% endfor %}
-            </p>
-        {% endif %}
-
         {% if s.bez_foto %}
-            <p style="font-size:13px; color:#999;">
-                <strong>Bez fotky:</strong>
+            <details style="font-size:13px; color:#999;">
+                <summary style="cursor:pointer;"><strong>Bez fotky ({{ s.bez_foto|length }})</strong></summary>
                 {% for r in s.bez_foto %}{{ r.meter.code }}{% if not forloop.last %}, {% endif %}{% endfor %}
-            </p>
+            </details>
         {% endif %}
     {% endfor %}
 </div>
