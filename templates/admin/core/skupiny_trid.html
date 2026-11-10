@@ -1,11 +1,14 @@
 {% comment %}
-Naklady za obdobi seskupene podle Trid - stejne jako sekce Klicu na Karte:
+Seznam seskupeny podle Trid (Naklady za obdobi, Odecty meridel) - stejne
+jako sekce Klicu na Karte:
 zahlavi Tridy s pruhem vlevo a radky podbarvene barvou Tridy (Nastaveni ->
 Tridy, zvlast pro svetly a tmavy motiv). Daniel 2026-11-10.
 
-Poradi radku zajistuje CostEntryAdmin.get_ordering (poradi Trid), tady se
-jen vkladaji zahlavi tam, kde se Trida meni. Trida radku se pozna podle
-CSS tridy rx-class-<kod> ve sloupci Trida (colored_by_class). Kdyz si
+Poradi radku zajistuje get_ordering daneho ModelAdminu (poradi Trid), tady
+se jen vkladaji zahlavi tam, kde se Trida meni. Trida radku se pozna podle
+CSS tridy rx-class-<kod> v obarvenem sloupci (colored_by_class /
+colored_by_meter_type), nazev do zahlavi se bere z Nastaveni -> Tridy -
+u Odectu je obarveny kod meridla, ne nazev Tridy. Kdyz si
 uzivatel seznam seradi klikem na sloupec (parametr "o"), zahlavi se
 nevkladaji - skupiny by rozdelily radky nesmyslne.
 
@@ -32,11 +35,15 @@ Motiv visi na tride "dark" na <html> (Unfold), ne na prefers-color-scheme
 document.addEventListener("DOMContentLoaded", function () {
     if (new URLSearchParams(window.location.search).has("o")) { return; }
 
+    var NAZVY = {
+        {% for c in invoice_class_colors %}"{{ c.invoice_class|escapejs }}": "{{ c.label|default:c.invoice_class|escapejs }}",{% endfor %}
+    };
+
     function trida(radek) {
         var span = radek.querySelector("[class*='rx-class-']");
         if (!span) { return null; }
         var m = span.className.match(/rx-class-([\w-]+)/);
-        return m ? { kod: m[1], nazev: span.textContent.trim() } : null;
+        return m ? { kod: m[1], nazev: NAZVY[m[1]] || span.textContent.trim() } : null;
     }
 
     function zahlavi(t, sloupcu) {

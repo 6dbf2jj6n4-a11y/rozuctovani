@@ -5040,6 +5040,24 @@ class MeterReadingAdmin(PodlePronajimatele, DefaultToCurrentPeriodMixin, ModelAd
         super().save_model(request, obj, form, change)
     ordering = ("meter__code", "-period")
 
+    def get_ordering(self, request):
+        """Po Tridach v poradi z Nastaveni -> Tridy, uvnitr podle arealu,
+        kodu meridla a obdobi - seznam je seskupeny podle Trid stejne jako
+        Naklady za obdobi (admin/core/skupiny_trid.html). Daniel 2026-11-10."""
+        from django.db.models import Case, IntegerField, When
+
+        poradi = Case(
+            *[When(meter__meter_type=code, then=i)
+              for i, (code, _) in enumerate(InvoiceClassColor.choices())],
+            output_field=IntegerField(),
+        )
+        return [poradi.asc(), "meter__site__name", "meter__code", "-period__year", "-period__month"]
+
+    def changelist_view(self, request, extra_context=None):
+        extra_context = extra_context or {}
+        extra_context["invoice_class_colors"] = InvoiceClassColor.objects.all()
+        return super().changelist_view(request, extra_context)
+
     @display(description="Měřidlo", ordering="meter__code")
     def meter_colored(self, obj):
         return colored_by_meter_type(str(obj.meter), obj.meter.meter_type)
@@ -5060,6 +5078,11 @@ class OdectyMeridlaAdmin(MeterReadingAdmin):
     # "-period" obraci vychozi razeni Obdobi (-year, -month), takze by
     # nahore byl nejstarsi mesic.
     ordering = ("-period__year", "-period__month")
+
+    def get_ordering(self, request):
+        # Zdedene razeni po Tridach (MeterReadingAdmin) tu nedava smysl -
+        # vsechny odecty jsou z jednoho meridla.
+        return self.ordering
 
     def get_queryset(self, request):
         return (
@@ -5738,7 +5761,7 @@ class CostEntryAdmin(PodlePronajimatele, DefaultToCurrentPeriodMixin, ModelAdmin
         _PeriodDefaultMarkerFilter,
     )
     search_fields = ("note", "service_item__name")
-    list_before_template = "admin/core/costentry/skupiny_trid.html"
+    list_before_template = "admin/core/skupiny_trid.html"
     list_after_template = "admin/core/costentry/default_amount_items.html"
 
     def get_ordering(self, request):
