@@ -4784,7 +4784,7 @@ class InflationRateAdmin(ModelAdmin):
 @admin.register(SupplyPoint)
 class SupplyPointAdmin(PodlePronajimatele, ModelAdmin):
     cesta_k_arealu = "site"
-    list_display = ("name_colored", "code", "site", "meter_type", "main_meter", "legal_loss_pct", "member_count")
+    list_display = ("name_colored", "code", "site", "meter_type", "supplier", "main_meter", "legal_loss_pct", "member_count")
     list_select_related = ("site", "main_meter")
     list_filter = ("site", "meter_type")
     search_fields = ("name", "code")
@@ -4805,7 +4805,7 @@ class SupplyPointAdmin(PodlePronajimatele, ModelAdmin):
                 ("site", "meter_type"),
                 ("name", "code"),
                 "main_meter",
-                "cost_item",
+                ("cost_item", "supplier"),
                 "legal_loss_pct",
                 "note",
             ),

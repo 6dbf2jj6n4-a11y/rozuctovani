@@ -1665,6 +1665,14 @@ class SupplyPoint(models.Model):
             "ne m³."
         ),
     )
+    supplier = models.CharField(
+        "Dodavatel", max_length=100, blank=True,
+        help_text=(
+            "Kdo za tenhle odběr fakturuje (např. TEDOM, VEOLIA, SMVAK). "
+            "Nově založený Náklad položky z pole „Náklad (faktura) tohoto "
+            "odběru“ ho převezme do „Dodavatel / zdroj“ sám."
+        ),
+    )
     note = models.CharField("Poznámka", max_length=300, blank=True)
 
     class Meta:
@@ -2705,6 +2713,17 @@ class CostEntry(models.Model):
         self.clean()
         if self.note == self.NOTE_K_DOPLNENI and (self.amount_units is not None or self.amount_czk is not None):
             self.note = ""
+        # Dodavatele prevezme jen NOVY Naklad, a jen kdyz je jednoznacny
+        # (jedno Odberne misto s vyplnenym dodavatelem na tuhle polozku).
+        # Pozdeji smazany nebo prepsany dodavatel se znovu nedoplnuje.
+        # Daniel 2026-11-10.
+        if not self.pk and not self.supplier and self.service_item_id:
+            dodavatele = set(
+                SupplyPoint.objects.filter(cost_item_id=self.service_item_id)
+                .exclude(supplier="").values_list("supplier", flat=True)
+            )
+            if len(dodavatele) == 1:
+                self.supplier = dodavatele.pop()
         super().save(*args, **kwargs)
 
     def get_amount_czk(self, period=None, price_cache=None):
