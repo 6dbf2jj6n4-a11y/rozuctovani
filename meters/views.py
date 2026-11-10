@@ -98,6 +98,24 @@ def _cislo(hodnota):
     return ("%s" % hodnota).rstrip("0")
 
 
+def _mimo_aktualni(user, period):
+    """Spravce zapisuje odecty jen do AKTUALNIHO Obdobi (Period.current,
+    to nastavuje admin). Starsi i budouci Obdobi si muze prohlednout, ale
+    ne menit - drive to hlidalo jen uzavreni budoucich Obdobi, ktera pak
+    ale nesla zpracovat. Admin omezeni nema. Daniel 2026-11-10."""
+    if user.is_admin_role:
+        return False
+    aktualni = Period.current()
+    return aktualni is not None and period.pk != aktualni.pk
+
+
+def _chyba_mimo_aktualni():
+    return JsonResponse(
+        {"ok": False, "error": f"Odečty se zadávají jen do aktuálního období ({Period.current()})."},
+        status=400,
+    )
+
+
 def _require_spravce(user):
     if not user.is_spravce_role:
         raise PermissionDenied("Zadávání odečtů je jen pro správce.")
@@ -247,7 +265,13 @@ def readings_entry(request):
         "period": period,
         "meters_data": meters_data,
         "class_colors": class_colors,
-        "period_closed": bool(period and period.status == Period.Status.CLOSED),
+        # period_closed vypina zapis na cele obrazovce - i pro spravce
+        # mimo aktualni Obdobi (viz _mimo_aktualni).
+        "period_closed": bool(period and (period.status == Period.Status.CLOSED
+                                          or _mimo_aktualni(request.user, period))),
+        "mimo_aktualni": bool(period and period.status != Period.Status.CLOSED
+                              and _mimo_aktualni(request.user, period)),
+        "aktualni_obdobi": Period.current(),
         # Uzavreni odectu je NECO JINEHO nez uzavreni Obdobi: tohle si
         # rekne sam spravce ("mam hotovo") a plati jen na tuhle obrazovku,
         # admin muze opravovat dal. Viz core.models.ReadingsClosure.
@@ -284,6 +308,8 @@ def readings_save(request):
         return JsonResponse(
             {"ok": False, "error": "Období je uzavřené, odečet nejde upravit."}, status=400
         )
+    if _mimo_aktualni(user, period):
+        return _chyba_mimo_aktualni()
 
     try:
         value = Decimal(str(payload.get("value")))
@@ -372,6 +398,8 @@ def readings_close(request):
     period = get_object_or_404(Period, pk=request.POST.get("period_id"))
     if not user.get_accessible_sites().filter(pk=site.pk).exists():
         raise PermissionDenied("K tomuto areálu nemáš přístup.")
+    if _mimo_aktualni(user, period):
+        return _chyba_mimo_aktualni()
 
     chybejici = _meridla_bez_odectu(site, period)
     if chybejici and not request.POST.get("potvrzeno"):
@@ -422,6 +450,8 @@ def readings_photo(request):
         return JsonResponse(
             {"ok": False, "error": "Období je uzavřené, foto nejde přidat."}, status=400
         )
+    if _mimo_aktualni(user, period):
+        return _chyba_mimo_aktualni()
 
     reading = MeterReading.objects.filter(meter=meter, period=period).first()
     if reading is None:
@@ -458,6 +488,8 @@ def readings_photo_delete(request):
         return JsonResponse(
             {"ok": False, "error": "Období je uzavřené, foto nejde smazat."}, status=400
         )
+    if _mimo_aktualni(user, period):
+        return _chyba_mimo_aktualni()
 
     reading = MeterReading.objects.filter(meter=meter, period=period).first()
     if reading is None or not reading.photo:

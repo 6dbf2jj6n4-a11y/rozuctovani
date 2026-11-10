@@ -357,7 +357,9 @@
         </select>
     </form>
 
-    {% if period_closed %}
+    {% if mimo_aktualni %}
+        <div class="closed-warning">Odečty se zadávají jen do aktuálního období ({{ aktualni_obdobi }}) – tohle se dá jen prohlížet.</div>
+    {% elif period_closed %}
         <div class="closed-warning">Toto období je uzavřené - odečty se dají jen prohlížet, ne upravovat.</div>
     {% elif readings_closure %}
         <div class="closed-warning">
