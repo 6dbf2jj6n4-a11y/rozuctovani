@@ -15,6 +15,7 @@ except admin.sites.NotRegistered:
     pass
 from django import forms
 from unfold.decorators import display
+from unfold.datasets import BaseDataset
 from unfold.widgets import UnfoldBooleanSwitchWidget
 from . import pronajimatele, rizika
 from .admin_mixins import ModelAdmin, TabularInline
@@ -3177,10 +3178,19 @@ class ClientCardAdmin(PodlePronajimatele, ModelAdmin):
 
 
 class MeterReadingInline(TabularInline):
+    """Na detailu Meridla uz jen na PRIDANI odectu - prazdny radek, bez
+    historie. Historii ukazuje dataset OdectyMeridlaDataset (se spotrebou
+    a varovanim), oprava jde kliknutim na Obdobi v nem. Drive tu byly
+    vsechny odecty jako editovatelne radky a tabulka rostla kazdy mesic.
+    Daniel 2026-11-10."""
     model = MeterReading
     extra = 1
     fields = ("period", "reading_date", "value", "reset_from_value", "note", "photo")
-    ordering = ("-period",)
+    verbose_name = "Nový odečet"
+    verbose_name_plural = "Přidat odečet"
+
+    def get_queryset(self, request):
+        return super().get_queryset(request).none()
     # Vypne Unfold radek s nazvem zaznamu ("668NT - 12/2025: 144095.000")
     # nad kazdym radkem - jen duplikoval hodnoty uz vidne ve sloupcich.
     # Zahlavi sloupcu (thead) zustava - bez nej neni jasne, ktery sloupec
@@ -3222,6 +3232,12 @@ class MeterAdmin(PodlePronajimatele, DuplicateModelAdminMixin, ModelAdmin):
     filter_horizontal = ("plochy",)
     actions = ["duplicate_selected", "assign_supply_point"]
     inlines = [MeterReadingInline]
+
+    def get_changeform_datasets(self, request):
+        # Jen u ulozeneho Meridla - pri zakladani zadne odecty nema.
+        if getattr(request.resolver_match, "url_name", "") != "core_meter_change":
+            return ()
+        return (OdectyMeridlaDataset,)
 
     def formfield_for_manytomany(self, db_field, request, **kwargs):
         """Obsluhovane prostory jen z arealu meridla - jinak by se nabizely
@@ -5047,6 +5063,51 @@ class MeterReadingAdmin(PodlePronajimatele, DefaultToCurrentPeriodMixin, ModelAd
     @display(description="Měřidlo", ordering="meter__code")
     def meter_colored(self, obj):
         return colored_by_meter_type(str(obj.meter), obj.meter.meter_type)
+
+
+class OdectyMeridlaAdmin(MeterReadingAdmin):
+    """Odecty jednoho Meridla jako Unfold dataset na jeho detailu -
+    nejnovejsi nahore, po 12 (rok na strance), se spotrebou za obdobi.
+    Neregistruje se, pouziva ho jen OdectyMeridlaDataset. Hromadne akce
+    vypnute - mazani odectu patri do seznamu Odectu, ne pod Meridlo.
+    Daniel 2026-11-10."""
+    list_display = ("period", "reading_date", "stav", "spotreba", "ma_foto", "created_by", "varovani")
+    list_display_links = ("period",)
+    list_per_page = 12
+    search_fields = ()
+    actions = None
+    # Razeni bere ChangeList z ordering, ne z get_queryset. Zdedene
+    # "-period" obraci vychozi razeni Obdobi (-year, -month), takze by
+    # nahore byl nejstarsi mesic.
+    ordering = ("-period__year", "-period__month")
+
+    def get_queryset(self, request):
+        return (
+            super().get_queryset(request)
+            .filter(meter_id=(self.extra_context or {}).get("object"))
+            .select_related("meter", "period", "created_by")
+        )
+
+    @display(description="Stav")
+    def stav(self, obj):
+        from django.utils import formats
+
+        return formats.number_format(obj.value, 3, use_l10n=True, force_grouping=True)
+
+    @display(description="Spotřeba")
+    def spotreba(self, obj):
+        from django.utils import formats
+
+        hodnota = obj.meter.consumption_for(obj.period)
+        if hodnota is None:
+            return "—"
+        return f"{formats.number_format(hodnota, 2, use_l10n=True, force_grouping=True)} {obj.meter.unit_of_measure or ''}".strip()
+
+
+class OdectyMeridlaDataset(BaseDataset):
+    model = MeterReading
+    model_admin = OdectyMeridlaAdmin
+    title = "Odečty"
 
 
 def _jednotka_polozky(item):
