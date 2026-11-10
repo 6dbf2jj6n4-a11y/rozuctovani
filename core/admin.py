@@ -5738,7 +5738,23 @@ class CostEntryAdmin(PodlePronajimatele, DefaultToCurrentPeriodMixin, ModelAdmin
         _PeriodDefaultMarkerFilter,
     )
     search_fields = ("note", "service_item__name")
+    list_before_template = "admin/core/costentry/skupiny_trid.html"
     list_after_template = "admin/core/costentry/default_amount_items.html"
+
+    def get_ordering(self, request):
+        """Poradi Trid (stejne jako get_queryset). Bez tohohle ho
+        ChangeList prebil vychozim razenim modelu (-period, service_item)
+        a Tridy byly v seznamu promichane. Na nem stoji i zahlavi skupin
+        (skupiny_trid.html). Daniel 2026-11-10."""
+        from django.db.models import Case, IntegerField, When
+
+        poradi = Case(
+            *[When(service_item__invoice_class=code, then=i)
+              for i, (code, _) in enumerate(InvoiceClassColor.choices())],
+            output_field=IntegerField(),
+        )
+        return [poradi.asc(), "service_item__site__name", "service_item__name",
+                "-period__year", "-period__month"]
 
     def get_fields(self, request, obj=None):
         """Ve formulari se ukazou jen pole, ktera u te polozky maji smysl -
@@ -5806,6 +5822,7 @@ class CostEntryAdmin(PodlePronajimatele, DefaultToCurrentPeriodMixin, ModelAdmin
     def changelist_view(self, request, extra_context=None):
         extra_context = extra_context or {}
         extra_context["default_amount_rows"] = self._default_amount_rows(request)
+        extra_context["invoice_class_colors"] = InvoiceClassColor.objects.all()
         return super().changelist_view(request, extra_context)
 
     def _default_amount_rows(self, request):
@@ -5834,12 +5851,16 @@ class CostEntryAdmin(PodlePronajimatele, DefaultToCurrentPeriodMixin, ModelAdmin
         invoice_class = request.GET.get("service_item__invoice_class__exact")
         if invoice_class:
             items = items.filter(invoice_class=invoice_class)
-        items = items.exclude(cost_entries__period=period).order_by("invoice_class", "site__name", "name")
+        items = items.exclude(cost_entries__period=period).order_by("site__name", "name")
 
+        # Poradi Trid jako v seznamu nad tim (Nastaveni -> Tridy), ne
+        # abecedne podle kodu - tabulka je seskupena podle Trid stejne.
         class_labels = InvoiceClassColor.label_map()
+        poradi = {code: i for i, (code, _) in enumerate(InvoiceClassColor.choices())}
+        items = sorted(items, key=lambda item: poradi.get(item.invoice_class, len(poradi)))
         rows = [
             {
-                "trida": class_labels[item.invoice_class],
+                "trida": colored_by_class(class_labels[item.invoice_class], item.invoice_class),
                 "item": item,
                 "amount_html": _format_kc(item.default_amount_czk),
             }

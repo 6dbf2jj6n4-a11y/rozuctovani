@@ -1,0 +1,86 @@
+{% comment %}
+Naklady za obdobi seskupene podle Trid - stejne jako sekce Klicu na Karte:
+zahlavi Tridy s pruhem vlevo a radky podbarvene barvou Tridy (Nastaveni ->
+Tridy, zvlast pro svetly a tmavy motiv). Daniel 2026-11-10.
+
+Poradi radku zajistuje CostEntryAdmin.get_ordering (poradi Trid), tady se
+jen vkladaji zahlavi tam, kde se Trida meni. Trida radku se pozna podle
+CSS tridy rx-class-<kod> ve sloupci Trida (colored_by_class). Kdyz si
+uzivatel seznam seradi klikem na sloupec (parametr "o"), zahlavi se
+nevkladaji - skupiny by rozdelily radky nesmyslne.
+
+Motiv visi na tride "dark" na <html> (Unfold), ne na prefers-color-scheme
+- viz admin/core/clientcard/invoiceclasscolor_style.html.
+{% endcomment %}
+<style>
+{% for c in invoice_class_colors %}
+    #result_list tbody.rx-skupina-{{ c.invoice_class }},
+    table.rx-skupiny tr.rx-skupina-{{ c.invoice_class }} { background-color: {{ c.color_light }} !important; }
+    html.dark #result_list tbody.rx-skupina-{{ c.invoice_class }},
+    html.dark table.rx-skupiny tr.rx-skupina-{{ c.invoice_class }} { background-color: {{ c.color_dark }} !important; }
+    .rx-skupina-zahlavi.rx-skupina-{{ c.invoice_class }} td { border-left-color: {{ c.text_color_light }} !important; }
+    html.dark .rx-skupina-zahlavi.rx-skupina-{{ c.invoice_class }} td { border-left-color: {{ c.text_color_dark }} !important; }
+{% endfor %}
+.rx-skupina-zahlavi td {
+    font-size: 15px;
+    font-weight: 600;
+    padding: 10px 14px !important;
+    border-left: 4px solid var(--color-base-400);
+}
+</style>
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+    if (new URLSearchParams(window.location.search).has("o")) { return; }
+
+    function trida(radek) {
+        var span = radek.querySelector("[class*='rx-class-']");
+        if (!span) { return null; }
+        var m = span.className.match(/rx-class-([\w-]+)/);
+        return m ? { kod: m[1], nazev: span.textContent.trim() } : null;
+    }
+
+    function zahlavi(t, sloupcu) {
+        var tr = document.createElement("tr");
+        tr.className = "rx-skupina-zahlavi rx-skupina-" + t.kod;
+        var td = document.createElement("td");
+        td.colSpan = sloupcu;
+        td.textContent = t.nazev;
+        tr.appendChild(td);
+        return tr;
+    }
+
+    // Seznam Nakladu - kazdy radek je v Unfoldu vlastni <tbody>.
+    var tabulka = document.getElementById("result_list");
+    if (tabulka) {
+        var sloupcu = tabulka.querySelectorAll("thead th").length || 1;
+        var posledni = null;
+        tabulka.querySelectorAll(":scope > tbody").forEach(function (tbody) {
+            var t = trida(tbody);
+            if (!t) { return; }
+            tbody.classList.add("rx-skupina-" + t.kod);
+            if (t.kod !== posledni) {
+                var hlava = document.createElement("tbody");
+                hlava.className = "rx-skupina-" + t.kod;
+                hlava.appendChild(zahlavi(t, sloupcu));
+                tbody.parentNode.insertBefore(hlava, tbody);
+                posledni = t.kod;
+            }
+        });
+    }
+
+    // Polozky s vychozi castkou (default_amount_items.html).
+    document.querySelectorAll("table.rx-skupiny").forEach(function (tab) {
+        var sloupcu = tab.querySelectorAll("thead th").length || 1;
+        var posledni = null;
+        tab.querySelectorAll("tbody > tr").forEach(function (tr) {
+            var t = trida(tr);
+            if (!t) { return; }
+            tr.classList.add("rx-skupina-" + t.kod);
+            if (t.kod !== posledni) {
+                tr.parentNode.insertBefore(zahlavi(t, sloupcu), tr);
+                posledni = t.kod;
+            }
+        });
+    });
+});
+</script>
