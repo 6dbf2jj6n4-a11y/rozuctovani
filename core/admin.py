@@ -1538,14 +1538,6 @@ class ClientAdmin(PodlePronajimatele, ModelAdmin):
                                 help_text=db_field.help_text)
         return super().formfield_for_dbfield(db_field, request, **kwargs)
     list_filter = (ActiveClientFilter, KlientiPronajimateleFilter, "entity_type", "is_landlord", SiteFilter, "insolvency_status", "vat_payer")
-    # Nejpouzivanejsi filtry v liste nad tabulkou (Unfold 0.110), zbytek
-    # zustava pod tlacitkem Filtry. Klic je parameter_name / field_path
-    # filtru. Zkusebne jen u Klientu, Daniel 2026-11-10.
-    list_filter_options = {
-        KlientiPronajimateleFilter.parameter_name: {"horizontal": True, "label": "Klienti"},
-        "entity_type": {"horizontal": True, "label": "Typ osoby"},
-        "vat_payer": {"horizontal": True, "label": "Plátce DPH"},
-    }
     fieldsets = (
         ("Základní údaje", {
             "fields": (("name", "code"), ("is_active", "is_landlord"))
