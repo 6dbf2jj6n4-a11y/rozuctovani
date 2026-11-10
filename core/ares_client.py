@@ -98,8 +98,30 @@ def lookup_company(ico):
     result["street"], result["street_number"] = ulice_a_cislo(sidlo)
     psc = sidlo.get("psc")
     result["zip_code"] = str(psc) if psc else ""
-    result["city"] = sidlo.get("nazevObce") or ""
+    result["city"] = obec(sidlo)
     return result
+
+
+def obec(sidlo):
+    """Obec v postovnim tvaru z textove adresy ("..., 10100 Praha 10").
+    nazevObce je u Prahy jen "Praha", klienti maji "Praha 10". Stejne
+    pravidlo je v ares_lookup.js. Daniel 2026-11-10."""
+    m = re.search(r"\b\d{3}\s?\d{2}\s+([^,]+)$", sidlo.get("textovaAdresa") or "")
+    return m.group(1).strip() if m else (sidlo.get("nazevObce") or "")
+
+
+def platna_spisova_znacka(data):
+    """Platna spisova znacka z odpovedi VR. ARES vraci celou historii
+    vcetne vymazanych - u GEHER GEO je PRVNI znacka KSBR vymazana 2020,
+    platna je KSOS. Platna je ta bez datumVymazu; brala se drive prvni,
+    takze by u firem po presunu dosadila stary soud. Stejne pravidlo je
+    v ares_lookup.js. Daniel 2026-11-10."""
+    zaznamy = (data or {}).get("zaznamy") or []
+    zaznam = next((z for z in zaznamy if z.get("primarniZaznam")), zaznamy[0] if zaznamy else None)
+    if not zaznam:
+        return None
+    platne = [sz for sz in (zaznam.get("spisovaZnacka") or []) if not sz.get("datumVymazu")]
+    return platne[-1] if platne else None
 
 
 def lookup_registry(ico):
@@ -107,13 +129,9 @@ def lookup_registry(ico):
     data = _get_json(VR_URL.format(ico=ico))
     if not data:
         return None
-    zaznamy = data.get("zaznamy") or []
-    if not zaznamy:
+    sz = platna_spisova_znacka(data)
+    if not sz:
         return None
-    spisove_znacky = zaznamy[0].get("spisovaZnacka") or []
-    if not spisove_znacky:
-        return None
-    sz = spisove_znacky[0]
     soud_code = sz.get("soud")
     vlozka = sz.get("vlozka")
     return {
