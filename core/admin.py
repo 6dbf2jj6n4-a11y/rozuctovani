@@ -1261,6 +1261,35 @@ class ClientCardSiteFilter(admin.SimpleListFilter):
         return queryset
 
 
+def deaktivovat_klienty_po_obdobi(period, user):
+    """Pri uzavreni Obdobi prepne na Neaktivni klienty, jejichz vsechny
+    Karty skoncily nejpozdeji koncem tohoto Obdobi - posledni mesic
+    najmu je tim vyuctovany a uzavreny. Daniel 2026-11-10.
+
+    - Klient bez jedine Karty (rozpracovana nabidka) se nemeni - jinak
+      by se novy klient vypnul driv, nez mu Kartu zalozis.
+    - Opetovne otevreni Obdobi klienty zpet nezapina.
+    - Plati pro vsechny klienty, Obdobi je spolecne vsem pronajimatelum.
+    Kazde vypnuti se zapise do historie Klienta."""
+    from django.contrib.admin.models import CHANGE, LogEntry
+
+    _, konec = period.date_range()
+    trvajici = ClientCard.objects.filter(Q(valid_to__isnull=True) | Q(valid_to__gt=konec))
+    klienti = list(
+        Client.objects.filter(is_active=True, cards__isnull=False)
+        .exclude(cards__in=trvajici)
+        .distinct().order_by("name")
+    )
+    for klient in klienti:
+        klient.is_active = False
+        klient.save(update_fields=["is_active"])
+        LogEntry.objects.log_actions(
+            user_id=user.pk, queryset=[klient], action_flag=CHANGE, single_object=True,
+            change_message=f"Neaktivní po uzavření {period} - žádná Karta po {konec:%d. %m. %Y}.",
+        )
+    return klienti
+
+
 class ActiveClientFilter(admin.SimpleListFilter):
     """Vychozi zobrazeni jen aktivnich klientu - "Vse"/"Neaktivni" musi
     uzivatel vybrat sam. Na rozdil od beznych list_filter na is_active,
@@ -4285,6 +4314,14 @@ class PeriodAdmin(ModelAdmin):
         if nove:
             zprava += f" Uzavřeny i odečty: {', '.join(nove)}."
         self.message_user(request, zprava, level=messages.SUCCESS)
+
+        vypnuti = deaktivovat_klienty_po_obdobi(period, request.user)
+        if vypnuti:
+            self.message_user(
+                request,
+                f"Neaktivní (žádná Karta po {period}): " + ", ".join(c.name for c in vypnuti) + ".",
+                level=messages.INFO,
+            )
         return self._redirect_back(request)
 
     def vypocet_view(self, request, period_id):
