@@ -1226,68 +1226,6 @@ def _stav_karty(obj):
     return format_html('<span style="color:#2a7;">Platí</span>')
 
 
-class ClientCardInline(TabularInline):
-    """Jen zobrazeni/editace existujicich Karet - pridavani nove Karty jde
-    pres tlacitko "+ Přidat kartu" pod touto sekci (viz
-    templates/admin/core/client/clientcard_inline_tabular.html), ktere
-    vede na standardni pridavaci stranku Karty s klientem uz
-    predvyplnenym. Inline pridavani je zamerne vypnute
-    (has_add_permission=False) - prazdny radek pridany primo tady nema
-    zadnou validaci povinnych udaju a driv na nej ani nesel kliknout
-    (viz git historie - "Karta klienta s klíčem None")."""
-    model = ClientCard
-    extra = 0
-    fields = ("description_link", "valid_from", "valid_to", "stav", "note")
-    readonly_fields = ("description_link", "stav")
-    can_delete = True
-    verbose_name = "Karta"
-    verbose_name_plural = "Karty klientů"
-    template = "admin/core/client/clientcard_inline_tabular.html"
-    # Unfold nad kazdym radkem inline vypisuje jeste nazev objektu
-    # (ClientCard.__str__ = "Klient - Plocha - od M/RRRR"). Tady je to
-    # zbytecne: klient je z te stranky zrejmy a popis karty je hned prvni
-    # sloupec radku. Viz unfold/helpers/edit_inline/tabular_title.html.
-    show_title = False
-
-    def has_add_permission(self, request, obj=None):
-        return False
-
-    def description_link(self, obj):
-        from django.urls import reverse
-        from django.utils.html import format_html
-        if not obj.pk:
-            return "(uložte klienta, pak půjde otevřít)"
-        url = reverse("admin:core_clientcard_change", args=[obj.pk])
-        return format_html('<a href="{}">{}</a>', url, obj.description or "—")
-    description_link.short_description = "Popis karty"
-
-    @display(description="Stav")
-    def stav(self, obj):
-        return _stav_karty(obj)
-
-
-class ContractInline(TabularInline):
-    """Jen zobrazeni/editace existujicich Smluv - pridavani nove Smlouvy
-    jde pres tlacitko "+ Přidat smlouvu" pod touto sekci (viz
-    templates/admin/core/client/contract_inline_tabular.html), ktere
-    vede na standardni pridavaci stranku Smlouvy s klientem uz
-    predvyplnenym a vynucenymi povinnymi udaji (cislo, platnost od,
-    vypovedni lhuta - viz ContractAdminForm). Inline pridavani je
-    zamerne vypnute (has_add_permission=False)."""
-    model = Contract
-    extra = 0
-    fields = ("number", "site", "valid_from", "signed_on", "deposit_czk", "deposit_paid", "has_inflation_clause")
-    autocomplete_fields = ("site",)
-    show_change_link = True
-    template = "admin/core/client/contract_inline_tabular.html"
-
-    verbose_name = "Smlouva"
-    verbose_name_plural = "Smlouvy"
-
-    def has_add_permission(self, request, obj=None):
-        return False
-
-
 class SiteFilter(admin.SimpleListFilter):
     title = "Areál"
     parameter_name = "site"
@@ -1587,7 +1525,12 @@ class ClientAdmin(PodlePronajimatele, ModelAdmin):
         "registry_section": _BEZ_REJSTRIKU,
         "registry_insert": _BEZ_REJSTRIKU,
     }
-    inlines = [ClientCardInline, ContractInline]
+    def get_changeform_datasets(self, request):
+        # Karty a Smlouvy klienta jako datasety (Daniel 2026-11-10) - drive
+        # editovatelne inliny. Jen u ulozeneho klienta.
+        if getattr(request.resolver_match, "url_name", "") != "core_client_change":
+            return ()
+        return (KartyKlientaDataset, SmlouvyKlientaDataset)
     actions = ["export_emaily"]
 
     # Barvy nazvu klienta v seznamu. Drzi se tady jako konstanty, protoze
@@ -1828,7 +1771,7 @@ class ContractAdmin(PodlePronajimatele, DuplicateModelAdminMixin, ModelAdmin):
 
     def get_changeform_initial_data(self, request):
         """Pri zalozeni nove Smlouvy (tlacitko "+ Pridat smlouvu" na Klientovi,
-        viz contract_inline_tabular.html) predvyplni:
+        viz SmlouvyKlientaDataset) predvyplni:
         - zastupce a fakturacni e-mail z navazaneho Klienta - jsou to
           samostatna pole Smlouvy (mohou se od Klienta lisit), takze jde jen
           o initial hodnotu formulare, ne o kopii pri ulozeni;
@@ -5108,6 +5051,85 @@ class OdectyMeridlaDataset(BaseDataset):
     model = MeterReading
     model_admin = OdectyMeridlaAdmin
     title = "Odečty"
+
+
+class _DatasetKlienta(BaseDataset):
+    """Spolecny zaklad datasetu na detailu Klienta: pod tabulku prida
+    tlacitko na zalozeni noveho zaznamu s predvyplnenym klientem
+    (pridava se pres plny formular, ne radkem v tabulce - kvuli
+    povinnym udajum)."""
+    pridat_url = None
+    pridat_text = None
+
+    @property
+    def contents(self):
+        from django.urls import reverse
+        from django.utils.html import format_html
+
+        tlacitko = format_html(
+            '<div style="margin:12px 0 24px;"><a href="{}?client={}" class="rx-btn rx-btn-primary">{}</a></div>',
+            reverse(self.pridat_url), (self.extra_context or {}).get("object") or "", self.pridat_text,
+        )
+        return super().contents + tlacitko
+
+
+class KartyKlientaAdmin(ClientCardAdmin):
+    """Karty jednoho Klienta pro KartyKlientaDataset - nejnovejsi nahore.
+    Ukazuji se vsechny Karty klienta bez ohledu na vybraneho
+    pronajimatele, stejne jako drive inline. Neregistruje se."""
+    list_display = ("description", "valid_from", "valid_to", "stav", "contract", "note")
+    list_display_links = ("description",)
+    list_per_page = 20
+    search_fields = ()
+    actions = None
+    ordering = ("-valid_from", "-pk")
+
+    def omezit_na_pronajimatele(self, request):
+        return False
+
+    def get_queryset(self, request):
+        return (
+            super().get_queryset(request)
+            .filter(client_id=(self.extra_context or {}).get("object"))
+            .select_related("contract")
+        )
+
+
+class KartyKlientaDataset(_DatasetKlienta):
+    model = ClientCard
+    model_admin = KartyKlientaAdmin
+    title = "Karty klientů"
+    pridat_url = "admin:core_clientcard_add"
+    pridat_text = "+ Přidat kartu"
+
+
+class SmlouvyKlientaAdmin(ContractAdmin):
+    """Smlouvy jednoho Klienta pro SmlouvyKlientaDataset. Neregistruje se."""
+    list_display = ("number", "site", "valid_from", "valid_to", "signed_on", "deposit_czk",
+                    "deposit_paid", "has_inflation_clause")
+    list_display_links = ("number",)
+    list_per_page = 20
+    search_fields = ()
+    actions = None
+    ordering = ("-valid_from", "-pk")
+
+    def omezit_na_pronajimatele(self, request):
+        return False
+
+    def get_queryset(self, request):
+        return (
+            super().get_queryset(request)
+            .filter(client_id=(self.extra_context or {}).get("object"))
+            .select_related("site")
+        )
+
+
+class SmlouvyKlientaDataset(_DatasetKlienta):
+    model = Contract
+    model_admin = SmlouvyKlientaAdmin
+    title = "Smlouvy"
+    pridat_url = "admin:core_contract_add"
+    pridat_text = "+ Přidat smlouvu"
 
 
 def _jednotka_polozky(item):
