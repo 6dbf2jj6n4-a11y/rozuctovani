@@ -1909,51 +1909,6 @@ class ServicePoolItem(models.Model):
         return InvoiceClassColor.label_map().get(self.invoice_class, self.invoice_class)
 
 
-class NastaveniRozuctovani(models.Model):
-    """Obecna nastaveni rozuctovani - jediny zaznam pro celou aplikaci.
-
-    Sem patri prepinace, ktere plati napric arealy i tridami. Co se lisi
-    po tridach, zustava na InvoiceClassColor (napr. odecitani pausalu).
-    """
-
-    kladne_ztraty_pronajimateli = models.BooleanField(
-        "Kladné ztráty si nechává pronajímatel", default=False,
-        help_text=(
-            "Kladná ztráta = naše podružná měřidla naměřila VÍC, než fakturoval "
-            "dodavatel.\n"
-            "Vypnuto (výchozí): rozdělí se celá faktura mezi naměřené podíly, "
-            "takže cena za jednotku klesne a rozdíl je bonusem nájemců.\n"
-            "Zapnuto: nájemce platí své naměřené jednotky × cenu z faktury "
-            "(částka ÷ fakturované množství). Vybere se víc, než přišlo na "
-            "faktuře, a přebytek zůstává pronajímateli jako výnos - vidíš ho "
-            "v přehledu Náklad/Výnos.\n"
-            "ZÁPORNÝCH ztrát (naměřili jsme míň, typicky voda a teplo) se "
-            "přepínač netýká - ty nesou nájemci jako dosud."
-        ),
-    )
-
-    class Meta:
-        verbose_name = "Nastavení rozúčtování"
-        verbose_name_plural = "Nastavení rozúčtování"
-
-    def __str__(self):
-        return "Nastavení rozúčtování"
-
-    def save(self, *args, **kwargs):
-        """Jediny zaznam - druhy by se tise ignoroval a nikdo by nevedel,
-        ktery plati."""
-        self.pk = 1
-        super().save(*args, **kwargs)
-
-    def delete(self, *args, **kwargs):
-        """Nastaveni se nemaze - bez nej by nebylo podle ceho pocitat."""
-
-    @classmethod
-    def nacti(cls):
-        """Ulozene nastaveni, nebo vychozi (vse vypnute), kdyz jeste neni."""
-        return cls.objects.first() or cls()
-
-
 class InvoiceClassColor(models.Model):
     """Trida (Elektrina/Voda/Teplo/Ostatni/Najemne) - JEDINY seznam, do
     ktereho se radi jak polozky zasobniku sluzeb, tak Meridla a Odberna
@@ -2025,6 +1980,17 @@ class InvoiceClassColor(models.Model):
             "o podíl na rozdílu × cena z faktury dodavatele."
         ),
     )
+    kladne_ztraty_pronajimateli = models.BooleanField(
+        "Kladné ztráty si nechává pronajímatel", default=False,
+        help_text=(
+            "Kladná ztráta = naše podružná měřidla naměřila VÍC, než fakturoval "
+            "dodavatel. Vypnuto (výchozí): rozdělí se celá faktura mezi naměřené "
+            "podíly, cena za jednotku klesne a rozdíl je bonusem nájemců. "
+            "Zapnuto: nájemce platí své naměřené jednotky × cenu z faktury "
+            "(částka ÷ fakturované množství) a přebytek zůstává pronajímateli "
+            "jako výnos. Záporných ztrát (naměřili jsme míň) se netýká."
+        ),
+    )
     ma_sekci_klicu = models.BooleanField(
         "Vlastní sekce v Kartě klienta a na Ploše", default=True,
         help_text=(
@@ -2052,6 +2018,14 @@ class InvoiceClassColor(models.Model):
         v jednotkach (zapnuto) nebo v cene (vypnuto, vychozi). Jen
         zobrazeni, castky se nemeni. Viz billing/zobrazeni_ztrat.py."""
         return dict(cls.objects.values_list("invoice_class", "ztraty_do_jednotek"))
+
+    @classmethod
+    def kladne_ztraty_map(cls):
+        """{invoice_class: bool} - jestli si u te tridy prebytek z kladne
+        ztraty (namereno vic, nez fakturovano) nechava pronajimatel. Drive
+        jeden globalni prepinac v Nastaveni rozuctovani, Daniel 2026-11-18:
+        u elektriny ne, u vody ano - proto po Tridach."""
+        return dict(cls.objects.values_list("invoice_class", "kladne_ztraty_pronajimateli"))
 
     @classmethod
     def choices(cls):

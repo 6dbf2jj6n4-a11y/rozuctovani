@@ -56,7 +56,7 @@ from django.db import transaction
 
 from core.models import (
     AllocationKey, BillingLine, ClientCard, CostEntry, InvoiceClassColor, MeterReading, Period,
-    NastaveniRozuctovani, PriceList, ServicePoolItem,
+    PriceList, ServicePoolItem,
 )
 
 
@@ -801,8 +801,8 @@ def calculate_period(period, site=None):
         # Prepinac "odecitat pausaly z celkoveho nakladu" po Tridach
         # (Nastavení -> Třídy) - nactene jednou pro cely vypocet.
         deduct_fixed_by_class = InvoiceClassColor.deduct_fixed_map()
-        # Obecna nastaveni - nacist jednou, ne u kazde polozky zvlast.
-        nastaveni = NastaveniRozuctovani.nacti()
+        # Prepinac "Kladne ztraty si nechava pronajimatel" - po Tridach.
+        kladne_ztraty_by_class = InvoiceClassColor.kladne_ztraty_map()
 
         for service_item in service_items:
             deduct_fixed_allowed = deduct_fixed_by_class.get(service_item.invoice_class, True)
@@ -1045,7 +1045,7 @@ def calculate_period(period, site=None):
             # neridi - tam se dal deli cela faktura a rozdil nesou najemci.
             prebytek_pronajimatele = None
             fakturovane_jednotky = cost_totals["units"] if cost_source == "naklad_za_obdobi" else None
-            if (nastaveni.kladne_ztraty_pronajimateli and total_consumption
+            if (kladne_ztraty_by_class.get(service_item.invoice_class, False) and total_consumption
                     and fakturovane_jednotky and total_consumption > fakturovane_jednotky
                     and remaining_cost > 0):
                 cena_z_faktury = total_cost / fakturovane_jednotky
