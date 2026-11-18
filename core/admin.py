@@ -6030,8 +6030,37 @@ class BillingLineAdmin(PodlePronajimatele, DefaultToCurrentPeriodMixin, ModelAdm
                 self.admin_site.admin_view(self.report_naklady_pronajimatele_view),
                 name="core_billingline_report_naklady_pronajimatele",
             ),
+            path(
+                "report/naklady-a-vynosy/",
+                self.admin_site.admin_view(self.report_naklady_a_vynosy_view),
+                name="core_billingline_report_naklady_a_vynosy",
+            ),
         ]
         return custom + urls
+
+    def report_naklady_a_vynosy_view(self, request):
+        """Report (Reporty v menu): za Obdobi naklad z faktur dodavatelu
+        proti vyfakturovanemu najemcum po polozkach, a kolik z rozdilu
+        zustalo na pronajimateli (vlastni Karta, nefakturovane podily,
+        ostatni). Vypocet v billing/naklady_pronajimatele.naklady_a_vynosy.
+        Daniel 2026-11-18."""
+        from django.shortcuts import render
+
+        from billing.naklady_pronajimatele import naklady_a_vynosy
+
+        sites = list(pronajimatele.arealy(request).order_by("name"))
+        site = next((s for s in sites if str(s.pk) == request.GET.get("site")), None)
+        periods = list(Period.objects.order_by("-year", "-month"))
+        period = next((p for p in periods if str(p.pk) == request.GET.get("period")), None) or Period.current()
+        data = naklady_a_vynosy([site] if site else sites, period) if period and sites else None
+        context = {
+            **self.admin_site.each_context(request),
+            "title": "Náklady a výnosy pronajímatele",
+            "sites": sites, "site": site, "periods": periods, "period": period, "data": data,
+            "invoice_class_colors": InvoiceClassColor.objects.all(),
+            "opts": self.model._meta,
+        }
+        return render(request, "admin/core/billingline/report_naklady_a_vynosy.html", context)
 
     def report_naklady_pronajimatele_view(self, request):
         """Report (Reporty v menu): kolik za obdobi nese pronajimatel arealu -

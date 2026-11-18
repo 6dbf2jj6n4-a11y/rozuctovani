@@ -1,0 +1,122 @@
+{% extends "admin/base_site.html" %}
+{% load l10n %}
+
+{% block content %}
+{% comment %}
+Report Naklady a vynosy pronajimatele - vypocet v
+billing/naklady_pronajimatele.naklady_a_vynosy. Barvy skupin Trid ze
+sdilene sablony admin/core/skupiny_trid.html (tabulka ma tridu
+rx-skupiny, radky rx-skupina-<kod>). Bunky s tridou rx-class-* tu
+zamerne nejsou - skript ze sdilene sablony by jinak vkladal zahlavi
+podruhe, tady je vykresluje uz sablona i se soucty.
+Pozor: viceradkovy komentar MUSI byt {% comment %}, ne {# #}.
+{% endcomment %}
+{% include "admin/core/skupiny_trid.html" %}
+<style>
+    .rx-nv table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    .rx-nv th { padding: 6px 8px; text-align: right; border-bottom: 2px solid #666; vertical-align: bottom; }
+    .rx-nv th:first-child, .rx-nv td:first-child { text-align: left; }
+    .rx-nv td { padding: 5px 8px; text-align: right; border-bottom: 1px solid rgba(128,128,128,.25); white-space: nowrap; }
+    .rx-nv td:first-child { white-space: normal; }
+    .rx-nv tr.soucet td { font-weight: 600; }
+    .rx-nv tr.celkem td { font-weight: 700; border-top: 2px solid #666; font-size: 14px; }
+    .rx-nv .zustava { font-weight: 600; }
+    .rx-nv .zap { color: #16a34a; }
+    .rx-nv .mala { color: #888; font-size: 11px; }
+    .rx-nv .varovani { color: #d97706; }
+    .rx-nv th.rozpad { color: #888; font-weight: 500; }
+</style>
+<div class="rx-nv">
+    <form method="get" class="rx-filters">
+        <div>
+            <label for="id_period">Období</label>
+            <select name="period" id="id_period" onchange="this.form.submit()" style="padding:8px; min-width:140px;">
+                {% for p in periods %}<option value="{{ p.pk|unlocalize }}" {% if period and p.pk == period.pk %}selected{% endif %}>{{ p }}{% if p.status == 'closed' %} (uzavřeno){% endif %}</option>{% endfor %}
+            </select>
+        </div>
+        <div>
+            <label for="id_site">Areál</label>
+            <select name="site" id="id_site" onchange="this.form.submit()" style="padding:8px; min-width:160px;">
+                <option value="">Všechny areály</option>
+                {% for s in sites %}<option value="{{ s.pk|unlocalize }}" {% if site and s.pk == site.pk %}selected{% endif %}>{{ s.name }}</option>{% endfor %}
+            </select>
+        </div>
+    </form>
+
+    <p style="color:#999; font-size:13px; max-width:900px;">
+        <strong>Zůstává na pronajímateli</strong> = náklad z faktur dodavatelů − co se vyfakturovalo nájemcům.
+        Rozpad: <strong>na Kartě pronajímatele</strong> (jeho vlastní podíl – volné plochy, vlastní prostory),
+        <strong>nefakturováno</strong> (podíly nájemců v nájmu nebo v paušálu) a <strong>ostatní</strong>
+        (paušály a pevné ceny nad / pod skutečný podíl, nerozúčtované ztráty).
+        Záporné číslo (zeleně) = výnos navíc. Částky bez DPH.
+    </p>
+
+    {% if data.upozorneni %}
+        <div style="border:1px solid #d97706; border-radius:6px; padding:10px 14px; margin-bottom:14px; font-size:13px;">
+            <strong class="varovani">Výpočet za {{ period }} neodpovídá zadaným nákladům – spusť ho znovu:</strong>
+            <ul style="margin:6px 0 0 18px;">
+                {% for r in data.upozorneni %}
+                    <li>{{ r.item.name }} ({{ r.item.site.name }}):
+                        {% if r.nespocitano %}náklad {{ r.naklad|floatformat:"2g" }} Kč se nerozúčtoval
+                        {% else %}náklad teď {{ r.naklad|floatformat:"2g" }} Kč, ve výpočtu {{ r.ve_vypoctu|floatformat:"2g" }} Kč{% endif %}</li>
+                {% endfor %}
+            </ul>
+        </div>
+    {% endif %}
+
+    {% if not data or not data.skupiny %}
+        <p>Za {{ period }} nejsou žádné náklady ani výpočet.</p>
+    {% else %}
+        <div style="overflow-x:auto;">
+        <table class="rx-skupiny">
+            <thead>
+                <tr>
+                    <th>Položka</th>
+                    <th>Náklad<br><span class="mala">faktury dodavatelů</span></th>
+                    <th>Vyfakturováno<br><span class="mala">nájemcům</span></th>
+                    <th>Zůstává na<br>pronajímateli</th>
+                    <th class="rozpad">z toho na Kartě<br>pronajímatele</th>
+                    <th class="rozpad">z toho<br>nefakturováno</th>
+                    <th class="rozpad">z toho<br>ostatní</th>
+                </tr>
+            </thead>
+            <tbody>
+            {% for s in data.skupiny %}
+                <tr class="rx-skupina-zahlavi rx-skupina-{{ s.cls }}"><td colspan="7">{{ s.nazev }}</td></tr>
+                {% for r in s.radky %}
+                    <tr class="rx-skupina-{{ s.cls }}">
+                        <td>{{ r.item.name }}{% if not site %} <span class="mala">{{ r.item.site.name }}</span>{% endif %}
+                            {% if r.nespocitano or r.ve_vypoctu is not None %} <span class="varovani" title="Výpočet neodpovídá nákladům">⚠</span>{% endif %}</td>
+                        <td>{{ r.naklad|floatformat:"2g" }}</td>
+                        <td>{{ r.vyfakt|floatformat:"2g" }}</td>
+                        <td class="zustava{% if r.zustava < 0 %} zap{% endif %}">{{ r.zustava|floatformat:"2g" }}</td>
+                        <td>{% if r.na_karte %}{{ r.na_karte|floatformat:"2g" }}{% else %}–{% endif %}</td>
+                        <td>{% if r.nefakt %}{{ r.nefakt|floatformat:"2g" }}{% else %}–{% endif %}</td>
+                        <td{% if r.ostatni < 0 %} class="zap"{% endif %}>{% if r.ostatni %}{{ r.ostatni|floatformat:"2g" }}{% else %}–{% endif %}</td>
+                    </tr>
+                {% endfor %}
+                <tr class="soucet rx-skupina-{{ s.cls }}">
+                    <td>{{ s.nazev }} celkem</td>
+                    <td>{{ s.soucet.naklad|floatformat:"2g" }}</td>
+                    <td>{{ s.soucet.vyfakt|floatformat:"2g" }}</td>
+                    <td class="zustava{% if s.soucet.zustava < 0 %} zap{% endif %}">{{ s.soucet.zustava|floatformat:"2g" }}</td>
+                    <td>{{ s.soucet.na_karte|floatformat:"2g" }}</td>
+                    <td>{{ s.soucet.nefakt|floatformat:"2g" }}</td>
+                    <td{% if s.soucet.ostatni < 0 %} class="zap"{% endif %}>{{ s.soucet.ostatni|floatformat:"2g" }}</td>
+                </tr>
+            {% endfor %}
+                <tr class="celkem">
+                    <td>Celkem {{ period }}{% if site %} – {{ site.name }}{% endif %}</td>
+                    <td>{{ data.celkem.naklad|floatformat:"2g" }}</td>
+                    <td>{{ data.celkem.vyfakt|floatformat:"2g" }}</td>
+                    <td class="zustava{% if data.celkem.zustava < 0 %} zap{% endif %}">{{ data.celkem.zustava|floatformat:"2g" }}</td>
+                    <td>{{ data.celkem.na_karte|floatformat:"2g" }}</td>
+                    <td>{{ data.celkem.nefakt|floatformat:"2g" }}</td>
+                    <td{% if data.celkem.ostatni < 0 %} class="zap"{% endif %}>{{ data.celkem.ostatni|floatformat:"2g" }}</td>
+                </tr>
+            </tbody>
+        </table>
+        </div>
+    {% endif %}
+</div>
+{% endblock %}

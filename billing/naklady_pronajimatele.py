@@ -222,3 +222,67 @@ def rozsah_arealu(site, periods):
         rocne.append(z)
     rocne.sort(key=lambda z: z["rozdil"])
     return {"obdobi": obdobi, "celkem": celkem, "rocne": rocne, "tridy": tridy}
+
+
+def naklady_a_vynosy(sites, period):
+    """Report Naklady a vynosy pronajimatele (Daniel 2026-11-18): za jedno
+    Obdobi po polozkach zasobniku naklad z faktur dodavatelu proti tomu, co
+    se vyfakturovalo najemcum. Rozdil nese pronajimatel; rozpada se na
+
+    - podil na Karte pronajimatele (Areal.landlord) - volne plochy, vlastni
+      prostory,
+    - nefakturovane podily najemcu (energie v najmu, paušální klienti),
+    - ostatni rozdil = dopocet do celku: paušály a pevne ceny nad/pod
+      skutecny podil (zaporny = vynos navic), nerozuctovane ztraty.
+
+    Plati: zustava = naklad - vyfakturovano = na_karte + nefakturovano + ostatni.
+    Naklad se bere z Nakladu za obdobi (CostEntry.totals_for, jinak Vychozi
+    castka), tedy aktualni stav - kdyz se od vypoctu zmenil, polozka to hlasi
+    (vypocet je pak potreba pustit znovu)."""
+    lines = (
+        BillingLine.objects.filter(period=period, service_item__site__in=sites)
+        .select_related("client_card__client")
+    )
+    po_polozce = defaultdict(list)
+    for l in lines:
+        po_polozce[l.service_item_id].append(l)
+
+    poradi = {code: i for i, (code, _) in enumerate(InvoiceClassColor.choices())}
+    nazvy = InvoiceClassColor.label_map()
+    radky = []
+    for item in ServicePoolItem.objects.filter(site__in=sites).select_related("site"):
+        bl = po_polozce.get(item.id, [])
+        t = CostEntry.totals_for(item, period)
+        naklad = t["czk"] if t["czk"] is not None else item.default_amount_czk
+        if naklad is None and not bl:
+            continue
+        naklad = naklad or NULA
+        pronajimatel = item.site.landlord_id
+        vyfakt = sum((r.amount for r in bl if r.is_billed and r.client_card.client_id != pronajimatel), NULA)
+        na_karte = sum((r.amount for r in bl if r.client_card.client_id == pronajimatel), NULA)
+        nefakt = sum((r.amount for r in bl if not r.is_billed and r.client_card.client_id != pronajimatel), NULA)
+        zustava = naklad - vyfakt
+        cd = (bl[0].calc_detail or {}) if bl else {}
+        ve_vypoctu = _d(cd.get("total_cost")) if "total_cost" in cd else None
+        radky.append({
+            "item": item, "cls": item.invoice_class, "naklad": naklad, "vyfakt": vyfakt,
+            "zustava": zustava, "na_karte": na_karte, "nefakt": nefakt,
+            "ostatni": zustava - na_karte - nefakt,
+            "nespocitano": bool(naklad) and not bl,
+            "ve_vypoctu": ve_vypoctu if ve_vypoctu is not None and ve_vypoctu != naklad else None,
+        })
+    radky.sort(key=lambda r: (poradi.get(r["cls"], len(poradi)), r["item"].site.name, r["item"].name))
+
+    sloupce = ("naklad", "vyfakt", "zustava", "na_karte", "nefakt", "ostatni")
+    skupiny = []
+    for r in radky:
+        if not skupiny or skupiny[-1]["cls"] != r["cls"]:
+            skupiny.append({"cls": r["cls"], "nazev": nazvy.get(r["cls"], r["cls"]), "radky": []})
+        skupiny[-1]["radky"].append(r)
+    for s in skupiny:
+        s["soucet"] = {k: sum((r[k] for r in s["radky"]), NULA) for k in sloupce}
+    celkem = {k: sum((r[k] for r in radky), NULA) for k in sloupce}
+    return {
+        "skupiny": skupiny, "celkem": celkem,
+        "upozorneni": [r for r in radky if r["nespocitano"] or r["ve_vypoctu"] is not None],
+    }
